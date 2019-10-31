@@ -1,4 +1,4 @@
-__author__ = 'noe'
+__author__ = "noe"
 
 from .analysis import *
 from .latent_sampling import *

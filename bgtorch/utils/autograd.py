@@ -30,11 +30,7 @@ def brute_force_jacobian_trace(y, x):
     trace = 0.0
     for i in range(system_dim):
         dyi_dx = torch.autograd.grad(
-            y[:, i],
-            x,
-            torch.ones_like(y[:, i]),
-            create_graph=True,
-            retain_graph=True,
+            y[:, i], x, torch.ones_like(y[:, i]), create_graph=True, retain_graph=True
         )[0]
         trace = trace + dyi_dx[:, i]
     return trace.contiguous()
@@ -69,11 +65,7 @@ def brute_force_jacobian(y, x):
     rows = []
     for i in range(system_dim):
         row = torch.autograd.grad(
-            y[:, i],
-            x,
-            torch.ones_like(y[:, i]),
-            create_graph=True,
-            retain_graph=True,
+            y[:, i], x, torch.ones_like(y[:, i]), create_graph=True, retain_graph=True
         )[0]
         rows.append(row.view(-1, 1, system_dim))
     jac = torch.cat(rows, dim=-2)

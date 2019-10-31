@@ -10,22 +10,21 @@ def _unnormalized_kl_divergence(flow, distribution, x, inverse=False):
 
 
 class CombinedTrainer(object):
-    
     def __init__(self, flow, data, prior, target, optimizer):
         """
             Trainer class, which optimizes a flow to minimize
-            
+
                 1. the negative log-likelihood (NLL) on a provided data set.
                 2. the reverse KL divergence (KLL) to a target distribution with accessible energy.
-            
-            The final minimized loss is 
-            
+
+            The final minimized loss is
+
                 `(1-a) * NLL + a * KLL`
-                
+
             where the trade-off parameter `a` is a value in `[0, 1]`.
-                
+
             Training is performed per epoch, where in each epoch the trade-off parameter can be adjusted.
-            
+
             Parameters:
             -----------
             flow : invertible flow object
@@ -41,7 +40,7 @@ class CombinedTrainer(object):
                 Must provide an implementation of the `energy` function.
             optimizer : torch.optim.Optimizer
                 The optimizer used during optimization.
-            
+
         """
         self._flow = flow
         self._data = data
@@ -49,26 +48,31 @@ class CombinedTrainer(object):
         self._target = target
         self._optim = optimizer
 
-    def _aggregate_gradients(self, x, target, weight=1., inverse=False):
-        loss = weight * _unnormalized_kl_divergence(self._flow, target, x, inverse=inverse).mean()
+    def _aggregate_gradients(self, x, target, weight=1.0, inverse=False):
+        kl_divergence = _unnormalized_kl_divergence(
+            self._flow, target, x, inverse=inverse
+        )
+        loss = weight * kl_divergence.mean()
         loss.backward()
         return loss
-    
+
     def _step(self, data, n_samples, ratio):
         self._optim.zero_grad()
         nll = kll = None
-        if ratio < 1.:
-            nll = self._aggregate_gradients(data, self._prior, 1. - ratio, inverse=True)
-        if ratio > 0.:
+        if ratio < 1.0:
+            nll = self._aggregate_gradients(
+                data, self._prior, 1.0 - ratio, inverse=True
+            )
+        if ratio > 0.0:
             samples = self._prior.sample((n_samples,))
             kll = self._aggregate_gradients(samples, self._target, ratio, inverse=False)
         self._optim.step()
         return nll, kll
-    
-    def train_epoch(self, n_batch, n_samples=None, kl_ratio=0.):
+
+    def train_epoch(self, n_batch, n_samples=None, kl_ratio=0.0):
         """
             Train for one epoch (= one iteration through the data set).
-            
+
             Parameters:
             -----------
             n_batch : Integer
@@ -79,21 +83,33 @@ class CombinedTrainer(object):
             kl_ratio : Float between 0 and 1.
                 The trade-off parameter `a` weighing NLL loss vs. KLL loss.
         """
-        batch_iterator = IndexBatchIterator(len(self._data), n_batch)
-        nlls = []
-        klls = []
-        if n_samples is None:
-            n_samples = n_batch
-        for idxs in batch_iterator:
-            if kl_ratio < 1.:
-                data = self._data[idxs]
-                if not isinstance(data, torch.Tensor):
-                    data = torch.Tensor(data)
-            else:
-                data = None
-            nll, kll = self._step(data, n_samples, kl_ratio)
-            yield nll, kll
-            
-            
-            
-                           
+        return _EpochIterator(self, n_batch, n_samples, kl_ratio)
+
+
+class _EpochIterator(object):
+    def __init__(self, trainer, n_batch, n_samples, kl_ratio):
+        self._trainer = trainer
+        self._batch_iterator = IndexBatchIterator(len(trainer._data), n_batch)
+        self._n_samples = n_samples
+        self._kl_ratio = kl_ratio
+        if self._n_samples is None:
+            self._n_samples = n_batch
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        idxs = self._batch_iterator.next()
+        if self._kl_ratio < 1.0:
+            data = self._trainer._data[idxs]
+            if not isinstance(data, torch.Tensor):
+                data = torch.Tensor(data)
+        else:
+            data = None
+        return self._trainer._step(data, self._n_samples, self._kl_ratio)
+
+    def __len__(self):
+        return len(self._batch_iterator)
+
+    def next(self):
+        return self.__next__()

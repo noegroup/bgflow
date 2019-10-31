@@ -4,7 +4,6 @@ from .utils.types import is_list_or_tuple
 
 
 class DiscreteFlow(torch.nn.Module):
-    
     def __init__(self, layers):
         """
         Represents a diffeomorphism that can be computed
@@ -19,7 +18,7 @@ class DiscreteFlow(torch.nn.Module):
         """
         super().__init__()
         self._layers = torch.nn.ModuleList(layers)
-    
+
     def forward(self, x, inverse=False):
         """
         Transforms the input along the diffeomorphism and returns

@@ -1,6 +1,7 @@
-__author__ = 'noe'
+__author__ = "noe"
 
 import numpy as np
+
 
 def mean_finite_(x, min_finite=1):
     """ Computes mean over finite values """
@@ -10,6 +11,7 @@ def mean_finite_(x, min_finite=1):
     else:
         return np.nan
 
+
 def std_finite_(x, min_finite=2):
     """ Computes mean over finite values """
     isfin = np.isfinite(x)
@@ -18,36 +20,40 @@ def std_finite_(x, min_finite=2):
     else:
         return np.nan
 
+
 def mean_finite(x, axis=None, min_finite=1):
     if axis is None:
         return mean_finite_(x)
     if axis == 0 or axis == 1:
-        M = np.zeros((x.shape[axis-1],))
-        for i in range(x.shape[axis-1]):
+        M = np.zeros((x.shape[axis - 1],))
+        for i in range(x.shape[axis - 1]):
             if axis == 0:
                 M[i] = mean_finite_(x[:, i])
             else:
                 M[i] = mean_finite_(x[i])
         return M
     else:
-        raise NotImplementedError('axis value not implemented:', axis)
+        raise NotImplementedError("axis value not implemented:", axis)
+
 
 def std_finite(x, axis=None, min_finite=2):
     if axis is None:
         return mean_finite_(x)
     if axis == 0 or axis == 1:
-        S = np.zeros((x.shape[axis-1],))
-        for i in range(x.shape[axis-1]):
+        S = np.zeros((x.shape[axis - 1],))
+        for i in range(x.shape[axis - 1]):
             if axis == 0:
                 S[i] = std_finite_(x[:, i])
             else:
                 S[i] = std_finite_(x[i])
         return S
     else:
-        raise NotImplementedError('axis value not implemented:', axis)
+        raise NotImplementedError("axis value not implemented:", axis)
+
 
 def metropolis_function(x):
     return np.minimum(np.exp(-x), 1)
+
 
 def bar(sampled_a_uab, sampled_b_uba):
     """
@@ -58,10 +64,15 @@ def bar(sampled_a_uab, sampled_b_uba):
     sampled_b_uba : array
         Ua-Ub for samples in B
     """
-    R = np.mean(metropolis_function(sampled_a_uab)) / np.mean(metropolis_function(sampled_b_uba))
+    R = np.mean(metropolis_function(sampled_a_uab)) / np.mean(
+        metropolis_function(sampled_b_uba)
+    )
     return -np.log(R)
 
-def free_energy_bootstrap(D, l, r, n, sample=100, weights=None, bias=None, temperature=1.0):
+
+def free_energy_bootstrap(
+    D, l, r, n, sample=100, weights=None, bias=None, temperature=1.0
+):
     """ Bootstrapped free energy calculation
 
     If D is a single array, bootstraps by sample. If D is a list of arrays, bootstraps by trajectories
@@ -118,10 +129,12 @@ def free_energy_bootstrap(D, l, r, n, sample=100, weights=None, bias=None, tempe
         B = bias(bin_means) / temperature
         Es -= B
 
-    return bin_means, Es# / temperature
+    return bin_means, Es  # / temperature
 
 
-def free_energy_bootstrap_2BGs(bg1, bg2, nsamples, nbootstrap, temperature=1.0, verbose=False):
+def free_energy_bootstrap_2BGs(
+    bg1, bg2, nsamples, nbootstrap, temperature=1.0, verbose=False
+):
     """ Computes free energy difference between the states sampled by two Boltzmann generators
     with a joint latent space
 
@@ -150,13 +163,17 @@ def free_energy_bootstrap_2BGs(bg1, bg2, nsamples, nbootstrap, temperature=1.0, 
     for i in range(niter):
         if verbose:
             print(i)
-        sample_z = np.sqrt(temperature) * np.random.randn(nsample_per_bootstrap, bg1._dim)
+        sample_z = np.sqrt(temperature) * np.random.randn(
+            nsample_per_bootstrap, bg1._dim
+        )
         sample_x1, sampleJzx1 = bg1.transform_zxJ(sample_z)
         energies_sample_x1 = bg1.energy(sample_x1)
         sample_x2, sampleJzx2 = bg2.transform_zxJ(sample_z)
         energies_sample_x2 = bg1.energy(sample_x2)
 
-        energies_sample_z = bg1._dim + np.sum(sample_z**2, axis=1) / (2.0 * temperature)
+        energies_sample_z = bg1._dim + np.sum(sample_z ** 2, axis=1) / (
+            2.0 * temperature
+        )
         logw1 = -energies_sample_x1 + energies_sample_z + sampleJzx1
         w1 = np.exp((logw1 - logw1.max()) / temperature)
         logw2 = -energies_sample_x2 + energies_sample_z + sampleJzx2
@@ -179,6 +196,6 @@ def free_energy_bootstrap_2BGs(bg1, bg2, nsamples, nbootstrap, temperature=1.0, 
         p12 = np.sum(W1s[Isel] * f) / np.sum(W1s[Isel])
         f = np.minimum(np.exp(dEs[Isel] / temperature), 1.0)
         p21 = np.sum(W2s[Isel] * f) / np.sum(W2s[Isel])
-        dFs.append(-temperature * np.log(p12/p21))
+        dFs.append(-temperature * np.log(p12 / p21))
 
     return dFs

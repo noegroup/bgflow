@@ -1,4 +1,4 @@
-__author__ = 'noe'
+__author__ = "noe"
 
 from deep_boltzmann.util import ensure_traj
 from scipy.misc import logsumexp
@@ -6,24 +6,42 @@ import numpy as np
 import keras
 
 
-def plot_latent_sampling(rc, Z, E, rclabel='Reaction coord.', maxener=100):
+def plot_latent_sampling(rc, Z, E, rclabel="Reaction coord.", maxener=100):
     import matplotlib.pyplot as plt
     from deep_boltzmann.plot import plot_traj_hist
+
     plt.figure(figsize=(20, 12))
     ax1 = plt.subplot2grid((3, 4), (0, 0), colspan=3)
     ax2 = plt.subplot2grid((3, 4), (0, 3))
-    plot_traj_hist(rc, ax1=ax1, ax2=ax2, color='blue', ylabel=rclabel)
+    plot_traj_hist(rc, ax1=ax1, ax2=ax2, color="blue", ylabel=rclabel)
     ax3 = plt.subplot2grid((3, 4), (1, 0), colspan=3)
     ax4 = plt.subplot2grid((3, 4), (1, 3))
-    Elow = np.minimum(E, maxener+1)
-    plot_traj_hist(Elow, ax1=ax3, ax2=ax4, color='blue',
-                   ylim=[Elow.min() - 0.5*(maxener-Elow.min()), maxener], ylabel='Energy')
+    Elow = np.minimum(E, maxener + 1)
+    plot_traj_hist(
+        Elow,
+        ax1=ax3,
+        ax2=ax4,
+        color="blue",
+        ylim=[Elow.min() - 0.5 * (maxener - Elow.min()), maxener],
+        ylabel="Energy",
+    )
     ax5 = plt.subplot2grid((3, 4), (2, 0), colspan=3)
     ax6 = plt.subplot2grid((3, 4), (2, 3))
-    plot_traj_hist(np.mean(Z**2, axis=1), ax1=ax5, ax2=ax6, color='blue', ylabel='|Z|')
+    plot_traj_hist(
+        np.mean(Z ** 2, axis=1), ax1=ax5, ax2=ax6, color="blue", ylabel="|Z|"
+    )
 
-def sample_RC(network, nsamples, compute_rc, batchsize=10000, verbose=True, temperature=1.0,
-              xmapper=None, failfast=True):
+
+def sample_RC(
+    network,
+    nsamples,
+    compute_rc,
+    batchsize=10000,
+    verbose=True,
+    temperature=1.0,
+    xmapper=None,
+    failfast=True,
+):
     """ Generates x samples from latent network and computes their weights
 
     Parameters
@@ -48,10 +66,12 @@ def sample_RC(network, nsamples, compute_rc, batchsize=10000, verbose=True, temp
     W = []
     niter = int(nsamples / batchsize) + 1
     for i in range(niter):
-        print('Iteration', i, '/', niter)
-        _, sample_x, _, E_x, logw = network.sample(temperature=temperature, nsample=batchsize)
+        print("Iteration", i, "/", niter)
+        _, sample_x, _, E_x, logw = network.sample(
+            temperature=temperature, nsample=batchsize
+        )
         if np.any(np.isnan(E_x)) and failfast:
-            raise ValueError('Energy NaN')
+            raise ValueError("Energy NaN")
         if xmapper is not None:
             notperm = np.logical_not(xmapper.is_permuted(sample_x))
             sample_x = sample_x[notperm]
@@ -62,6 +82,7 @@ def sample_RC(network, nsamples, compute_rc, batchsize=10000, verbose=True, temp
     W = np.concatenate(W)[:nsamples]
     W -= W.max()
     return D, W
+
 
 class LatentModel:
     def __init__(self, network):
@@ -100,8 +121,17 @@ class BiasedModel:
 
 
 class GaussianPriorMCMC(object):
-    def __init__(self, network, energy_model=None,
-                 z0=None, std_z=1.0, batchsize=10000, xmapper=None, tf=False, temperature=1.0):
+    def __init__(
+        self,
+        network,
+        energy_model=None,
+        z0=None,
+        std_z=1.0,
+        batchsize=10000,
+        xmapper=None,
+        tf=False,
+        temperature=1.0,
+    ):
         """ Latent Prior Markov-Chain Monte Carlo
 
         Samples from a Gaussian prior in latent space and accepts according to energy in configuration space.
@@ -149,13 +179,19 @@ class GaussianPriorMCMC(object):
         self.xmapper = xmapper
         if self.xmapper is not None:
             if self.xmapper.is_permuted(self.x)[0]:
-                raise RuntimeError('Starting configuration is already permuted. Choose a different z0.')
+                raise RuntimeError(
+                    "Starting configuration is already permuted. Choose a different z0."
+                )
         self.e = self.energy_model.energy(self.x) / self.temperature
 
     def _propose_batch(self):
         # sample and set first data point to current sample for easy acceptance
-        sample_s = np.random.randint(low=0, high=self.std_z.size, size=self.batchsize + 1)  # step chosen
-        sample_z = self.std_z[sample_s][:, None] * np.random.randn(self.batchsize + 1, self.network.zdim)
+        sample_s = np.random.randint(
+            low=0, high=self.std_z.size, size=self.batchsize + 1
+        )  # step chosen
+        sample_z = self.std_z[sample_s][:, None] * np.random.randn(
+            self.batchsize + 1, self.network.zdim
+        )
         sample_z[0] = self.z
         sample_x, sample_J = self.network.transform_zxJ(sample_z)
         if self.xmapper is not None:
@@ -163,12 +199,19 @@ class GaussianPriorMCMC(object):
             I_permuted = np.where(isP == True)[0]
             # resample
             while I_permuted.size > 0:
-                sample_z[I_permuted] = self.std_z[sample_s[I_permuted]][:, None] * np.random.randn(I_permuted.size, self.network.zdim)
-                sample_x[I_permuted], sample_J[I_permuted] = self.network.transform_zxJ(sample_z[I_permuted])
+                sample_z[I_permuted] = self.std_z[sample_s[I_permuted]][
+                    :, None
+                ] * np.random.randn(I_permuted.size, self.network.zdim)
+                sample_x[I_permuted], sample_J[I_permuted] = self.network.transform_zxJ(
+                    sample_z[I_permuted]
+                )
                 isP[I_permuted] = self.xmapper.is_permuted(sample_x[I_permuted])
                 I_permuted = np.where(isP == True)[0]
         if self.tf:
-            sample_e = keras.backend.eval(self.energy_model.energy(sample_x)) / self.temperature
+            sample_e = (
+                keras.backend.eval(self.energy_model.energy(sample_x))
+                / self.temperature
+            )
         else:
             sample_e = self.energy_model.energy(sample_x) / self.temperature
         return sample_s, sample_z, sample_x, sample_e, sample_J
@@ -180,21 +223,35 @@ class GaussianPriorMCMC(object):
         factor = 1.0 / (2.0 * self.std_z * self.std_z)
         for i in range(1, n):
             if self.std_z.size == 1:
-                log_p_forward = - factor[0] * np.sum(sample_z[i]**2)
-                log_p_backward = - factor[0] * np.sum(self.z**2)
+                log_p_forward = -factor[0] * np.sum(sample_z[i] ** 2)
+                log_p_backward = -factor[0] * np.sum(self.z ** 2)
             else:
-                log_p_forward = logsumexp(- factor * np.sum(sample_z[i]**2) - self.network.zdim * np.log(self.std_z))
-                log_p_backward = logsumexp(- factor * np.sum(self.z**2) - self.network.zdim * np.log(self.std_z))
+                log_p_forward = logsumexp(
+                    -factor * np.sum(sample_z[i] ** 2)
+                    - self.network.zdim * np.log(self.std_z)
+                )
+                log_p_backward = logsumexp(
+                    -factor * np.sum(self.z ** 2)
+                    - self.network.zdim * np.log(self.std_z)
+                )
                 # use sequential stepping
-                #log_p_forward = - factor[sample_s[i]] * np.sum(sample_z[i]**2)
-                #log_p_backward = - factor[sample_s[i]] * np.sum(self.z**2)
-            if R[i] > self.J - sample_J[i] + sample_e[i] - self.e + log_p_forward - log_p_backward:
+                # log_p_forward = - factor[sample_s[i]] * np.sum(sample_z[i]**2)
+                # log_p_backward = - factor[sample_s[i]] * np.sum(self.z**2)
+            if (
+                R[i]
+                > self.J
+                - sample_J[i]
+                + sample_e[i]
+                - self.e
+                + log_p_forward
+                - log_p_backward
+            ):
                 sel[i] = i
                 self.z = sample_z[i]
                 self.e = sample_e[i]
                 self.J = sample_J[i]
             else:
-                sel[i] = sel[i-1]
+                sel[i] = sel[i - 1]
         sel = sel[1:]
         return sample_s[sel], sample_z[sel], sample_x[sel], sample_e[sel], sample_J[sel]
 
@@ -226,7 +283,9 @@ class GaussianPriorMCMC(object):
             Xp.append(sample_x)
             Ep.append(sample_e)
             Jp.append(sample_J)
-            acc_s, acc_z, acc_x, acc_e, acc_J = self._accept_batch(sample_s, sample_z, sample_x, sample_e, sample_J)
+            acc_s, acc_z, acc_x, acc_e, acc_J = self._accept_batch(
+                sample_s, sample_z, sample_x, sample_e, sample_J
+            )
             Z.append(acc_z)
             X.append(acc_x)
             E.append(acc_e)
@@ -240,25 +299,45 @@ class GaussianPriorMCMC(object):
         X = np.vstack(X)[:N]
         E = np.concatenate(E)[:N]
         J = np.concatenate(J)[:N]
-        #return Zp, Xp, Ep, Jp
+        # return Zp, Xp, Ep, Jp
         if return_proposal:
             return Zp, Xp, Ep, Jp, Z, X, E, J
         else:
             return Z, X, E, J
 
-def eval_GaussianPriorMCMC(network, metric, nrepeat, nsteps, energy_model=None, burnin=10000,
-                           z0=None, temperature=1.0, batchsize=10000, xmapper=None, tf=False, verbose=True):
+
+def eval_GaussianPriorMCMC(
+    network,
+    metric,
+    nrepeat,
+    nsteps,
+    energy_model=None,
+    burnin=10000,
+    z0=None,
+    temperature=1.0,
+    batchsize=10000,
+    xmapper=None,
+    tf=False,
+    verbose=True,
+):
     z2s = []
     ms = []
     Es = []
     Js = []
     for i in range(nrepeat):
-        print('Iteration', i)
-        gp_mcmc = GaussianPriorMCMC(network, energy_model=energy_model, z0=z0, batchsize=batchsize,
-                                    xmapper=xmapper, tf=tf, temperature=temperature)
+        print("Iteration", i)
+        gp_mcmc = GaussianPriorMCMC(
+            network,
+            energy_model=energy_model,
+            z0=z0,
+            batchsize=batchsize,
+            xmapper=xmapper,
+            tf=tf,
+            temperature=temperature,
+        )
         _, _, _, _ = gp_mcmc.run(burnin, return_proposal=False)
         Z, X, E, J = gp_mcmc.run(nsteps, return_proposal=False)
-        z2s.append(np.sum(Z**2, axis=1))
+        z2s.append(np.sum(Z ** 2, axis=1))
         ms.append(metric(X))
         Es.append(E)
         Js.append(J)
@@ -268,7 +347,16 @@ def eval_GaussianPriorMCMC(network, metric, nrepeat, nsteps, energy_model=None, 
 # TODO: Currently not compatible with RealNVP networks. Refactor to include Jacobian
 # TODO: Mapping handling should be changed, so as to reject permuted configurations
 class LatentMetropolisGauss(object):
-    def __init__(self, latent_network, z0, noise=0.1, burnin=0, stride=1, nwalkers=1, xmapper=None):
+    def __init__(
+        self,
+        latent_network,
+        z0,
+        noise=0.1,
+        burnin=0,
+        stride=1,
+        nwalkers=1,
+        xmapper=None,
+    ):
         """ Metropolis Monte-Carlo Simulation with Gaussian Proposal Steps
 
         Parameters
@@ -297,16 +385,20 @@ class LatentMetropolisGauss(object):
         self.stride = stride
         self.nwalkers = nwalkers
         if xmapper is None:
+
             class DummyMapper(object):
                 def map(self, X):
                     return X
+
             xmapper = DummyMapper()
         self.xmapper = xmapper
         self.reset(z0)
 
     def _proposal_step(self):
         # proposal step
-        self.z_prop = self.z + self.noise*np.random.randn(self.z.shape[0], self.z.shape[1])
+        self.z_prop = self.z + self.noise * np.random.randn(
+            self.z.shape[0], self.z.shape[1]
+        )
         x_prop_unmapped = self.network.transform_zx(self.z_prop)
         self.x_prop = self.xmapper.map(x_prop_unmapped)
         if np.max(np.abs(self.x_prop - x_prop_unmapped)) > 1e-7:
@@ -370,8 +462,18 @@ class LatentMetropolisGauss(object):
                 self.etraj_.append(self.E)
 
 
-def sample_hybrid_zprior_zmetro(network, niter, nprior, nmetro, prior_std=1.0, noise=0.1, z0=None, x0=None, mapper=None,
-                                verbose=0):
+def sample_hybrid_zprior_zmetro(
+    network,
+    niter,
+    nprior,
+    nmetro,
+    prior_std=1.0,
+    noise=0.1,
+    z0=None,
+    x0=None,
+    mapper=None,
+    verbose=0,
+):
     """ Samples iteratively using Prior MCMC in z-space and Metropolis MCMC in z-space
 
     Parameters
@@ -413,13 +515,13 @@ def sample_hybrid_zprior_zmetro(network, niter, nprior, nmetro, prior_std=1.0, n
 
     # initial configuration
     if z0 is not None and x0 is not None:
-        raise ValueError('Cannot set both x0 and z0.')
+        raise ValueError("Cannot set both x0 and z0.")
     if x0 is not None:
         z0 = network.transform_xz(x0)
 
     for i in range(niter):
-        if verbose > 0 and (i+1) % verbose == 0:
-            print((i+1), '/', niter)
+        if verbose > 0 and (i + 1) % verbose == 0:
+            print((i + 1), "/", niter)
         # Gaussian prior MCMC
         prior_mc = GaussianPriorMCMC(network, z0=z0, std_z=prior_std, batchsize=nprior)
         z, x, e = prior_mc.run(nprior)
@@ -444,9 +546,18 @@ def sample_hybrid_zprior_zmetro(network, niter, nprior, nmetro, prior_std=1.0, n
     return Z, X, E
 
 
-
-def sample_hybrid_zprior_xmetro(network, niter, nprior, nmetro, prior_std=1.0, noise=0.02, z0=None, x0=None,
-                                mapper=None, verbose=0):
+def sample_hybrid_zprior_xmetro(
+    network,
+    niter,
+    nprior,
+    nmetro,
+    prior_std=1.0,
+    noise=0.02,
+    z0=None,
+    x0=None,
+    mapper=None,
+    verbose=0,
+):
     """ Samples iteratively using Prior MCMC in z-space and Metropolis MCMC in z-space
 
     Parameters
@@ -483,6 +594,7 @@ def sample_hybrid_zprior_xmetro(network, niter, nprior, nmetro, prior_std=1.0, n
 
     """
     from deep_boltzmann.sampling import MetropolisGauss
+
     Z = []
     X = []
     E = []
@@ -490,15 +602,17 @@ def sample_hybrid_zprior_xmetro(network, niter, nprior, nmetro, prior_std=1.0, n
 
     # initial configuration
     if z0 is not None and x0 is not None:
-        raise ValueError('Cannot set both x0 and z0.')
+        raise ValueError("Cannot set both x0 and z0.")
     if x0 is not None:
         z0 = network.transform_xz(x0)
 
     for i in range(niter):
-        if verbose > 0 and (i+1) % verbose == 0:
-            print((i+1), '/', niter)
+        if verbose > 0 and (i + 1) % verbose == 0:
+            print((i + 1), "/", niter)
         # Gaussian prior MCMC
-        prior_mc = GaussianPriorMCMC(network, z0=z0, std_z=prior_std, batchsize=nprior, xmapper=mapper)
+        prior_mc = GaussianPriorMCMC(
+            network, z0=z0, std_z=prior_std, batchsize=nprior, xmapper=mapper
+        )
         z, x, e, j = prior_mc.run(nprior)
         if mapper is not None:
             x = mapper.map(x)

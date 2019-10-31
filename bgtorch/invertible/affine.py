@@ -3,7 +3,6 @@ import numpy as np
 
 
 class AffineLayer(torch.nn.Module):
-    
     def __init__(self, n_dims, use_scaling=True, use_translation=True):
         super().__init__()
         self._n_dims = n_dims
@@ -12,7 +11,7 @@ class AffineLayer(torch.nn.Module):
             self._log_sigma = torch.nn.Parameter(torch.zeros(self._n_dims))
         if use_translation:
             self._mu = torch.nn.Parameter(torch.zeros(self._n_dims))
-    
+
     def forward(self, x, inverse=False):
         dlogp = torch.zeros(*x.shape[:-1], 1).to(x)
         if not inverse:

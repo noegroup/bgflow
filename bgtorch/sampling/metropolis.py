@@ -1,19 +1,18 @@
-__author__ = 'noe'
+__author__ = "noe"
 
 import numpy as np
 import torch
 
 
 class SystemWrapper(object):
-    
     def __init__(self, system, use_numpy=False, cuda_device=None):
         self._system = system
         if hasattr(self._system, "_energy_numpy"):
             self._use_numpy = use_numpy
         else:
             self._use_numpy = False
-        self._cuda_device=cuda_device
-    
+        self._cuda_device = cuda_device
+
     def __call__(self, x, *args, **kwargs):
         if self._use_numpy:
             energy = self._system._energy_numpy(x)
@@ -27,9 +26,17 @@ class SystemWrapper(object):
 
 
 class MetropolisGauss(object):
-
-    def __init__(self, energy_function, x0, temperature=1.0, noise=0.1,
-                 burnin=0, stride=1, nwalkers=1, mapper=None):
+    def __init__(
+        self,
+        energy_function,
+        x0,
+        temperature=1.0,
+        noise=0.1,
+        burnin=0,
+        stride=1,
+        nwalkers=1,
+        mapper=None,
+    ):
         """ Metropolis Monte-Carlo Simulation with Gaussian Proposal Steps
 
         Parameters
@@ -66,7 +73,9 @@ class MetropolisGauss(object):
 
     def _proposal_step(self):
         # proposal step
-        self.x_prop = self.x + self.noise*np.random.randn(self.x.shape[0], self.x.shape[1])
+        self.x_prop = self.x + self.noise * np.random.randn(
+            self.x.shape[0], self.x.shape[1]
+        )
         if self.mapper is not None:
             self.x_prop = self.mapper(self.x_prop)
         self.E_prop = self.energy_function(self.x_prop)
@@ -120,22 +129,37 @@ class MetropolisGauss(object):
             self._acceptance_step()
             self.step += 1
             if verbose > 0 and i % verbose == 0:
-                print('Step', i, '/', nsteps)
+                print("Step", i, "/", nsteps)
             if self.step > self.burnin and self.step % self.stride == 0:
                 self.traj_.append(self.x)
                 self.etraj_.append(self.E)
 
 
 class ReplicaExchangeMetropolisGauss(object):
-
-    def __init__(self, energy_function, x0, temperatures, noise=0.1,
-                 burnin=0, stride=1, mapper=None):
+    def __init__(
+        self,
+        energy_function,
+        x0,
+        temperatures,
+        noise=0.1,
+        burnin=0,
+        stride=1,
+        mapper=None,
+    ):
         if temperatures.size % 2 == 0:
-            raise ValueError('Please use an odd number of temperatures.')
+            raise ValueError("Please use an odd number of temperatures.")
         self.temperatures = temperatures
-        self.sampler = MetropolisGauss(energy_function, x0, temperature=temperatures, noise=noise,
-                                       burnin=burnin, stride=stride, nwalkers=temperatures.size, mapper=mapper)
-        self.toggle=0
+        self.sampler = MetropolisGauss(
+            energy_function,
+            x0,
+            temperature=temperatures,
+            noise=noise,
+            burnin=burnin,
+            stride=stride,
+            nwalkers=temperatures.size,
+            mapper=mapper,
+        )
+        self.toggle = 0
 
     @property
     def trajs(self):
@@ -149,16 +173,18 @@ class ReplicaExchangeMetropolisGauss(object):
         for i in range(nepochs):
             self.sampler.run(nsteps=nsteps_per_epoch)
             # exchange
-            for k in range(self.toggle, self.temperatures.size-1, 2):
-                c = -(self.sampler.E[k+1] - self.sampler.E[k]) * (1.0/self.temperatures[k+1] - 1.0/self.temperatures[k])
+            for k in range(self.toggle, self.temperatures.size - 1, 2):
+                c = -(self.sampler.E[k + 1] - self.sampler.E[k]) * (
+                    1.0 / self.temperatures[k + 1] - 1.0 / self.temperatures[k]
+                )
                 acc = -np.log(np.random.rand()) > c
                 if acc:
                     h = self.sampler.x[k].copy()
-                    self.sampler.x[k] = self.sampler.x[k+1].copy()
-                    self.sampler.x[k+1] = h
+                    self.sampler.x[k] = self.sampler.x[k + 1].copy()
+                    self.sampler.x[k + 1] = h
                     h = self.sampler.E[k]
-                    self.sampler.E[k] = self.sampler.E[k+1]
-                    self.sampler.E[k+1] = h
+                    self.sampler.E[k] = self.sampler.E[k + 1]
+                    self.sampler.E[k + 1] = h
             self.toggle = 1 - self.toggle
 
 
@@ -224,5 +250,3 @@ class ReplicaExchangeMetropolisGauss(object):
 #             if self.step > self.burnin and self.step % self.stride == 0:
 #                 self.traj_.append(self.x[0].copy())
 #                 self.etraj_.append(self.E)
-
-
