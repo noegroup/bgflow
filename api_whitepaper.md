@@ -792,7 +792,7 @@ data = loader.get_data(seed)
 
 To maintain consistency while still allowing for flexibility and to maximize code reuse
 
-1. Compositions should be preferred over inheritance:
+1. [Compositions should be preferred over inheritance](https://en.wikipedia.org/wiki/Composition_over_inheritance):
 
 ```python
 class Specialized():
