@@ -508,7 +508,7 @@ class KLLossIterator(LossIterator):
 If we have a target system `target`, a flow `flow` and a prior `prior`, we can now define two loss iterators
 that represent our usual ML and KL losses:
 
-```
+```python
 from bgtorch.sampling import DataSampler
 
 ml_loss_iter = KLLossIterator(
@@ -531,7 +531,7 @@ kl_loss_iter = KLLossIterator(
 This is a flexible design, e.g. if our prior is not given by a distribution that is accessible via iid sampling we could
 also define the following for the kl loss
 
-```
+```python
 from bgtorch.sampling import GaussianMCMCSampler
 
 kl_loss_iter = KLLossIterator(
