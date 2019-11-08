@@ -862,9 +862,9 @@ class Object():
 5. Flexibility should come from architecture design, not from monstrous configuration dicts. Try to avoid configuration
    dicts wherever possible. Dicts should be used as random access, hash-based containers (like `std::map` in C++) but
    never substitute a flexible api. Possible patterns that allow avoiding dicts
-   - Delegate patterns (see 1.)
-   - Factory patterns
-   - Command patterns
+   - [Delegate patterns](https://en.wikipedia.org/wiki/Delegation_pattern) (see 1.)
+   - [Builder patterns](https://en.wikipedia.org/wiki/Builder_pattern)
+   - [Command patterns](https://en.wikipedia.org/wiki/Command_pattern)
    - Default parameters / parameter overloading
 
 6. No hard-coding of specific design decisionsn the API. The API should allow to build every possible instantiation of
