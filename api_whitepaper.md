@@ -368,7 +368,7 @@ simpler.
 
 That way we can define a mixture flow as
 
-```
+```pythone
     # define a list of priors
     priors = [ ... ]
 
