@@ -802,7 +802,7 @@ class Specialized():
 
     def foo(self, arg):
         # do something
-        result = self._delegate(arg)
+        result = self._delegate.foo(arg)
         # do something else with `result test`
 ```
 
