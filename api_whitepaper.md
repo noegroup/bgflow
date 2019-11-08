@@ -250,7 +250,7 @@ class System(torch.nn.Module):
         raise NotImplementedError()
 
     def energy(self, state):
-        # compute the energy / unnormalized log prob for the state
+        # compute the energy / unnormed log prob for the state
         # if a log probability is given and tractable, we can just
         # use this. otherwise should be overrideen by child class
         return self._log_prob(state)
@@ -282,26 +282,26 @@ class MixtureModel(System):
     def __init__(
         self,
         components,
-        unnormalized_log_weights=None,
+        unnormed_log_weights=None,
         trainable_weights=False
     ):
         super().__init__()
         n_components = len(components)
         self._components = components
-        if unnormalized_log_weights is None:
-            unnormalized_log_weights = torch.zeros(
+        if unnormed_log_weights is None:
+            unnormed_log_weights = torch.zeros(
                 n_components
             )
-        self._unnormalized_log_weights = unnormalized_log_weights
+        self._unnormed_log_weights = unnormed_log_weights
         if trainable_weights:
-            self._unnormalized_log_weights = torch.nn.Parameter(
-                self._unnormalized_log_weights
+            self._unnormed_log_weights = torch.nn.Parameter(
+                self._unnormed_log_weights
             )
 
     @property
     def _log_weights(self):
         return torch.log_softmax(
-            self._unnormalized_log_weights, dim=-1
+            self._unnormed_log_weights, dim=-1
         )
 
     def _sample_iid(self, n_total_samples, temperature=1.0):
@@ -310,7 +310,7 @@ class MixtureModel(System):
         assert temperature == 1.0
 
         weights = self._log_weights.exp()
-        weights_numpy = to_numpy(log_weights.exp())
+        weights_numpy = to_numpy(weights)
 
         n_samples_per_comp = np.random.multinomial(
             n_total_samples, weights_numpy, 1
@@ -475,7 +475,7 @@ class LossIterator():
 A concrete example is a loss iterator that emits the KL divergence between an origin and a target distribution.
 
 ``` python
-def _unnormalized_kl_divergence(flow, target, x, inverse=false):
+def _unnormed_kl_divergence(flow, target, x, inverse=false):
     z, dlogp = flow(x, inverse=inverse)
     kl_divergence = target.energy(z).view(-1) - dlogp.view(-1)
     return kl_divergence
@@ -498,7 +498,7 @@ class KLLossIterator(LossIterator):
 
     def __next__(self):
         samples = self._sampler.sample(self._n_samples)
-        return _unnormalized_kl_divergence(
+        return _unnormed_kl_divergence(
             self._flow,
             self._target,
             samples,
@@ -560,20 +560,20 @@ class TrainingEpochIterator():
         n_iterations,
         loss_iterators,
         optimizer,
-        unnormalized_weights=None
+        unnormed_weights=None
     ):
         n_iterators = len(loss_iterators)
         self._step_iter = range(n_iterations)
         self._loss_iters = zip(loss_iterators)
         self._optimizer = optimizer
-        if unnormalized_weights is None:
-            unnormalized_weights = torch.ones(n_iterators)
-        self._unnormalized_weights = unnormalized_weights
+        if unnormed_weights is None:
+            unnormed_weights = torch.ones(n_iterators)
+        self._unnormed_weights = unnormed_weights
 
     @property
     def _weights:
         return torch.softmax(
-            self._unnormalized_weights,
+            self._unnormed_weights,
             dim=-1
         )
 
@@ -814,7 +814,7 @@ in a child class will occur - this can be solved with a delegator.
 
 2. Variables should have self-explanatory names. Avoid `x`, `mu`, `tau` etc. Try to use `samples`, `temperature`, `mean` etc.
    instead. Python encourages the use of explanatory variable names by providing a very flexible formatting.
-3. Private members that are not to be intended to be accessible from outside should be prefixed with an underscore, e.g.
+3. Private members that are not to be intended to be accessible from outside [should be prefixed with an underscore](https://www.python.org/dev/peps/pep-0008/#method-names-and-instance-variables), e.g.
    `self._private_variable` or `self._private_function()`. Object states (variables) which should be accessible from
    outside should be revealed with a `@property` function. Changes to object states should always happen via procedure /
    function calls (in the best case they should not happen - mutable object states are in many cases the cause for
