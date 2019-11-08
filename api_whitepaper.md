@@ -368,18 +368,18 @@ simpler.
 
 That way we can define a mixture flow as
 
-```pythone
-    # define a list of priors
-    priors = [ ... ]
+```python
+# define a list of priors
+priors = [ ... ]
 
-    # construct a list of individual flows following `bgtorch.invertible`
-    flows = [ ... ]
+# construct a list of individual flows following `bgtorch.invertible`
+flows = [ ... ]
 
-    # new target distribution
-    proposal_distribution = MixtureModel([
-        TransformedSystem(prior, flow)
-        for prior, flow in zip(priors, flows)
-    ])
+# new target distribution
+proposal_distribution = MixtureModel([
+    TransformedSystem(prior, flow)
+    for prior, flow in zip(priors, flows)
+])
 ```
 
 Target systems like Ala2, BPTI, ... are set up using OpenMM (or possibly other external libraries in the future). Here
