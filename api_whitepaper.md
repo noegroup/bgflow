@@ -346,6 +346,7 @@ class MixtureModel(System):
 class TransformedSystem(System):
 
     def __init(self, prior, flow):
+        super().__init__()
         self._prior = prior
         self._flow = flow
 
@@ -614,7 +615,7 @@ def train_epoch(
         weights=weights
     )
     for total_loss, losses in train_iter:
-        if report is not None:
+        if reporter is not None:
             reporter.report(total_loss, losses)
 ```
 
