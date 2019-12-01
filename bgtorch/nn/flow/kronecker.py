@@ -2,6 +2,9 @@ import torch
 import numpy as np
 
 
+from .base import Flow
+
+
 # TODO: write docstrings
 
 
@@ -31,7 +34,7 @@ def _create_ortho_matrices(n, d):
     return qs
 
 
-class KroneckerProductLayer(torch.nn.Module):
+class KroneckerProductFlow(Flow):
     def __init__(self, n_dim):
         super().__init__()
 
@@ -45,37 +48,33 @@ class KroneckerProductLayer(torch.nn.Module):
         )
         self._bias = torch.nn.Parameter(torch.Tensor(1, n_dim).zero_())
 
-    def forward(self, x, inverse=False):
-        if inverse:
-            return self._forward(x)
-        else:
-            return self._inverse(x)
-
-    def _forward(self, x):
+    def _forward(self, x, **kwargs):
         n_batch = x.shape[0]
-        M = self._factors[0]
-        dets = _batch_determinant_2x2(self._factors)
+        factors = self._factors.to(x)
+        M = factors[0]
+        dets = _batch_determinant_2x2(factors)
         det = dets[0]
         power = 2
-        for new_det, factor in zip(dets[1:], self._factors[1:]):
+        for new_det, factor in zip(dets[1:], factors[1:]):
             det = det.pow(2) * new_det.pow(power)
             M = _kronecker(M, factor)
             power = power * 2
-        dlogp = torch.zeros(n_batch, 1)
+        dlogp = torch.zeros(n_batch, 1).to(x)
         dlogp = dlogp + det.abs().log().sum(dim=-1, keepdim=True)
-        return x @ M + self._bias, dlogp
+        return x @ M + self._bias.to(x), dlogp
 
-    def _inverse(self, x):
+    def _inverse(self, x, **kwargs):
         n_batch = x.shape[0]
-        inv_factors = torch.inverse(self._factors)
+        factors = self._factors.to(x)
+        inv_factors = torch.inverse(factors)
         M = inv_factors[0]
-        inv_dets = 1.0 / _batch_determinant_2x2(self._factors)
+        inv_dets = _batch_determinant_2x2(inv_factors)
         inv_det = inv_dets[0]
         power = 2
         for new_inv_det, factor in zip(inv_dets[1:], inv_factors[1:]):
             inv_det = inv_det.pow(2) * new_inv_det.pow(power)
             M = kronecker(M, factor)
             power = power * 2
-        dlogp = torch.zeros(n_batch, 1)
+        dlogp = torch.zeros(n_batch, 1).to(x)
         dlogp = dlogp + inv_det.abs().log().sum(dim=-1, keepdim=True)
-        return (x - self._bias) @ M, dlogp
+        return (x - self._bias.to(x)) @ M, dlogp

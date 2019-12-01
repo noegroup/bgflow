@@ -1,10 +1,11 @@
 import torch
 
-from .utils.types import is_list_or_tuple
+from .base import Flow
+from ...utils.types import is_list_or_tuple
 
 
-class DiscreteFlow(torch.nn.Module):
-    def __init__(self, layers):
+class SequentialFlow(Flow):
+    def __init__(self, blocks):
         """
         Represents a diffeomorphism that can be computed
         as a discrete finite stack of layers.
@@ -14,12 +15,12 @@ class DiscreteFlow(torch.nn.Module):
             
         Parameters
         ----------
-        layers : Tuple / List of flow layers
+        blocks : Tuple / List of flow blocks
         """
         super().__init__()
-        self._layers = torch.nn.ModuleList(layers)
+        self._blocks = torch.nn.ModuleList(blocks)
 
-    def forward(self, x, inverse=False):
+    def forward(self, x, inverse=False, **kwargs):
         """
         Transforms the input along the diffeomorphism and returns
         the transformed variable together with the volume change.
@@ -43,12 +44,13 @@ class DiscreteFlow(torch.nn.Module):
             Corresponds to the log determinant of the Jacobian matrix.
         """
         dlogp = torch.zeros(*x.shape[:-1], 1).to(x)
-        layers = self._layers
+        blocks = self._blocks
         if inverse:
-            layers = reversed(layers)
+            blocks = reversed(blocks)
         if not is_list_or_tuple(x):
             x = [x]
-        for layer in layers:
-            *x, ddlogp = layer(*x, inverse=inverse)
+        for block in blocks:
+            *x, ddlogp = block(*x, inverse=inverse, **kwargs)
             dlogp += ddlogp
         return (*x, dlogp)
+        

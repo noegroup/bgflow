@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 
 
@@ -49,3 +50,32 @@ class IndexBatchIterator(object):
 
     def next(self):
         return self.__next__()
+
+
+def linlogcut(vals, high_val=1e3, max_val=1e9, inplace=False):
+    if not inplace:
+        vals = vals.clone()
+    filt = (vals >= high_val)
+    diff = vals[filt] - high_val
+    vals[filt] = torch.min(
+        high_val + torch.log(1 + diff),
+        max_val * torch.ones_like(diff)
+    )
+    return vals
+
+
+class _ClipGradient(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, input, max_norm):
+        ctx._max_norm = max_norm
+        return input
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        max_norm = ctx._max_norm
+        grad_norm = torch.norm(grad_output, p=2, dim=1)
+        coeff = max_norm / torch.max(grad_norm, max_norm * torch.ones_like(grad_norm))
+        return grad_output * coeff.view(-1, 1), None, None
+
+clip_grad = _ClipGradient.apply

@@ -3,6 +3,7 @@ import numpy as np
 
 
 # TODO: write docstrings
+# TODO: numerically unstable! check reference implementation!
 
 
 def _compute_bin_filter(x, grid):
@@ -80,13 +81,14 @@ def _spline(x, unnormed_pdf, grid=None, inverse=False):
     n_batch = unnormed_pdf.shape[0]
     n_dim = unnormed_pdf.shape[1]
     n_grid = unnormed_pdf.shape[2]
-
+    
+    unnormed_pdf = unnormed_pdf.to(x)
     pdf = torch.softmax(unnormed_pdf, dim=-1)
-
     cdf = _compute_cdf(pdf)
 
     if grid is None:
         grid = torch.linspace(0, 1, n_grid + 1).repeat(n_batch, n_dim, 1)
+    grid = grid.to(x)
 
     if inverse:
         cdf, grid = grid, cdf
@@ -100,7 +102,7 @@ def _spline(x, unnormed_pdf, grid=None, inverse=False):
     return y, logdet
 
 
-class LinearSplineLayer(torch.nn.Module):
+class LinearSplineFlow(torch.nn.Module):
     def __init__(self, n_points, n_dims, min_val=-1.0, max_val=1.0):
         super().__init__()
         self._n_points = n_points

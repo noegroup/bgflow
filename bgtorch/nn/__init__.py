@@ -1,1 +1,1 @@
-from .dense_net import *
+from .dense import DenseNet
