@@ -5,7 +5,7 @@ from .base import Flow
 #TODO: write docstrings
 
 
-class InvertedFlow(Flow):
+class InverseFlow(Flow):
     def __init__(self, delegate):
         super().__init__()
         self._delegate = delegate
