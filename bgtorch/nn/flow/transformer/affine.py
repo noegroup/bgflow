@@ -19,11 +19,11 @@ class AffineTransformer(Transformer):
         if self._shift_transformation is not None:
             mu = self._shift_transformation(x, *cond)
         else:
-            mu = torch.zeros(n_batch, 1).to(x)
+            mu = torch.zeros_like(y).to(x)
         if self._scale_transformation is not None:
             log_sigma = torch.tanh(self._scale_transformation(x, *cond))
         else:
-            log_sigma = torch.zeros(n_batch, 1).to(x)
+            log_sigma = torch.zeros_like(y).to(x)
         return mu, log_sigma
         
     def _forward(self, y, x, *cond, **kwargs):

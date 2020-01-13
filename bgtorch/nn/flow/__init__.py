@@ -1,8 +1,8 @@
 from .affine import AffineFlow
-from .coupling import CouplingFlow, SplittingFlow, SwappingFlow
+from .coupling import CouplingFlow, SplitFlow, MergeFlow, SwapFlow
 from .funnel import FunnelFlow
 from .spline import LinearSplineFlow
 from .kronecker import KroneckerProductFlow
 from .sequential import SequentialFlow
-from .inverted import InvertedFlow
+from .inverted import InverseFlow
 from .checkerboard import CheckerboardFlow

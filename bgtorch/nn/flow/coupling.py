@@ -4,11 +4,12 @@ import torch
 import numpy as np
 
 from .base import Flow
+from .inverted import InverseFlow
 
 # TODO: write docstrings
 
 
-class SplittingFlow(Flow):
+class SplitFlow(Flow):
     def __init__(self, n_left=1):
         super().__init__()
         self._n_left = n_left
@@ -29,8 +30,15 @@ class SplittingFlow(Flow):
         return (x, *cond, dlogp)
 
 
-class SwappingFlow(Flow):
+class MergeFlow(InverseFlow):
+    def __init__(self, n_left=1):
+        """ Shortcut to InvertedFlow(SplitFlow()) """
+        super().__init__(SplitFlow(n_left=n_left))
+
+
+class SwapFlow(Flow):
     def __init__(self):
+        """ Swaps input channels """
         super().__init__()
         
     def _forward(self, *xs, **kwargs):
