@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+from .types import assert_numpy
+
 
 class IndexBatchIterator(object):
     def __init__(self, n_elems, n_batch):
@@ -79,3 +81,40 @@ class _ClipGradient(torch.autograd.Function):
         return grad_output * coeff.view(-1, 1), None, None
 
 clip_grad = _ClipGradient.apply
+
+
+class LossReporter:
+    """
+        Simple reporter use for reporting losses and plotting them.
+    """
+    
+    def __init__(self, *labels):
+        self._labels = labels
+        self._n_reported = len(labels)
+        self._raw = [[] for _ in range(self._n_reported)]
+    
+    def report(self, *losses):
+        assert len(losses) == self._n_reported
+        for i in range(self._n_reported):
+            self._raw[i].append(assert_numpy(losses[i]))
+    
+    def plot(self, n_smooth=10, log=False):
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(self._n_reported, sharex=True)
+        if not isinstance(axes, np.ndarray):
+            axes = [axes]
+        fig.set_size_inches((8, 4 * self._n_reported), forward=True)
+        for i, (label, raw, axis) in enumerate(zip(self._labels, self._raw, axes)):
+            raw = assert_numpy(raw).reshape(-1)
+            kernel = np.ones(shape=(n_smooth,)) / n_smooth
+            smoothed = np.convolve(raw, kernel, mode="valid")
+            if not log:
+                axis.plot(smoothed)
+            else:
+                axis.semilogy(smoothed - smoothed.min())
+            axis.set_ylabel(label)
+            if i == self._n_reported - 1:
+                axis.set_xlabel("Iteration")
+                
+    def recent(self, n_recent=1):
+        return np.array([raw[-n_recent:] for raw in self._raw])

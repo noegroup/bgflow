@@ -5,9 +5,9 @@ class Transformer(Flow):
     def __init__(self):
         super().__init__()
     
-    def _forward(self, x_cond, y, *args, **kwargs):
+    def _forward(self, y, *args, **kwargs):
         raise NotImplementedError()
     
-    def _inverse(self, x_cond, y, *args, **kwargs):
+    def _inverse(self, y, *args, **kwargs):
         raise NotImplementedError()
     

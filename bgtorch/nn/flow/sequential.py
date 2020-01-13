@@ -20,7 +20,7 @@ class SequentialFlow(Flow):
         super().__init__()
         self._blocks = torch.nn.ModuleList(blocks)
 
-    def forward(self, x, inverse=False, **kwargs):
+    def forward(self, *xs, inverse=False, **kwargs):
         """
         Transforms the input along the diffeomorphism and returns
         the transformed variable together with the volume change.
@@ -43,14 +43,13 @@ class SequentialFlow(Flow):
             Total volume change as a result of the transformation.
             Corresponds to the log determinant of the Jacobian matrix.
         """
-        dlogp = torch.zeros(*x.shape[:-1], 1).to(x)
+        n_batch = xs[0].shape[0]
+        dlogp = torch.zeros(n_batch, 1).to(xs[0])
         blocks = self._blocks
         if inverse:
             blocks = reversed(blocks)
-        if not is_list_or_tuple(x):
-            x = [x]
         for block in blocks:
-            *x, ddlogp = block(*x, inverse=inverse, **kwargs)
+            *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             dlogp += ddlogp
-        return (*x, dlogp)
+        return (*xs, dlogp)
         

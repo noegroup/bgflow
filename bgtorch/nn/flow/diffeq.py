@@ -32,22 +32,23 @@ class DiffEqFlow(Flow):
         self._use_checkpoints = use_checkpoints
         self._kwargs = kwargs
         
-    def _forward(self, x, **kwargs):
-        return self._run_ode(x, self._dynamics, **kwargs)
+    def _forward(self, *xs, **kwargs):
+        return self._run_ode(*xs, dynamics=self._dynamics, **kwargs)
     
-    def _inverse(self, x, **kwargs):
-        return self._run_ode(x, self._inverse_dynamics, **kwargs)
+    def _inverse(self, *xs, **kwargs):
+        return self._run_ode(*xs, dynamics=self._inverse_dynamics, **kwargs)
 
-    def _run_ode(self, x, dynamics, **kwargs):
+    def _run_ode(self, *xs, dynamics, **kwargs):
         # TODO: kwargs should be parsed to avoid conflicts!
-        n_batch = x.shape[0]
-        logp_init = torch.zeros(n_batch, 1).to(x)
-        state = torch.cat([x, logp_init], dim=-1).contiguous()
-        ts = torch.linspace(0.0, self._t_max, self._n_time_steps).to(x)
+        assert(all(x.shape[0] == xs[0].shape[0] for x in xs[1:]))
+        n_batch = xs[0].shape[0]
+        logp_init = torch.zeros(n_batch, 1).to(xs[0])
+        state = [*xs, logp_init]
+        ts = torch.linspace(0.0, self._t_max, self._n_time_steps).to(xs[0])
         kwargs = {**self._kwargs, **kwargs}
         if not self._use_checkpoints:
             from torchdiffeq import odeint_adjoint
-            state = odeint_adjoint(
+            *ys, dlogp = odeint_adjoint(
                 dynamics,
                 state,
                 t=ts,
@@ -57,10 +58,11 @@ class DiffEqFlow(Flow):
                 options=kwargs
             )
         else:
+#             raise NotImplementedError()
             from anode.adjoint import odesolver_adjoint
             state = odesolver_adjoint(dynamics, state, options=kwargs)
-        x = state[-1, :, :-1]
-        dlogp = state[-1, :, -1:]
-        return x, dlogp
+        ys = [y[-1] for y in ys]
+        dlogp = dlogp[-1]
+        return (*ys, dlogp)
     
     

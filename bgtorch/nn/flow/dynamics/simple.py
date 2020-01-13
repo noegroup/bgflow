@@ -10,12 +10,12 @@ class SimpleDynamics(torch.nn.Module):
         self._dynamics_function = dynamics_function
         self._divergence_estimator = divergence_estimator
         
-    def forward(self, x, compute_divergence=True):
+    def forward(self, *xs, compute_divergence=True):
         if compute_divergence:
-            dx, divergence = self._divergence_estimator(
-                self._dynamics_function, x
+            *dxs, divergence = self._divergence_estimator(
+                self._dynamics_function, *xs
             )
         else:
-            dx = self._dynamics_function(x)
+            dxs = self._dynamics_function(xs)
             divergence = None
-        return dx, divergence
+        return (*dxs, divergence)
