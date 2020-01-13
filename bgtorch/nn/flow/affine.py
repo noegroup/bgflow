@@ -11,8 +11,12 @@ class AffineFlow(Flow):
         self._log_sigma = None
         if use_scaling:
             self._log_sigma = torch.nn.Parameter(torch.zeros(self._n_dims))
+        else:
+            self._log_sigma = None
         if use_translation:
             self._mu = torch.nn.Parameter(torch.zeros(self._n_dims))
+        else:
+            self._mu = None
 
     def _forward(self, x, **kwargs):
         assert x.shape[-1] == self._n_dims, "dimension `x` does not match `n_dims`"
