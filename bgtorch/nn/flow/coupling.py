@@ -14,19 +14,20 @@ class SplitFlow(Flow):
         super().__init__()
         self._n_left = n_left
 
-    def _forward(self, x, **kwargs):
+    def _forward(self, x, *cond, **kwargs):
         assert x.shape[-1] > self._n_left, "input dim must be larger than `n_left`"
         dlogp = torch.zeros(*x.shape[:-1], 1).to(x)
         x_left = x[..., : self._n_left]
         x_right = x[..., self._n_left :]
-        return x_left, x_right, dlogp
+        return (x_left, x_right, *cond, dlogp)
     
     def _inverse(self, *xs, **kwargs):
-        assert len(xs) == 2
+        cond = xs[2:]
+        xs = xs[:2]
         x_left, x_right = xs
         dlogp = torch.zeros(*x_left.shape[:-1], 1).to(x_left)
         x = torch.cat([x_left, x_right], dim=-1)
-        return x, dlogp
+        return (x, *cond, dlogp)
 
 
 class MergeFlow(InverseFlow):
@@ -44,14 +45,14 @@ class SwapFlow(Flow):
         dlogp = torch.zeros(*xs[0].shape[:-1], 1).to(xs[0])
         if len(xs) == 1:
             warnings.warn("applying swapping on a single tensor has no effect")
-        xs = (*xs[1:], xs[0])
+        xs = (xs[1], xs[0], *xs[2:])
         return (*xs, dlogp)
 
     def _inverse(self, *xs, **kwargs):
         dlogp = torch.zeros(*xs[0].shape[:-1], 1).to(xs[0])
         if len(xs) == 1:
             warnings.warn("applying swapping on a single tensor has no effect")
-        xs = (xs[-1], *xs[0:-1])
+        xs = (xs[1], xs[0], *xs[2:])
         return (*xs, dlogp)
 
 
@@ -62,10 +63,10 @@ class CouplingFlow(Flow):
         assert dt > 0
         self._dt = dt
 
-    def _forward(self, x_left, x_right, **kwargs):
-        x_right, dlogp = self._transformer._forward(x_left, x_right, **kwargs)
+    def _forward(self, x_left, x_right, *cond, **kwargs):
+        x_left, dlogp = self._transformer._forward(x_left, x_right, *cond, **kwargs)
         return x_left, x_right, dlogp
     
-    def _inverse(self, x_left, x_right, **kwargs):
-        x_right, dlogp = self._transformer._inverse(x_left, x_right, **kwargs)
+    def _inverse(self, x_left, x_right, *cond, **kwargs):
+        x_left, dlogp = self._transformer._inverse(x_left, x_right, *cond, **kwargs)
         return x_left, x_right, dlogp

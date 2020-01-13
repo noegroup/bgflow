@@ -10,5 +10,5 @@ class InversedDynamics(torch.nn.Module):
         self._t_max = t_max
 
     def forward(self, t, state):
-        dx, trace = self._dynamics(self._t_max - t, state)
-        return -dx, -trace
+        *dxs, trace = self._dynamics(self._t_max - t, state)
+        return [-dx for dx in dxs] + [-trace]
