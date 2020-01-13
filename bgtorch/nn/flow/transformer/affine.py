@@ -14,7 +14,7 @@ class AffineTransformer(Transformer):
         assert dt > 0
         self._dt = dt
     
-    def _get_mu_and_log_sigma(self, x, *cond):
+    def _get_mu_and_log_sigma(self, y, x, *cond):
         n_batch = x.shape[0]
         if self._shift_transformation is not None:
             mu = self._shift_transformation(x, *cond)
@@ -28,7 +28,7 @@ class AffineTransformer(Transformer):
         
     def _forward(self, y, x, *cond, **kwargs):
         alpha = torch.exp(self._log_alpha.to(x))
-        mu, log_sigma = self._get_mu_and_log_sigma(x, *cond)
+        mu, log_sigma = self._get_mu_and_log_sigma(y, x, *cond)
         assert mu.shape[-1] == y.shape[-1]
         assert log_sigma.shape[-1] == y.shape[-1]
         sigma = torch.exp(alpha * log_sigma)
@@ -38,7 +38,7 @@ class AffineTransformer(Transformer):
 
     def _inverse(self, y, x, *cond, **kwargs):
         alpha = torch.exp(self._log_alpha.to(x))
-        mu, log_sigma = self._get_mu_and_log_sigma(x, *cond)
+        mu, log_sigma = self._get_mu_and_log_sigma(y, x, *cond)
         assert mu.shape[-1] == y.shape[-1]
         assert log_sigma.shape[-1] == y.shape[-1]
         sigma_inv = torch.exp(-alpha * log_sigma)
