@@ -64,9 +64,9 @@ class CouplingFlow(Flow):
         self._dt = dt
 
     def _forward(self, x_left, x_right, *cond, **kwargs):
-        x_left, dlogp = self._transformer._forward(x_left, x_right, *cond, **kwargs)
+        x_right, dlogp = self._transformer._forward(x_left, x_right, *cond, **kwargs)
         return x_left, x_right, dlogp
     
     def _inverse(self, x_left, x_right, *cond, **kwargs):
-        x_left, dlogp = self._transformer._inverse(x_left, x_right, *cond, **kwargs)
+        x_right, dlogp = self._transformer._inverse(x_left, x_right, *cond, **kwargs)
         return x_left, x_right, dlogp
