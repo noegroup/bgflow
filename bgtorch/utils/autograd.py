@@ -70,3 +70,28 @@ def brute_force_jacobian(y, x):
         rows.append(row.view(-1, 1, system_dim))
     jac = torch.cat(rows, dim=-2)
     return jac
+
+
+def batch_jacobian(y, x):
+    '''
+    Compute the Jacobian matrix in batch form.
+    Return (B, D_y, D_x)
+    '''
+    import numpy as np
+
+    batch = y.shape[0]
+    single_y_size = np.prod(y.shape[1:])
+    y = y.view(batch, -1)
+    vector = torch.ones(batch).to(y)
+
+    # Compute Jacobian row by row.
+    # dy_i / dx -> dy / dx
+    # (B, D) -> (B, 1, D) -> (B, D, D)
+    jac = [torch.autograd.grad(y[:, i], x,
+                               grad_outputs=vector,
+                               retain_graph=True,
+                               create_graph=True)[0].view(batch, -1)
+                for i in range(single_y_size)]
+    jac = torch.stack(jac, dim=1)
+
+    return jac

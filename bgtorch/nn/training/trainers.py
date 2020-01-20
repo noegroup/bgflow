@@ -92,7 +92,7 @@ class KLTrainer(object):
                 # aggregate weighted gradient
                 if w_likelihood > 0:
                     l = w_likelihood / (w_likelihood + w_energy)
-                    (l * nll).backward()
+                    (l * nll).backward(retain_graph=True)
             if self.train_energy:
                 # kl divergence to the target
                 kll = self.bg.kldiv(batchsize).mean()
@@ -100,7 +100,7 @@ class KLTrainer(object):
                 # aggregate weighted gradient
                 if w_energy > 0:
                     l = w_energy / (w_likelihood + w_energy)
-                    (l * kll).backward()
+                    (l * kll).backward(retain_graph=True)
 
             self.reporter.report(*reports)
             if n_print > 0:
