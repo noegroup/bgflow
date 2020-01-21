@@ -283,6 +283,23 @@ def ics2xyz_local_log_det_jac_decomposed(all_ics, all_Z_indices, cartesian_xyz, 
     return xyz, log_det_jac_tot
 
 
+def periodic_angle_loss(angles):
+    """ Penalizes angles outside the range [-pi, pi]
+
+    Use this as an energy loss to avoid violating invertibility in internal coordinate transforms.
+    non-unique reconstruction of angles. Computes
+
+        L = (a-pi) ** 2 for a > pi
+        L = (a+pi) ** 2 for a < -pi
+
+    and returns the sum over all angles.
+
+    """
+    zero = torch.zeros(1, 1)
+    positive_loss = torch.sum(torch.where(angles > np.pi, angles - np.pi, zero) ** 2, dim=-1, keepdim=True)
+    negative_loss = torch.sum(torch.where(angles < -np.pi, angles + np.pi, zero) ** 2, dim=-1, keepdim=True)
+    return positive_loss + negative_loss
+
 
 class MixedCoordinateTransform(Flow):
     """ Conversion between Cartesian coordinates and whitened Cartesian / whitened internal coordinates """
@@ -367,27 +384,17 @@ class MixedCoordinateTransform(Flow):
         batchsize = z.shape[0]
         xyz = x_cart.reshape(batchsize, self.cart_atom_indices.size, 3)
 
-        # def _angle_loss(angle):
-        #     positive_loss = torch.sum(torch.where(
-        #         angle > np.pi, angle - np.pi, torch.zeros_like(angle)) ** 2, axis=-1)
-        #     negative_loss = torch.sum(torch.where(
-        #         angle < -180, angle + 180, torch.zeros_like(angle)) ** 2, axis=-1)
-        #     return positive_loss + negative_loss
-
         # split off Z block
         z_ics_norm = z[:, dim_cart_signal:self.dim-self.remove_dof]
         z_ics = z_ics_norm * self.ic_stds + self.ic_means
 
-        #n_internal = self.dim - dim_cart_signal - self.remove_dof
-        #angle_idxs = np.arange(n_internal // 3) * 3 + 1
-        #torsion_idxs = np.arange(n_internal // 3) * 3 + 2
-
-        #angles = z_ics[:, angle_idxs]
-        #angle_loss = _angle_loss(angles)
-
-        #torsions = z_ics[:, torsion_idxs]
-        #torsions -= np.pi + self.torsion_cut
-        #angle_loss += _angle_loss(torsions)
+        # Compute periodic angle loss
+        n_internal = self.dim - dim_cart_signal - self.remove_dof
+        angle_idxs = np.arange(n_internal // 3) * 3 + 1
+        angles = z_ics[:, angle_idxs]
+        torsion_idxs = np.arange(n_internal // 3) * 3 + 2
+        torsions_centered = z_ics[:, torsion_idxs] - np.pi - self.torsion_cut
+        self.periodic_angle_loss = periodic_angle_loss(angles) + periodic_angle_loss(torsions_centered)
 
         # reconstruct remaining atoms using ICs + compute Jacobian
         xyz, log_det_jac = ics2xyz_local_log_det_jac_decomposed(z_ics, self.batchwise_Z_indices, xyz,
@@ -419,7 +426,7 @@ def ic2xy0(p1, p2, d14, a124):
     import numpy as np
     #t1234 = tf.Variable(np.array([[90.0 * np.pi / 180.0]], dtype=np.float32))
     t1234 = torch.Tensor([[0.5 * np.pi]])
-    p3 = torch.Tensor([[0, 1, 0]])
+    p3 = torch.Tensor([[0, -1, 0]])
     return ic2xyz(p1, p2, p3, d14, a124, t1234)
 
 
@@ -598,6 +605,13 @@ class InternalCoordinatesTransformation(Flow):
         ics_unnorm = ics * self.ic_stds + self.ic_means
         # reconstruct remaining atoms using ICs
         xyz = ics2xyz_global(ics_unnorm, self.Z_indices)
+
+        # Compute periodic angle loss
+        angle_idxs = np.concatenate([[2, 4], np.arange(7, self.dim-6, 3)])
+        angles = ics_unnorm[:, angle_idxs]
+        torsion_idxs = np.concatenate([[5], np.arange(8, self.dim-6, 3)])
+        torsions_centered = ics_unnorm[:, torsion_idxs] - np.pi - self.torsion_cut
+        self.periodic_angle_loss = periodic_angle_loss(angles) + periodic_angle_loss(torsions_centered)
 
         # Jacobian
         log_det_jac = ics2xyz_global_log_det_jac(ics, self.Z_indices)
