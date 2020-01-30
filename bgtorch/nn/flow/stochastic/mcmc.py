@@ -27,7 +27,8 @@ class MetropolisMCFlow(Flow):
             Nonequilibrium work done, always 0 for this process
             
         """
-        E = self.energy_model.energy(x)
+        E0 = self.energy_model.energy(x)
+        E = E0
         
         for i in range(self.nsteps):
             # propsal step
@@ -38,9 +39,12 @@ class MetropolisMCFlow(Flow):
             # acceptance step            
             acc = (torch.rand(x.shape[0], 1) < torch.exp(-(Eprop - E))).float()  # selection variable: 0 or 1.
             x = (1-acc) * x + acc * xprop
+            E = (1-acc) * E + acc * Eprop
 
         # work is 0 for symmetric move scheme
         dW = torch.zeros((x.shape[0], 1))
+        # new result: work is energy difference
+        #dW = E - E0
         
         return x, dW
 
