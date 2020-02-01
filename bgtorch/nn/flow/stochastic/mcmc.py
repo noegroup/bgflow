@@ -37,22 +37,22 @@ class MetropolisMCFlow(Flow):
             xprop = x + dx
             Eprop = self.energy_model.energy(xprop)
             
-            # acceptance step            
+            # acceptance step
             acc = (torch.rand(x.shape[0], 1) < torch.exp(-(Eprop - E))).float()  # selection variable: 0 or 1.
+            #pacc_forward = torch.min(torch.tensor([1.0]), torch.exp(-(Eprop - E)))
+            #pacc_backward = torch.min(torch.tensor([1.0]), torch.exp(-(E - Eprop)))
+            #ddW = acc * (torch.log(pacc_backward) - torch.log(pacc_forward))  # if rejected, this is 0.
             x = (1-acc) * x + acc * xprop
             E = (1-acc) * E + acc * Eprop
 
             # pacc ratio for dW
-            pacc_forward = torch.min(torch.tensor([1.0]), torch.exp(-(Eprop - E)))
-            pacc_backward = torch.min(torch.tensor([1.0]), torch.exp(-(E - Eprop)))
-            ddW = acc * (torch.log(pacc_backward) - torch.log(pacc_forward))  # if rejected, this is 0.
-            dW = dW + ddW
+            #dW = dW + ddW
 
 
         # work is 0 for symmetric move scheme
         #dW = torch.zeros((x.shape[0], 1))
         # new result: work is energy difference
-        #dW = E - E0
+        dW = E - E0
         
         return x, dW
 
