@@ -27,10 +27,11 @@ def angle_np(x1, x2, x3, cossin=False):
 
 def angle(x1, x2, x3, cossin=False):
     ba = x1 - x2
-    ba /= torch.norm(ba, dim=2, keepdim=True)
+    ba_normalized = ba / torch.norm(ba, dim=2, keepdim=True)
     bc = x3 - x2
-    bc /= torch.norm(bc, dim=2, keepdim=True)
-    cos_angle = torch.sum(ba*bc, dim=2)
+    bc_normalized = bc / torch.norm(bc, dim=2, keepdim=True)
+
+    cos_angle = torch.sum(ba_normalized*bc_normalized, dim=2)
     #angle = np.float32(180.0 / np.pi) * torch.acos(cosine_angle)
     a = torch.acos(cos_angle)
     if cossin:
@@ -80,20 +81,20 @@ def torsion(x1, x2, x3, x4, cossin=False):
     b2 = x4 - x3
     # normalize b1 so that it does not influence magnitude of vector
     # rejections that come next
-    b1 /= torch.norm(b1, dim=2, keepdim=True)
+    b1_normalized = b1 / torch.norm(b1, dim=2, keepdim=True)
 
     # vector rejections
     # v = projection of b0 onto plane perpendicular to b1
     #   = b0 minus component that aligns with b1
     # w = projection of b2 onto plane perpendicular to b1
     #   = b2 minus component that aligns with b1
-    v = b0 - torch.sum(b0*b1, dim=2, keepdim=True) * b1
-    w = b2 - torch.sum(b2*b1, dim=2, keepdim=True) * b1
+    v = b0 - torch.sum(b0*b1_normalized, dim=2, keepdim=True) * b1_normalized
+    w = b2 - torch.sum(b2*b1_normalized, dim=2, keepdim=True) * b1_normalized
 
     # angle between v and w in a plane is the torsion angle
     # v and w may not be normalized but that's fine since tan is y/x
     x = torch.sum(v*w, dim=2)
-    b1xv = torch.cross(b1, v)
+    b1xv = torch.cross(b1_normalized, v)
     y = torch.sum(b1xv*w, dim=2)
     a = torch.atan2(y, x)
     if cossin:
@@ -102,6 +103,26 @@ def torsion(x1, x2, x3, x4, cossin=False):
         return torch.cat([cos_angle, sin_angle], dim=-1)
     else:
         return a
+
+
+def torsioncut_minvar(torsion):
+    cuts = np.linspace(-np.pi, np.pi, 37)[:-1]
+    stds = []
+    for cut in cuts:
+        torsion_cut = np.where(torsion < cut, torsion+2*np.pi, torsion)
+        stds.append(np.std(torsion_cut))
+        print(cut, stds[-1])
+    stds = np.array(stds)
+    stdmin = stds.min()
+    minindices = np.where(stds == stdmin)[0]
+    return cuts[minindices[minindices.shape[0]//2]]
+
+
+def torsioncut_mindensity(torsion):
+    torsion_hist, torsion_edges = np.histogram(torsion, bins=36, range=[-np.pi, np.pi])
+    torsion_vals = 0.5 * (torsion_edges[:-1] + torsion_edges[1:])
+    mincut = torsion_vals[torsion_hist.argmin()]
+    return mincut
 
 
 class Coordinates(Module):
