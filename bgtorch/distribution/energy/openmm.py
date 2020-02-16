@@ -14,21 +14,15 @@ class _OpenMMEnergyWrapper(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, input, openmm_energy_bridge):
-        # energy, force = openmm_energy_bridge.evaluate(input, evaluate_forces=True)
         energy, force = openmm_energy_bridge.evaluate(input)
-        if openmm_energy_bridge.evaluate_force:
-            ctx.save_for_backward(-force)
+        ctx.save_for_backward(-force)
         return energy
 
     @staticmethod
     def backward(ctx, grad_output):
-        try:
-            neg_force, = ctx.saved_tensors
-            grad_input = grad_output * neg_force
-            return grad_input, None
-        except Exception as e:
-            print('Could not compute backward pass. Make sure that evaluate_force=True is set in OpenMMEnergy')
-            raise e
+        neg_force, = ctx.saved_tensors
+        grad_input = grad_output * neg_force
+        return grad_input, None
 
 
 _evaluate_openmm_energy = _OpenMMEnergyWrapper.apply
@@ -50,8 +44,7 @@ def initialize_worker(system, integrator, platform):
     _openmm_context = openmm.Context(system, integrator, platform)
 
 
-def _compute_energy_and_force(args):
-    positions, getEnergy, getForces, _err_handling = args
+def _compute_energy_and_force(positions):
     energy = None
     force = None
 
@@ -59,12 +52,9 @@ def _compute_energy_and_force(args):
         # set positions
         _openmm_context.setPositions(positions)
         # compute state
-        state = _openmm_context.getState(getEnergy=getEnergy, getForces=getForces)
-
-        if getEnergy:
-            energy = state.getPotentialEnergy()
-        if getForces:
-            force = state.getForces(asNumpy=True)
+        state = _openmm_context.getState(getEnergy=True, getForces=True)
+        energy = state.getPotentialEnergy()
+        force = state.getForces(asNumpy=True)
 
     except Exception as e:
         if _err_handling == "warning":
@@ -75,18 +65,18 @@ def _compute_energy_and_force(args):
     return energy, force
 
 
+def _compute_energy_and_force_batch(positions):
+    energies_and_forces = [_compute_energy_and_force(p) for p in positions]
+    return energies_and_forces
+
+
 class OpenMMEnergyBridge(object):
     def __init__(self, openmm_system, length_scale,
                  openmm_integrator=None, openmm_integrator_args=None, n_simulation_steps=0,
-                 platform_name='CPU', err_handling="warning", n_workers=1,
-                 evaluate_energy=True, evaluate_force=True):
+                 platform_name='CPU', err_handling="warning", n_workers=1):
         from simtk import openmm
         self._openmm_system = openmm_system
         self._length_scale = length_scale
-
-        assert evaluate_energy or evaluate_force, "Either `evaluate_energy` or `evaluate_force` must be `True`."
-        self.evaluate_energy = evaluate_energy
-        self.evaluate_force = evaluate_force
 
         if openmm_integrator is None:
             self._openmm_integrator = openmm.VerletIntegrator(0.001)
@@ -102,11 +92,11 @@ class OpenMMEnergyBridge(object):
         if n_workers == 1:
             initialize_worker(openmm_system, self._openmm_integrator, self._platform)
 
-        # self._openmm_context = openmm.Context(openmm_system, self._openmm_integrator, platform)
         self._n_simulation_steps = n_simulation_steps
         
         assert err_handling in ["ignore", "warning", "exception"]
-        self._err_handling = err_handling 
+        global _err_handling
+        _err_handling = err_handling
         
         from simtk import unit
         kB_NA = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -136,48 +126,44 @@ class OpenMMEnergyBridge(object):
     def evaluate(self, batch):
         """batch: (B, N*D) """
 
-        n_batch = batch.shape[0]
-
         # make a list of positions
         batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
-        batch_positions = []
+
+        # reshape to (B, N, D) and add physical units
         from simtk.unit import Quantity
-        for positions in batch_array:
-            # set unit
-            batch_positions.append(Quantity(value=positions.reshape(-1, _SPATIAL_DIM), unit=self._length_scale))
+        batch_array = Quantity(value=batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM), unit=self._length_scale)
 
         if self.n_workers == 1:
-            energies_and_forces = [_compute_energy_and_force((positions,
-                                                              self.evaluate_energy,
-                                                              self.evaluate_force,
-                                                              self._err_handling)) for positions in batch_positions]
+            energies_and_forces = _compute_energy_and_force_batch(batch_array)
         else:
+            # multiprocessing Pool
             from multiprocessing import Pool
-            # Create a multiprocessing pool of workers that cache a Context object for the System being evaluated
-            self.pool = Pool(self.n_workers, initialize_worker,
-                             (self._openmm_system, self._openmm_integrator, self._platform))
+            pool = Pool(self.n_workers, initialize_worker,
+                        (self._openmm_system, self._openmm_integrator, self._platform))
 
-            args = [(pos, self.evaluate_energy, self.evaluate_force, self._err_handling) for pos in batch_positions]
-            # Compute energies and forces
-            energies_and_forces = self.pool.map(_compute_energy_and_force, args)
-            # Shut down workers
-            self.pool.close()
+            # split list into equal parts
+            chunksize = batch.shape[0] // self.n_workers
+            batch_positions_ = [batch_array[i:i+chunksize] for i in range(0, batch.shape[0], chunksize)]
 
-        if self.evaluate_energy:
-            energies = [self._reduce_units(ef[0]) for ef in energies_and_forces]
-        else:
-            energies = np.zeros((n_batch, 1), dtype=batch_array.dtype)
+            energies_and_forces_ = pool.map(_compute_energy_and_force_batch, batch_positions_)
+
+            # concat lists
+            energies_and_forces = []
+            for ef in energies_and_forces_:
+                energies_and_forces += ef
+            pool.close()
+
+        # remove units
+        energies = [self._reduce_units(ef[0]) for ef in energies_and_forces]
 
         if not np.all(np.isfinite(energies)):
-            if self._err_handling == "warning":
+            if _err_handling == "warning":
                 warnings.warn("Infinite energy.")
-            if self._err_handling == "exception":
+            if _err_handling == "exception":
                 raise ValueError("Infinite energy.")
 
-        if self.evaluate_force:
-            forces = [np.ravel(self._reduce_units(ef[1]) * self._length_scale) for ef in energies_and_forces]
-        else:
-            forces = np.zeros_like(batch)
+        # remove units
+        forces = [np.ravel(self._reduce_units(ef[1]) * self._length_scale) for ef in energies_and_forces]
 
         return torch.tensor(energies).to(batch).reshape(-1, 1), torch.tensor(forces).to(batch)
 
@@ -188,27 +174,8 @@ class OpenMMEnergy(Energy):
         super().__init__(dimension)
         self._openmm_energy_bridge = openmm_energy_bridge
 
-    def _activate_energies(self):
-        if not self._openmm_energy_bridge.evaluate_energy:
-            self._openmm_energy_bridge.evaluate_energy = True
-            warnings.warn("OpenMM initialized without energy evaluation, but energy evaluation was just switched on. " +
-                          "This will slow down calculation")
-
-    def _activate_forces(self):
-        if not self._openmm_energy_bridge.evaluate_force:
-            self._openmm_energy_bridge.evaluate_force = True
-            warnings.warn("OpenMM initialized without force evaluation, but force evaluation was just switched on. " +
-                          "This will slow down calculation")
-
     def _energy(self, batch):
-        self._activate_energies()
         return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
-        # if no_grads:
-        #     return self._openmm_energy_bridge.evaluate(batch, evaluate_forces=False)[0]
-        # else:
-        #     self._activate_forces()
-        #     return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
 
     def force(self, batch, temperature=None):
-        self._activate_forces()
         return self._openmm_energy_bridge.evaluate(batch)[1]
