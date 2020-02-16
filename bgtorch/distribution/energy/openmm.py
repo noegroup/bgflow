@@ -72,7 +72,7 @@ def _compute_energy_and_force_batch(positions):
 
 class OpenMMEnergyBridge(object):
     def __init__(self, openmm_system, length_scale,
-                 openmm_integrator=None, openmm_integrator_args=None, n_simulation_steps=0,
+                 openmm_integrator=None, openmm_integrator_args=None,
                  platform_name='CPU', err_handling="warning", n_workers=1):
         from simtk import openmm
         self._openmm_system = openmm_system
@@ -92,8 +92,6 @@ class OpenMMEnergyBridge(object):
         if n_workers == 1:
             initialize_worker(openmm_system, self._openmm_integrator, self._platform)
 
-        self._n_simulation_steps = n_simulation_steps
-        
         assert err_handling in ["ignore", "warning", "exception"]
         global _err_handling
         _err_handling = err_handling
