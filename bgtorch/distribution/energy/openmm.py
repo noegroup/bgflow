@@ -165,7 +165,15 @@ class OpenMMEnergyBridge(object):
         # remove units
         forces = [np.ravel(self._reduce_units(ef[1]) * self._length_scale) for ef in energies_and_forces]
 
-        return torch.tensor(energies).to(batch).reshape(-1, 1), torch.tensor(forces).to(batch)
+        # to PyTorch tensors
+        energies = torch.tensor(energies).to(batch).reshape(-1, 1)
+        forces = torch.tensor(forces).to(batch)
+
+        # store
+        self.last_energies = energies
+        self.last_forces = forces
+
+        return energies, forces
 
 
 class OpenMMEnergy(Energy):
@@ -173,9 +181,20 @@ class OpenMMEnergy(Energy):
     def __init__(self, dimension, openmm_energy_bridge):
         super().__init__(dimension)
         self._openmm_energy_bridge = openmm_energy_bridge
+        self._last_batch = None
 
     def _energy(self, batch):
-        return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
+        # check if we have already computed this energy
+        if batch.__hash__() == self._last_batch:
+            return self._openmm_energy_bridge.last_energies
+        else:
+            self._last_batch = batch.__hash__()
+            return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
 
     def force(self, batch, temperature=None):
-        return self._openmm_energy_bridge.evaluate(batch)[1]
+        # check if we have already computed this energy
+        if batch.__hash__() == self._last_batch:
+            return self._openmm_energy_bridge.last_forces
+        else:
+            self._last_batch = batch.__hash__()
+            return self._openmm_energy_bridge.evaluate(batch)[1]
