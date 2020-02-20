@@ -58,9 +58,8 @@ class DiffEqFlow(Flow):
                 options=kwargs
             )
         else:
-#             raise NotImplementedError()
             from anode.adjoint import odesolver_adjoint
-            state = odesolver_adjoint(dynamics, state, options=kwargs)
+            *ys, dlogp = odesolver_adjoint(dynamics, state, options=kwargs)
         ys = [y[-1] for y in ys]
         dlogp = dlogp[-1]
         return (*ys, dlogp)

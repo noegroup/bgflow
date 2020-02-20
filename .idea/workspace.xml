@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="23a2cc04-3d18-47cd-8c48-58e68d678c75" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/blackbox.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/kernel_dynamic.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bgtorch/nn/flow/estimator/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bgtorch/nn/flow/estimator/brute_force_estimator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bgtorch/nn/flow/estimator/hutchinson_estimator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bgtorch/utils/rbf_kernels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bgtorch/nn/flow/diffeq.py" beforeDir="false" afterPath="$PROJECT_DIR$/bgtorch/nn/flow/diffeq.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/inversed.py" beforeDir="false" afterPath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/inversed.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/simple.py" beforeDir="false" afterPath="$PROJECT_DIR$/bgtorch/nn/flow/dynamics/simple.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bgtorch/utils/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/bgtorch/utils/__init__.py" afterDir="false" />
+    </list>
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1W7XE4B95h1akUPVK9IowGxByuZ" />
+  <component name="PropertiesComponent">
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/bgtorch/nn/flow/estimator" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/bgtorch/nn/flow/estimator" />
+    </key>
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="23a2cc04-3d18-47cd-8c48-58e68d678c75" name="Default Changelist" comment="" />
+      <created>1578501491562</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1578501491562</updated>
+      <workItem from="1578501515010" duration="28243000" />
+      <workItem from="1580298011603" duration="3046000" />
+      <workItem from="1580666651802" duration="5800000" />
+      <workItem from="1581601269373" duration="23883000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="1" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="COLUMN_ORDER" />
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

@@ -12,3 +12,5 @@ class InversedDynamics(torch.nn.Module):
     def forward(self, t, state):
         *dxs, trace = self._dynamics(self._t_max - t, state)
         return [-dx for dx in dxs] + [-trace]
+
+    #TODO correct sign? + rename!
