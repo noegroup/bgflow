@@ -59,6 +59,9 @@ class DiffEqFlow(Flow):
             )
         else:
             from anode.adjoint import odesolver_adjoint
+            #print(state.shape)
+            #state = torch.cat(state, dim=-1)
+            #print(state.shape)
             *ys, dlogp = odesolver_adjoint(dynamics, state, options=kwargs)
         ys = [y[-1] for y in ys]
         dlogp = dlogp[-1]

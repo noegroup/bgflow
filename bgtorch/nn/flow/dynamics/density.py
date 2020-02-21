@@ -30,8 +30,11 @@ class DensityDynamics(torch.nn.Module):
         self._n_evals = 0
         
     def forward(self, t, state):
+        #print(state)
         *xs, _ = state
         *dxs, div = self._dynamics(t, *xs)
+        # return torch.cat([*dxs, -div], dim=-1)
+
         return (*dxs, -div)
 
 
