@@ -5,7 +5,8 @@ import warnings
 from bgtorch.distribution.energy.openmm import OpenMMEnergyBridge
 
 
-def test_openmm_bridge_evaluate_dummy():
+@pytest.mark.parametrize("n_workers", [1,2,8])
+def test_openmm_bridge_evaluate_dummy(n_workers):
     """Test if we can evaluate an energy; skip test if openmm is not installed."""
     try:
         with warnings.catch_warnings():
@@ -26,9 +27,10 @@ def test_openmm_bridge_evaluate_dummy():
         system,
         unit.nanometer,
         openmm.LangevinIntegrator,
-        (300*unit.kelvin,1./unit.picoseconds, 1.*unit.femtoseconds)
+        (300*unit.kelvin,1./unit.picoseconds, 1.*unit.femtoseconds),
+        n_workers=n_workers
     )
-    positions = torch.tensor([[[0.1, 0.0, 0.0]]])
+    positions = torch.tensor([[[0.1, 0.0, 0.0]]]*8)
     kT = unit.MOLAR_GAS_CONSTANT_R * 300*unit.kelvin
     energies, forces = bridge.evaluate(positions)
     assert energies.numpy()[0] == pytest.approx([0.1*unit.kilojoule_per_mole/kT])
@@ -37,8 +39,8 @@ def test_openmm_bridge_evaluate_dummy():
 
 def test_openmm_bridge_evaluate_ala2():
     """Test if we can evaluate an energy; skip test if openmm is not installed."""
-
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="numpy.ufunc size changed")
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)  # ignore warnings inside OpenMM
