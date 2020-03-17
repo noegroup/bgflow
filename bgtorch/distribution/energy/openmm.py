@@ -2,6 +2,8 @@ import warnings
 import numpy as np
 import torch
 
+from multiprocessing import Pool, cpu_count
+
 from ...utils.types import assert_numpy
 from .base import Energy
 
@@ -67,6 +69,13 @@ def _compute_energy_and_force(positions, err_handling):
 
 
 def _compute_energy_and_force_batch(args):
+    """
+    Parameters:
+    -----------
+    args : tuple
+        A pair (positions, err_handling), where positions is an iterable of np.array and err_handling
+        is one of {"ignore", "warning", "exception"}
+    """
     positions, err_handling = args
     energies_and_forces = [_compute_energy_and_force(p, err_handling) for p in positions]
     return energies_and_forces
@@ -107,8 +116,11 @@ class OpenMMEnergyBridge(object):
         self._openmm_integrator = openmm_integrator
 
         self._platform = openmm.Platform.getPlatformByName(platform_name)
+
         if platform_name == 'CPU':
             # Use only one thread/worker on the CPU platform
+            # TODO: use [multiprocessing.cpu_count() // n_workers] instead of 1
+            # TODO: maybe set n_workers to cpu_count by default
             self._platform.setPropertyDefaultValue('Threads', '1')
 
         self.n_workers = n_workers
@@ -144,16 +156,12 @@ class OpenMMEnergyBridge(object):
             energies_and_forces = _compute_energy_and_force_batch([batch_array, self._err_handling])
         else:
             # multiprocessing Pool
-            from multiprocessing import Pool
             pool = Pool(self.n_workers, initialize_worker,
                         (self._openmm_system, self._openmm_integrator, self._platform))
 
             # split list into equal parts
-            chunksize = batch.shape[0] // self.n_workers
-            args = [
-                [batch_array[i:i+chunksize], self._err_handling]
-                for i in range(0, batch.shape[0], chunksize)
-            ]
+            chunks = np.array_split(batch_array, self.n_workers)
+            args = [ (chunk, self._err_handling) for chunk in chunks ]
 
             energies_and_forces_ = pool.map(_compute_energy_and_force_batch, args)
 
