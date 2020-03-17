@@ -39,6 +39,7 @@ def initialize_worker(system, integrator, platform):
     platform_name : str
         The platform name to open the Context for
     """
+    # TODO: cache context instead of recreating it
     from simtk import openmm
     global _openmm_context
     _openmm_context = openmm.Context(system, integrator, platform)
@@ -167,17 +168,17 @@ class OpenMMEnergy(Energy):
         self._last_batch = None
 
     def _energy(self, batch):
-        # check if we have already computed this energy
-        if batch.__hash__() == self._last_batch:
+        # check if we have already computed this energy (hash of string representation should be sufficient)
+        if hash(str(batch)) == self._last_batch:
             return self._openmm_energy_bridge.last_energies
         else:
-            self._last_batch = batch.__hash__()
+            self._last_batch = hash(str(batch))
             return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
 
     def force(self, batch, temperature=None):
         # check if we have already computed this energy
-        if batch.__hash__() == self._last_batch:
+        if hash(str(batch)) == self._last_batch:
             return self._openmm_energy_bridge.last_forces
         else:
-            self._last_batch = batch.__hash__()
+            self._last_batch = hash(str(batch))
             return self._openmm_energy_bridge.evaluate(batch)[1]
