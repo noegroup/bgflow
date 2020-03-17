@@ -30,9 +30,12 @@ def test_openmm_bridge_evaluate_dummy(n_workers):
         (300*unit.kelvin,1./unit.picoseconds, 1.*unit.femtoseconds),
         n_workers=n_workers
     )
-    positions = torch.tensor([[[0.1, 0.0, 0.0]]]*8)
+    batch_size = 8
+    positions = torch.tensor([[[0.1, 0.0, 0.0]]]*batch_size)
     kT = unit.MOLAR_GAS_CONSTANT_R * 300*unit.kelvin
     energies, forces = bridge.evaluate(positions)
+    assert energies.shape == torch.Size([batch_size,1])
+    assert forces.shape == torch.Size([batch_size, 3])
     assert energies.numpy()[0] == pytest.approx([0.1*unit.kilojoule_per_mole/kT])
     assert forces.numpy()[0] == pytest.approx([-1.*unit.kilojoule_per_mole/kT,0.,0.], abs=1e-5, rel=0)
 
