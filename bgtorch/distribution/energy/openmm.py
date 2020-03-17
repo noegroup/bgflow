@@ -100,21 +100,6 @@ class OpenMMEnergyBridge(object):
         kB_NA = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         self._unit_reciprocal = 1. / (self._openmm_integrator.getTemperature() * kB_NA)
 
-    def initialize_worker(self):
-        """Initialize a multiprocessing.Pool worker by caching a Context object
-
-        Parameters
-        ----------
-        system : simtk.openmm.System
-            The System object for which energies are to be computed
-        platform_name : str
-            The platform name to open the Context for
-        """
-        from simtk import openmm
-        # global context
-        self._openmm_context = openmm.Context(self._system, self._openmm_integrator, self._platform)
-        # return context
-
     def _reduce_units(self, x):
         return x * self._unit_reciprocal
 
