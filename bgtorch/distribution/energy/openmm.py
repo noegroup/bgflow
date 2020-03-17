@@ -45,7 +45,7 @@ def initialize_worker(system, integrator, platform):
     _openmm_context = openmm.Context(system, integrator, platform)
 
 
-def _compute_energy_and_force(positions):
+def _compute_energy_and_force(positions, err_handling):
     energy = None
     force = None
 
@@ -58,16 +58,17 @@ def _compute_energy_and_force(positions):
         force = state.getForces(asNumpy=True)
 
     except Exception as e:
-        if _err_handling == "warning":
+        if err_handling == "warning":
             warnings.warn("Suppressed exception: {}".format(e))
-        elif _err_handling == "exception":
+        elif err_handling == "exception":
             raise e
 
     return energy, force
 
 
-def _compute_energy_and_force_batch(positions):
-    energies_and_forces = [_compute_energy_and_force(p) for p in positions]
+def _compute_energy_and_force_batch(args):
+    positions, err_handling = args
+    energies_and_forces = [_compute_energy_and_force(p, err_handling) for p in positions]
     return energies_and_forces
 
 
@@ -92,7 +93,7 @@ class OpenMMEnergyBridge(object):
     platform_name : str, optional
         An OpenMM platform name ('CPU', 'CUDA', 'Reference', or 'OpenCL')
     err_handling : str, optional
-        How to handle infinite energies.
+        How to handle infinite energies (one of {"warning", "ignore", "exception"}).
     n_workers : int, optional
         The number of processes used to compute energies in batches. This should not exceed the
          most-used batch size or the number of accessible CPU cores.
@@ -115,8 +116,7 @@ class OpenMMEnergyBridge(object):
             initialize_worker(openmm_system, self._openmm_integrator, self._platform)
 
         assert err_handling in ["ignore", "warning", "exception"]
-        global _err_handling
-        _err_handling = err_handling
+        self._err_handling = err_handling
 
         kB_NA = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         self._unit_reciprocal = 1. / (openmm_integrator.getTemperature() * kB_NA)
@@ -134,11 +134,14 @@ class OpenMMEnergyBridge(object):
         # make a list of positions
         batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
 
+        # assert correct number of positions
+        assert batch_array.shape[1] == self._openmm_system.getNumParticles() * _SPATIAL_DIM
+
         # reshape to (B, N, D) and add physical units
         batch_array = unit.Quantity(value=batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM), unit=unit.nanometer)
 
         if self.n_workers == 1:
-            energies_and_forces = _compute_energy_and_force_batch(batch_array)
+            energies_and_forces = _compute_energy_and_force_batch([batch_array, self._err_handling])
         else:
             # multiprocessing Pool
             from multiprocessing import Pool
@@ -147,9 +150,12 @@ class OpenMMEnergyBridge(object):
 
             # split list into equal parts
             chunksize = batch.shape[0] // self.n_workers
-            batch_positions_ = [batch_array[i:i+chunksize] for i in range(0, batch.shape[0], chunksize)]
+            args = [
+                [batch_array[i:i+chunksize], self._err_handling]
+                for i in range(0, batch.shape[0], chunksize)
+            ]
 
-            energies_and_forces_ = pool.map(_compute_energy_and_force_batch, batch_positions_)
+            energies_and_forces_ = pool.map(_compute_energy_and_force_batch, args)
 
             # concat lists
             energies_and_forces = []
@@ -161,9 +167,9 @@ class OpenMMEnergyBridge(object):
         energies = [self._reduce_units(ef[0]) for ef in energies_and_forces]
 
         if not np.all(np.isfinite(energies)):
-            if _err_handling == "warning":
+            if self._err_handling == "warning":
                 warnings.warn("Infinite energy.")
-            if _err_handling == "exception":
+            if self._err_handling == "exception":
                 raise ValueError("Infinite energy.")
 
         # remove units
