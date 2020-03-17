@@ -122,6 +122,8 @@ class OpenMMEnergyBridge(object):
             # TODO: use [multiprocessing.cpu_count() // n_workers] instead of 1
             # TODO: maybe set n_workers to cpu_count by default
             self._platform.setPropertyDefaultValue('Threads', '1')
+            # assert n_workers <= cpu_count()
+            # self._platform.setPropertyDefaultValue('Threads', str(cpu_count()//n_workers))
 
         self.n_workers = n_workers
         if n_workers == 1:
