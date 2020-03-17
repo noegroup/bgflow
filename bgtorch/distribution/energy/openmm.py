@@ -71,18 +71,39 @@ def _compute_energy_and_force_batch(positions):
     return energies_and_forces
 
 
-class OpenMMEnergyBridge(object):
-    def __init__(self, openmm_system, length_scale,
-                 openmm_integrator=None, openmm_integrator_args=None,
-                 platform_name='CPU', err_handling="warning", n_workers=1):
-        from simtk import openmm
-        self._openmm_system = openmm_system
-        self._length_scale = length_scale
+def _copy_openmm_integrator(integrator):
+    """Copy an OpenMM integrator by serializing and deserializing it.
+    The returned object is not bound to a Context.
+    """
+    from simtk import openmm
+    return openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(integrator))
 
-        if openmm_integrator is None:
-            self._openmm_integrator = openmm.VerletIntegrator(0.001)
-        else:
-            self._openmm_integrator = openmm_integrator(*openmm_integrator_args)
+
+class OpenMMEnergyBridge(object):
+    """Bridge object to evaluate energies in OpenMM.
+    Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
+
+    Parameters
+    ----------
+    openmm_system : simtk.openmm.System
+        The OpenMM system object that contains all force objects.
+    openmm_integrator : simtk.openmm.Integrator
+        A thermostated OpenMM integrator (has to have a method `getTemperature()`.
+    platform_name : str, optional
+        An OpenMM platform name ('CPU', 'CUDA', 'Reference', or 'OpenCL')
+    err_handling : str, optional
+        How to handle infinite energies.
+    n_workers : int, optional
+        The number of processes used to compute energies in batches. This should not exceed the
+         most-used batch size or the number of accessible CPU cores.
+    """
+    def __init__(self, openmm_system,
+                 openmm_integrator,
+                 platform_name='CPU', err_handling="warning", n_workers=1):
+
+        from simtk import unit, openmm
+        self._openmm_system = openmm_system
+        self._openmm_integrator = openmm_integrator
 
         self._platform = openmm.Platform.getPlatformByName(platform_name)
         if platform_name == 'CPU':
@@ -96,10 +117,9 @@ class OpenMMEnergyBridge(object):
         assert err_handling in ["ignore", "warning", "exception"]
         global _err_handling
         _err_handling = err_handling
-        
-        from simtk import unit
+
         kB_NA = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-        self._unit_reciprocal = 1. / (self._openmm_integrator.getTemperature() * kB_NA)
+        self._unit_reciprocal = 1. / (openmm_integrator.getTemperature() * kB_NA)
 
     def _reduce_units(self, x):
         return x * self._unit_reciprocal
@@ -109,13 +129,13 @@ class OpenMMEnergyBridge(object):
 
     def evaluate(self, batch):
         """batch: (B, N*D) """
+        from simtk import unit
 
         # make a list of positions
         batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
 
         # reshape to (B, N, D) and add physical units
-        from simtk.unit import Quantity
-        batch_array = Quantity(value=batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM), unit=self._length_scale)
+        batch_array = unit.Quantity(value=batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM), unit=unit.nanometer)
 
         if self.n_workers == 1:
             energies_and_forces = _compute_energy_and_force_batch(batch_array)
@@ -147,7 +167,7 @@ class OpenMMEnergyBridge(object):
                 raise ValueError("Infinite energy.")
 
         # remove units
-        forces = [np.ravel(self._reduce_units(ef[1]) * self._length_scale) for ef in energies_and_forces]
+        forces = [np.ravel(self._reduce_units(ef[1]) * unit.nanometer) for ef in energies_and_forces]
 
         # to PyTorch tensors
         energies = torch.tensor(energies).to(batch).reshape(-1, 1)
