@@ -2,7 +2,7 @@ import warnings
 import numpy as np
 import torch
 
-from multiprocessing import Pool, cpu_count
+import multiprocessing as mp
 
 from ...utils.types import assert_numpy
 from .base import Energy
@@ -30,172 +30,6 @@ class _OpenMMEnergyWrapper(torch.autograd.Function):
 _evaluate_openmm_energy = _OpenMMEnergyWrapper.apply
 
 
-# Use multiprocessing.Pool to create workers that manage their own Context objects
-def initialize_worker(system, integrator, platform):
-    """Initialize a multiprocessing.Pool worker by caching a Context object
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-        The System object for which energies are to be computed
-    platform_name : str
-        The platform name to open the Context for
-    """
-    # TODO: cache context instead of recreating it
-    from simtk import openmm
-    global _openmm_context
-    _openmm_context = openmm.Context(system, integrator, platform)
-
-
-def _compute_energy_and_force(positions, err_handling):
-    energy = None
-    force = None
-
-    try:
-        # set positions
-        _openmm_context.setPositions(positions)
-        # compute state
-        state = _openmm_context.getState(getEnergy=True, getForces=True)
-        energy = state.getPotentialEnergy()
-        force = state.getForces(asNumpy=True)
-
-    except Exception as e:
-        if err_handling == "warning":
-            warnings.warn("Suppressed exception: {}".format(e))
-        elif err_handling == "exception":
-            raise e
-
-    return energy, force
-
-
-def _compute_energy_and_force_batch(args):
-    """
-    Parameters:
-    -----------
-    args : tuple
-        A pair (positions, err_handling), where positions is an iterable of np.array and err_handling
-        is one of {"ignore", "warning", "exception"}
-    """
-    positions, err_handling = args
-    energies_and_forces = [_compute_energy_and_force(p, err_handling) for p in positions]
-    return energies_and_forces
-
-
-def _copy_openmm_integrator(integrator):
-    """Copy an OpenMM integrator by serializing and deserializing it.
-    The returned object is not bound to a Context.
-    """
-    from simtk import openmm
-    return openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(integrator))
-
-
-class OpenMMEnergyBridge(object):
-    """Bridge object to evaluate energies in OpenMM.
-    Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
-
-    Parameters
-    ----------
-    openmm_system : simtk.openmm.System
-        The OpenMM system object that contains all force objects.
-    openmm_integrator : simtk.openmm.Integrator
-        A thermostated OpenMM integrator (has to have a method `getTemperature()`.
-    platform_name : str, optional
-        An OpenMM platform name ('CPU', 'CUDA', 'Reference', or 'OpenCL')
-    err_handling : str, optional
-        How to handle infinite energies (one of {"warning", "ignore", "exception"}).
-    n_workers : int, optional
-        The number of processes used to compute energies in batches. This should not exceed the
-         most-used batch size or the number of accessible CPU cores.
-    """
-    def __init__(self, openmm_system,
-                 openmm_integrator,
-                 platform_name='CPU', err_handling="warning", n_workers=1):
-
-        from simtk import unit, openmm
-        self._openmm_system = openmm_system
-        self._openmm_integrator = openmm_integrator
-
-        self._platform = openmm.Platform.getPlatformByName(platform_name)
-
-        if platform_name == 'CPU':
-            # Use only one thread/worker on the CPU platform
-            # TODO: use [multiprocessing.cpu_count() // n_workers] instead of 1
-            # TODO: maybe set n_workers to cpu_count by default
-            self._platform.setPropertyDefaultValue('Threads', '1')
-            # assert n_workers <= cpu_count()
-            # self._platform.setPropertyDefaultValue('Threads', str(cpu_count()//n_workers))
-
-        self.n_workers = n_workers
-        if n_workers == 1:
-            initialize_worker(openmm_system, self._openmm_integrator, self._platform)
-
-        assert err_handling in ["ignore", "warning", "exception"]
-        self._err_handling = err_handling
-
-        kB_NA = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-        self._unit_reciprocal = 1. / (openmm_integrator.getTemperature() * kB_NA)
-
-    def _reduce_units(self, x):
-        return x * self._unit_reciprocal
-
-    def _simulate(self, n_steps):
-        self._openmm_integrator.step(n_steps)
-
-    def evaluate(self, batch):
-        """batch: (B, N*D) """
-        from simtk import unit
-
-        # make a list of positions
-        batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
-
-        # assert correct number of positions
-        assert batch_array.shape[1] == self._openmm_system.getNumParticles() * _SPATIAL_DIM
-
-        # reshape to (B, N, D) and add physical units
-        batch_array = unit.Quantity(value=batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM), unit=unit.nanometer)
-
-        if self.n_workers == 1:
-            energies_and_forces = _compute_energy_and_force_batch([batch_array, self._err_handling])
-        else:
-            # multiprocessing Pool
-            pool = Pool(self.n_workers, initialize_worker,
-                        (self._openmm_system, self._openmm_integrator, self._platform))
-
-            # split list into equal parts
-            chunks = np.array_split(batch_array, self.n_workers)
-            args = [ (chunk, self._err_handling) for chunk in chunks ]
-
-            energies_and_forces_ = pool.map(_compute_energy_and_force_batch, args)
-
-            # concat lists
-            energies_and_forces = []
-            for ef in energies_and_forces_:
-                energies_and_forces += ef
-            pool.close()
-
-        # remove units
-        energies = [self._reduce_units(ef[0]) for ef in energies_and_forces]
-
-        if not np.all(np.isfinite(energies)):
-            if self._err_handling == "warning":
-                warnings.warn("Infinite energy.")
-            if self._err_handling == "exception":
-                raise ValueError("Infinite energy.")
-
-        # remove units
-        forces = [np.ravel(self._reduce_units(ef[1]) * unit.nanometer) for ef in energies_and_forces]
-
-        # to PyTorch tensors
-        energies = torch.tensor(energies).to(batch).reshape(-1, 1)
-        forces = torch.tensor(forces).to(batch)
-
-        # store
-        self.last_energies = energies
-        self.last_forces = forces
-
-        return energies, forces
-
-
 class OpenMMEnergy(Energy):
 
     def __init__(self, dimension, openmm_energy_bridge):
@@ -218,3 +52,277 @@ class OpenMMEnergy(Energy):
         else:
             self._last_batch = hash(str(batch))
             return self._openmm_energy_bridge.evaluate(batch)[1]
+
+
+class OpenMMEnergyBridge:
+    """Bridge object to evaluate energies in OpenMM.
+    Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
+
+    Parameters
+    ----------
+    openmm_system : simtk.openmm.System
+        The OpenMM system object that contains all force objects.
+    openmm_integrator : simtk.openmm.Integrator
+        A thermostated OpenMM integrator (has to have a method `getTemperature()`.
+    platform_name : str, optional
+        An OpenMM platform name ('CPU', 'CUDA', 'Reference', or 'OpenCL')
+    err_handling : str, optional
+        How to handle infinite energies (one of {"warning", "ignore", "exception"}).
+    n_workers : int, optional
+        The number of processes used to compute energies in batches. This should not exceed the
+         most-used batch size or the number of accessible CPU cores. The default is the number
+         of logical cpu cores.
+    """
+    def __init__(
+        self,
+        openmm_system,
+        openmm_integrator,
+        platform_name='CPU',
+        err_handling="warning",
+        n_workers=mp.cpu_count()
+    ):
+        from simtk import unit
+        platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
+        ContextWrapperClass = SingleContext if n_workers == 1 else MultiContext
+        self._openmm_system = openmm_system
+        self.context_wrapper = ContextWrapperClass(
+            n_workers, openmm_system, openmm_integrator, platform_name, platform_properties
+        )
+        self.err_handling = err_handling
+        self._unit_reciprocal = (openmm_integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R).value_in_unit(unit.kilojoule_per_mole)
+        self.last_energies = None
+        self.last_forces = None
+
+    def _reduce_units(self, x):
+        return x * self._unit_reciprocal
+
+    def _simulate(self, n_steps):
+        # TODO: move to worker threads
+        self._openmm_integrator.step(n_steps)
+
+    def evaluate(self, batch, get_forces=True, get_energies=True):
+        """batch: (B, N*D) """
+
+        # make a list of positions
+        batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
+
+        # assert correct number of positions
+        assert batch_array.shape[1] == self._openmm_system.getNumParticles() * _SPATIAL_DIM
+
+        # reshape to (B, N, D)
+        batch_array = batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM)
+        energies, forces = self.context_wrapper.evaluate(
+            batch_array,
+            get_energies=get_energies,
+            get_forces=get_forces,
+            err_handling=self.err_handling
+        )
+
+        # divide by kT
+        energies = self._reduce_units(energies)
+        forces = self._reduce_units(forces)
+
+        # to PyTorch tensors
+        energies = torch.tensor(energies).to(batch).reshape(-1, 1)
+        forces = torch.tensor(forces).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+
+        # store
+        self.last_energies = energies
+        self.last_forces = forces
+
+        return energies, forces
+
+
+class MultiContext:
+    """A container for multiple contexts that are operated by different workers.
+
+    Parameters:
+    -----------
+    n_workers : int
+        The number of workers which operate one context each.
+    system : simtk.openmm.System
+        The system that contains all forces.
+    integrator : simtk.openmm.Integrator
+        An OpenMM integrator.
+    platform_name : str
+        The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
+    platform_properties : dict, optional
+        A dictionary of platform properties.
+    """
+
+    def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
+        """Set up workers and queues."""
+        self.n_workers = n_workers
+        self._task_queue = mp.Queue()
+        self._result_queue = mp.Queue()
+        for i in range(self.n_workers):
+            MultiContext.Worker(
+                self._task_queue,
+                self._result_queue,
+                system, integrator,
+                platform_name,
+                platform_properties,
+            ).start()
+
+    def evaluate(self, positions, box_vectors=None, get_energies=True, get_forces=True, err_handling="warning"):
+        """Delegate energy and force computations to the workers.
+
+        Parameters:
+        -----------
+        positions : numpy.ndarray
+            The particle positions in nanometer; its shape is (batch_size, num_particles, 3).
+        box_vectors : numpy.ndarray, optional
+            The periodic box vectors in nanometer; its shape is (batch_size, 3, 3).
+            If not specified, don't change the box vectors.
+        get_energies : bool, optional
+            Whether to compute energies.
+        get_forces : bool, optional
+            Whether to compute forces.
+        err_handling : str, optional
+            How to handle infinite energies (one of {"warning", "ignore", "exception"}).
+
+        Returns:
+        --------
+        energies : np.ndarray or None
+            The energies in units of kilojoule/mole; its shape  is (len(positions), )
+        forces : np.ndarray or None
+            The forces in units of kilojoule/mole/nm; its shape is (len(positions), num_particles, 3)
+        """
+        assert get_energies or get_forces, "MultiContext has to compute either forces or energies"
+        assert box_vectors is None or len(box_vectors) == len(positions), \
+            "box_vectors and positions have to be the same length"
+        box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
+        for i, (p, bv) in enumerate(zip(positions, box_vectors)):
+            self._task_queue.put([i, p, bv, get_energies, get_forces, err_handling])
+        results = [self._result_queue.get() for _ in positions]
+        results = sorted(results, key=lambda x: x[0])
+        return (
+            np.array([res[1] for res in results]) if get_energies else None,
+            np.array([res[2] for res in results]) if get_forces else None
+        )
+
+    def __del__(self):
+        """Terminate the workers."""
+        for i in range(self.n_workers):
+            self._task_queue.put(None)
+
+    class Worker(mp.Process):
+        """A worker process that computes energies in its own context.
+
+        Parameters:
+        -----------
+        task_queue : multiprocessing.Queue
+            The queue that the MultiContext pushes tasks to.
+        result_queue : multiprocessing.Queue
+            The queue that the MultiContext receives results from.
+        system : simtk.openmm.System
+            The system that contains all forces.
+        integrator : simtk.openmm.Integrator
+            An OpenMM integrator.
+        platform_name : str
+            The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
+        platform_properties : dict
+            A dictionary of platform properties.
+        """
+
+        def __init__(self, task_queue, result_queue, system, integrator, platform_name, platform_properties):
+            super(MultiContext.Worker, self).__init__()
+            from simtk.openmm import Platform, XmlSerializer
+            self._task_queue = task_queue
+            self._result_queue = result_queue
+            self._openmm_system = system
+            self._openmm_platform = Platform.getPlatformByName(platform_name)
+            self._openmm_integrator = XmlSerializer.deserialize(XmlSerializer.serialize(integrator))  # copy integrator
+            self._openmm_platform_properties = platform_properties
+            self._openmm_context = None
+
+        def run(self):
+            """Run the process: set positions and compute energies and forces.
+            Positions and box vectors are received from the task_queue in units of nanometers.
+            Energies and forces are pushed to the result_queue in units of kJ/mole and kJ/mole/nm, respectively.
+            """
+            from simtk import unit
+            from simtk.openmm import Context
+
+            # create the context
+            # it is crucial to do that in the run function and not in the constructor
+            # for some reason, the CPU platform hangs if the context is created in the constructor
+            self._openmm_context = Context(
+                self._openmm_system,
+                self._openmm_integrator,
+                self._openmm_platform,
+                self._openmm_platform_properties
+            )
+
+            # get tasks from the task queue
+            for index, positions, box_vectors, get_energies, get_forces, err_handling in iter(self._task_queue.get, None):
+                try:
+                    # initialize state
+                    self._openmm_context.setPositions(positions)
+                    if box_vectors is not None:
+                        self._openmm_context.setPeriodicBoxVectors(box_vectors)
+
+                    # compute energy and forces
+                    state = self._openmm_context.getState(getEnergy=get_energies, getForces=get_forces)
+                    energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if get_energies else None
+                    forces = (
+                        state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+                        if get_forces else None
+                    )
+                except Exception as e:
+                    if err_handling == "warning":
+                        warnings.warn("Suppressed exception: {}".format(e))
+                    elif err_handling == "exception":
+                        raise e
+
+                # push energies and forces to the results queue
+                self._result_queue.put([index, energy, forces])
+
+
+class SingleContext:
+    """Energy and force evaluation on master thread. The API mirrors MultiContext.
+    """
+    def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
+        """Set up workers and queues."""
+        from simtk.openmm import Platform, Context, XmlSerializer
+        assert n_workers == 1
+        platform = Platform.getPlatformByName(platform_name)
+        integrator = XmlSerializer.deserialize(XmlSerializer.serialize(integrator))  # copy integrator
+        self._openmm_context = Context(system, integrator, platform, platform_properties)
+
+    def evaluate(self, positions, box_vectors=None, get_energies=True, get_forces=True, err_handling="warning"):
+        from simtk.openmm import unit
+        assert get_energies or get_forces, "MultiContext has to compute either forces or energies"
+        assert box_vectors is None or len(box_vectors) == len(positions), \
+            "box_vectors and positions have to be the same length"
+        box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
+
+        energy_list = []
+        forces_list = []
+        for i, (p, bv) in enumerate(zip(positions, box_vectors)):
+            try:
+                self._openmm_context.setPositions(p)
+                if bv is not None:
+                    self._openmm_context.setPeriodicBoxVectors(bv)
+
+                # compute energy and forces
+                state = self._openmm_context.getState(getEnergy=get_energies, getForces=get_forces)
+                energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if get_energies else None
+                forces = (
+                    state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+                    if get_forces else None
+                )
+                print(energy, forces)
+                energy_list.append(energy)
+                forces_list.append(forces)
+            except Exception as e:
+                if err_handling == "warning":
+                    warnings.warn("Suppressed exception: {}".format(e))
+                elif err_handling == "exception":
+                    raise e
+
+
+        return (
+            np.array(energy_list) if get_energies else None,
+            np.array(forces_list) if get_forces else None
+        )

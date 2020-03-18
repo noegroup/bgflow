@@ -49,7 +49,7 @@ def test_openmm_bridge_evaluate_dummy(n_workers):
 
 # run 'pytest --durations 0' to print the time it takes to evaluate
 @pytest.mark.parametrize("testsystem_name", ["AlanineDipeptideImplicit", "PMEWaterBox"])
-@pytest.mark.parametrize("batch_size", [4])
+@pytest.mark.parametrize("batch_size", [4,100])
 @pytest.mark.parametrize("n_workers", [1,2])
 def test_openmm_bridge_evaluate_openmmtools_testsystem(testsystem_name, batch_size, n_workers):
     """Test if we can evaluate an energy; skip test if openmm is not installed."""
