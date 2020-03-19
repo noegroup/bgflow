@@ -2,6 +2,7 @@
 import pytest
 import torch
 import warnings
+import numpy as np
 from bgtorch.distribution.energy.openmm import OpenMMEnergyBridge, OpenMMEnergy
 
 
@@ -48,9 +49,9 @@ def test_openmm_bridge_evaluate_dummy(n_workers):
 
 
 # run 'pytest --durations 0' to print the time it takes to evaluate
-@pytest.mark.parametrize("testsystem_name", ["AlanineDipeptideImplicit", "PMEWaterBox"])
-@pytest.mark.parametrize("batch_size", [4,100])
-@pytest.mark.parametrize("n_workers", [1,2])
+@pytest.mark.parametrize("testsystem_name", ["AlanineDipeptideImplicit", "WaterBox"])
+@pytest.mark.parametrize("batch_size", [4, 20])
+@pytest.mark.parametrize("n_workers", [1, 8])
 def test_openmm_bridge_evaluate_openmmtools_testsystem(testsystem_name, batch_size, n_workers):
     """Test if we can evaluate an energy; skip test if openmm is not installed."""
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="numpy.ufunc size changed")
@@ -74,7 +75,6 @@ def test_openmm_bridge_evaluate_openmmtools_testsystem(testsystem_name, batch_si
         openmm.LangevinIntegrator(300*unit.kelvin,1./unit.picoseconds, 1.*unit.femtoseconds),
         n_workers=n_workers
     )
-    import numpy as np
     batch = torch.tensor(np.array([np.ravel(testsystem.positions.value_in_unit(unit.nanometer))]*batch_size))
     energies, forces = bridge.evaluate(batch)
     assert energies.shape == torch.Size([batch_size,1])
