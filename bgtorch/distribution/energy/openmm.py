@@ -33,30 +33,6 @@ class _OpenMMEnergyWrapper(torch.autograd.Function):
 _evaluate_openmm_energy = _OpenMMEnergyWrapper.apply
 
 
-class OpenMMEnergy(Energy):
-
-    def __init__(self, dimension, openmm_energy_bridge):
-        super().__init__(dimension)
-        self._openmm_energy_bridge = openmm_energy_bridge
-        self._last_batch = None
-
-    def _energy(self, batch):
-        # check if we have already computed this energy (hash of string representation should be sufficient)
-        if hash(str(batch)) == self._last_batch:
-            return self._openmm_energy_bridge.last_energies
-        else:
-            self._last_batch = hash(str(batch))
-            return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
-
-    def force(self, batch, temperature=None):
-        # check if we have already computed this energy
-        if hash(str(batch)) == self._last_batch:
-            return self._openmm_energy_bridge.last_forces
-        else:
-            self._last_batch = hash(str(batch))
-            return self._openmm_energy_bridge.evaluate(batch)[1]
-
-
 class OpenMMEnergyBridge:
     """Bridge object to evaluate energies in OpenMM.
     Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
@@ -318,3 +294,27 @@ class MultiContext:
 
                 # push energies and forces to the results queue
                 self._result_queue.put([index, energy, forces])
+
+
+class OpenMMEnergy(Energy):
+
+    def __init__(self, dimension, openmm_energy_bridge):
+        super().__init__(dimension)
+        self._openmm_energy_bridge = openmm_energy_bridge
+        self._last_batch = None
+
+    def _energy(self, batch, no_grads=False):
+        # check if we have already computed this energy (hash of string representation should be sufficient)
+        if hash(str(batch)) == self._last_batch:
+            return self._openmm_energy_bridge.last_energies
+        else:
+            self._last_batch = hash(str(batch))
+            return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
+
+    def force(self, batch, temperature=None):
+        # check if we have already computed this energy
+        if hash(str(batch)) == self._last_batch:
+            return self._openmm_energy_bridge.last_forces
+        else:
+            self._last_batch = hash(str(batch))
+            return self._openmm_energy_bridge.evaluate(batch)[1]
