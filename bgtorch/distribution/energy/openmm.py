@@ -1,3 +1,6 @@
+"""Energy and Force computation in OpenMM
+"""
+
 import warnings
 import multiprocessing as mp
 
@@ -70,8 +73,10 @@ class OpenMMEnergyBridge:
         How to handle infinite energies (one of {"warning", "ignore", "exception"}).
     n_workers : int, optional
         The number of processes used to compute energies in batches. This should not exceed the
-         most-used batch size or the number of accessible CPU cores. The default is the number
-         of logical cpu cores.
+        most-used batch size or the number of accessible CPU cores. The default is the number
+        of logical cpu cores.
+    n_simulation_steps : int, optional
+        If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
     """
     def __init__(
         self,
@@ -79,7 +84,8 @@ class OpenMMEnergyBridge:
         openmm_integrator,
         platform_name='CPU',
         err_handling="warning",
-        n_workers=mp.cpu_count()
+        n_workers=mp.cpu_count(),
+        n_simulation_steps=0
     ):
         from simtk import unit
         platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
@@ -91,7 +97,8 @@ class OpenMMEnergyBridge:
         self.context_wrapper = MultiContext(
             n_workers, openmm_system, openmm_integrator, platform_name, platform_properties
         )
-        self.err_handling = err_handling
+        self._err_handling = err_handling
+        self._n_simulation_steps = n_simulation_steps
         self._unit_reciprocal = 1/(openmm_integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
                                    ).value_in_unit(unit.kilojoule_per_mole)
         self.last_energies = None
@@ -100,7 +107,7 @@ class OpenMMEnergyBridge:
     def _reduce_units(self, x):
         return x * self._unit_reciprocal
 
-    def evaluate(self, batch, get_forces=True, get_energies=True, n_simulation_steps=0):
+    def evaluate(self, batch, evaluate_force=True, evaluate_energy=True):
         """
         Compute energies/forces for a batch of positions.
 
@@ -108,12 +115,10 @@ class OpenMMEnergyBridge:
         -----------
         batch : np.ndarray or torch.Tensor
             A batch of particle positions that has shape (batch_size, num_particles * 3).
-        get_forces : bool, optional
+        evaluate_force : bool, optional
             Whether to compute forces.
-        get_energies : bool, optional
+        evaluate_energy : bool, optional
             Whether to compute energies.
-        n_simulation_steps : int, optional
-            If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
         """
 
         # make a list of positions
@@ -126,10 +131,10 @@ class OpenMMEnergyBridge:
         batch_array = batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM)
         energies, forces = self.context_wrapper.evaluate(
             batch_array,
-            get_energies=get_energies,
-            get_forces=get_forces,
-            err_handling=self.err_handling,
-            n_simulation_steps=n_simulation_steps
+            evaluate_energy=evaluate_energy,
+            evaluate_force=evaluate_force,
+            err_handling=self._err_handling,
+            n_simulation_steps=self._n_simulation_steps
         )
 
         # divide by kT
@@ -185,8 +190,8 @@ class MultiContext:
             self,
             positions,
             box_vectors=None,
-            get_energies=True,
-            get_forces=True,
+            evaluate_energy=True,
+            evaluate_force=True,
             err_handling="warning",
             n_simulation_steps=0
     ):
@@ -199,11 +204,11 @@ class MultiContext:
         box_vectors : numpy.ndarray, optional
             The periodic box vectors in nanometer; its shape is (batch_size, 3, 3).
             If not specified, don't change the box vectors.
-        get_energies : bool, optional
+        evaluate_energy : bool, optional
             Whether to compute energies.
-        get_forces : bool, optional
+        evaluate_force : bool, optional
             Whether to compute forces.
-        err_handling : str, optional
+        _err_handling : str, optional
             How to handle infinite energies (one of {"warning", "ignore", "exception"}).
         n_simulation_steps : int, optional
             If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
@@ -215,23 +220,25 @@ class MultiContext:
         forces : np.ndarray or None
             The forces in units of kilojoule/mole/nm; its shape is (len(positions), num_particles, 3)
         """
-        assert get_energies or get_forces, "MultiContext has to compute either forces or energies"
+        assert evaluate_energy or evaluate_force, "MultiContext has to compute either forces or energies"
         assert box_vectors is None or len(box_vectors) == len(positions), \
             "box_vectors and positions have to be the same length"
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
         for i, (p, bv) in enumerate(zip(positions, box_vectors)):
-            self._task_queue.put([i, p, bv, get_energies, get_forces, err_handling, n_simulation_steps])
+            self._task_queue.put([i, p, bv, evaluate_energy, evaluate_force, err_handling, n_simulation_steps])
         results = [self._result_queue.get() for _ in positions]
         results = sorted(results, key=lambda x: x[0])
         return (
-            np.array([res[1] for res in results]) if get_energies else None,
-            np.array([res[2] for res in results]) if get_forces else None
+            np.array([res[1] for res in results]) if evaluate_energy else None,
+            np.array([res[2] for res in results]) if evaluate_force else None
         )
 
     def __del__(self):
         """Terminate the workers."""
+        # soft termination
         for i in range(self.n_workers):
             self._task_queue.put(None)
+        # hard termination
         for worker in self._workers:
             worker.terminate()
 
@@ -288,20 +295,20 @@ class MultiContext:
 
             # get tasks from the task queue
             for task in iter(self._task_queue.get, None):
-                index, positions, box_vectors, get_energies, get_forces, err_handling, n_simulation_steps = task
+                index, positions, box_vectors, evaluate_energy, evaluate_force, err_handling, n_simulation_steps = task
                 try:
                     # initialize state
                     self._openmm_context.setPositions(positions)
                     if box_vectors is not None:
                         self._openmm_context.setPeriodicBoxVectors(box_vectors)
-                    self._openmm_context.getIntegrator().step(n_simulation_steps)
+                    self._openmm_integrator.step(n_simulation_steps)
 
                     # compute energy and forces
-                    state = self._openmm_context.getState(getEnergy=get_energies, getForces=get_forces)
-                    energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if get_energies else None
+                    state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
+                    energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
                     forces = (
                         state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
-                        if get_forces else None
+                        if evaluate_force else None
                     )
                 except Exception as e:
                     if err_handling == "warning":

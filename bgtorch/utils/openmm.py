@@ -1,7 +1,6 @@
 __author__ = 'solsson'
 
 import numpy as np
-import multiprocessing as mp
 
 
 def save_latent_samples_as_trajectory(samples, mdtraj_topology, filename=None, topology_fn=None, return_openmm_traj=True):
