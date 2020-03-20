@@ -3,7 +3,8 @@ import torch
 from .base import Flow
 from .dynamics import (
     DensityDynamics,
-    InversedDynamics
+    InversedDynamics,
+    AnodeDynamics
 )
 
 #TODO: write docstrings
@@ -57,11 +58,14 @@ class DiffEqFlow(Flow):
                 atol=self._integrator_atol,
                 options=kwargs
             )
+            ys = [y[-1] for y in ys]
         else:
-#             raise NotImplementedError()
             from anode.adjoint import odesolver_adjoint
-            state = odesolver_adjoint(dynamics, state, options=kwargs)
-        ys = [y[-1] for y in ys]
+            state = torch.cat(state, dim=-1)
+            anode_dynamics = AnodeDynamics(dynamics)
+            state = odesolver_adjoint(anode_dynamics, state, options=kwargs)
+            ys = [state[:, :-1]]
+            dlogp = [state[:, -1:]]
         dlogp = dlogp[-1]
         return (*ys, dlogp)
     
