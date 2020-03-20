@@ -147,11 +147,10 @@ class MultiContext:
 
     def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
         """Set up workers and queues."""
-        self.n_workers = n_workers
         self._task_queue = mp.Queue()
         self._result_queue = mp.Queue()
         self._workers = []
-        for i in range(self.n_workers):
+        for i in range(n_workers):
             worker = MultiContext.Worker(
                 self._task_queue,
                 self._result_queue,
@@ -212,7 +211,7 @@ class MultiContext:
     def __del__(self):
         """Terminate the workers."""
         # soft termination
-        for i in range(self.n_workers):
+        for _ in self._workers:
             self._task_queue.put(None)
         # hard termination
         for worker in self._workers:
