@@ -6,3 +6,4 @@ from .kronecker import KroneckerProductFlow
 from .sequential import SequentialFlow
 from .inverted import InverseFlow
 from .checkerboard import CheckerboardFlow
+from .bnaf import BNARFlow
