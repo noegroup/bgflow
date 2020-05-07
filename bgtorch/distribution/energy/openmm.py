@@ -50,7 +50,8 @@ class OpenMMEnergyBridge:
     n_workers : int, optional
         The number of processes used to compute energies in batches. This should not exceed the
         most-used batch size or the number of accessible CPU cores. The default is the number
-        of logical cpu cores.
+        of logical cpu cores. If a GPU platform is used (CUDA or OpenCL), n_workers is always set to 1
+        to sidestep multiprocessing (due to performance issues when using multiprocessing with GPUs).
     n_simulation_steps : int, optional
         If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
     """
@@ -70,7 +71,7 @@ class OpenMMEnergyBridge:
         # This might be problematic if an energy has already been computed in the same program on the parent thread,
         # see https://github.com/openmm/openmm/issues/2602
         self._openmm_system = openmm_system
-        if platform_name in ["CUDA", "OpenCL"]:
+        if platform_name in ["CUDA", "OpenCL"] or n_workers == 1:
             self.context_wrapper = SingleContext(
                 1, openmm_system, openmm_integrator, platform_name, platform_properties
             )
@@ -321,7 +322,7 @@ class SingleContext:
         """Set up workers and queues."""
         from simtk.openmm import Platform, Context
         assert n_workers == 1
-        openmm_platform = Platform.getPlatformByName(self._openmm_platform_name)
+        openmm_platform = Platform.getPlatformByName(platform_name)
         self._openmm_context = Context(system, integrator, openmm_platform, platform_properties)
 
     def evaluate(
@@ -333,7 +334,7 @@ class SingleContext:
             err_handling="warning",
             n_simulation_steps=0
     ):
-        """Delegate energy and force computations to the workers.
+        """Compute energies and/or forces.
 
         Parameters:
         -----------
@@ -365,27 +366,27 @@ class SingleContext:
             "box_vectors and positions have to be the same length"
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
 
-        forces = np.empty_like(positions)
-        energies = np.empty_like(positions[:,0,0])
+        forces = np.zeros_like(positions)
+        energies = np.zeros_like(positions[:,0,0])
 
         for i, (p, bv) in enumerate(zip(positions, box_vectors)):
 
             try:
                 # initialize state
                 self._openmm_context.setPositions(p)
-                if box_vectors is not None:
+                if bv is not None:
                     self._openmm_context.setPeriodicBoxVectors(bv)
                 self._openmm_context.getIntegrator().step(n_simulation_steps)
 
                 # compute energy and forces
                 state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
                 energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
-                forces = (
+                force = (
                     state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
                     if evaluate_force else None
                 )
                 energies[i] = energy if evaluate_energy else 0.0
-                forces[i,:,:] = forces if evaluate_force else 0.0
+                forces[i,:,:] = force if evaluate_force else 0.0
 
             except Exception as e:
                 if err_handling == "warning":
@@ -395,7 +396,7 @@ class SingleContext:
 
         return (
             energies if evaluate_energy else None,
-            forces if evaluate_energy else None,
+            forces if evaluate_force else None,
         )
 
 
