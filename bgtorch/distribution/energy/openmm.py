@@ -70,9 +70,14 @@ class OpenMMEnergyBridge:
         # This might be problematic if an energy has already been computed in the same program on the parent thread,
         # see https://github.com/openmm/openmm/issues/2602
         self._openmm_system = openmm_system
-        self.context_wrapper = MultiContext(
-            n_workers, openmm_system, openmm_integrator, platform_name, platform_properties
-        )
+        if platform_name in ["CUDA", "OpenCL"]:
+            self.context_wrapper = SingleContext(
+                1, openmm_system, openmm_integrator, platform_name, platform_properties
+            )
+        else:
+            self.context_wrapper = MultiContext(
+                n_workers, openmm_system, openmm_integrator, platform_name, platform_properties
+            )
         self._err_handling = err_handling
         self._n_simulation_steps = n_simulation_steps
         self._unit_reciprocal = 1/(openmm_integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
@@ -293,6 +298,105 @@ class MultiContext:
 
                 # push energies and forces to the results queue
                 self._result_queue.put([index, energy, forces])
+
+
+class SingleContext:
+    """Mimics the MultiContext API but does not spawn worker processes.
+
+    Parameters:
+    -----------
+    n_workers : int
+        Needs to be 1.
+    system : simtk.openmm.System
+        The system that contains all forces.
+    integrator : simtk.openmm.Integrator
+        An OpenMM integrator.
+    platform_name : str
+        The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
+    platform_properties : dict, optional
+        A dictionary of platform properties.
+    """
+
+    def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
+        """Set up workers and queues."""
+        from simtk.openmm import Platform, Context
+        assert n_workers == 1
+        openmm_platform = Platform.getPlatformByName(self._openmm_platform_name)
+        self._openmm_context = Context(system, integrator, openmm_platform, platform_properties)
+
+    def evaluate(
+            self,
+            positions,
+            box_vectors=None,
+            evaluate_energy=True,
+            evaluate_force=True,
+            err_handling="warning",
+            n_simulation_steps=0
+    ):
+        """Delegate energy and force computations to the workers.
+
+        Parameters:
+        -----------
+        positions : numpy.ndarray
+            The particle positions in nanometer; its shape is (batch_size, num_particles, 3).
+        box_vectors : numpy.ndarray, optional
+            The periodic box vectors in nanometer; its shape is (batch_size, 3, 3).
+            If not specified, don't change the box vectors.
+        evaluate_energy : bool, optional
+            Whether to compute energies.
+        evaluate_force : bool, optional
+            Whether to compute forces.
+        _err_handling : str, optional
+            How to handle infinite energies (one of {"warning", "ignore", "exception"}).
+        n_simulation_steps : int, optional
+            If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
+
+        Returns:
+        --------
+        energies : np.ndarray or None
+            The energies in units of kilojoule/mole; its shape  is (len(positions), )
+        forces : np.ndarray or None
+            The forces in units of kilojoule/mole/nm; its shape is (len(positions), num_particles, 3)
+        """
+        from simtk import unit
+
+        assert evaluate_energy or evaluate_force, "MultiContext has to compute either forces or energies"
+        assert box_vectors is None or len(box_vectors) == len(positions), \
+            "box_vectors and positions have to be the same length"
+        box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
+
+        forces = np.empty_like(positions)
+        energies = np.empty_like(positions[:,0,0])
+
+        for i, (p, bv) in enumerate(zip(positions, box_vectors)):
+
+            try:
+                # initialize state
+                self._openmm_context.setPositions(p)
+                if box_vectors is not None:
+                    self._openmm_context.setPeriodicBoxVectors(bv)
+                self._openmm_context.getIntegrator().step(n_simulation_steps)
+
+                # compute energy and forces
+                state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
+                energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
+                forces = (
+                    state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+                    if evaluate_force else None
+                )
+                energies[i] = energy if evaluate_energy else 0.0
+                forces[i,:,:] = forces if evaluate_force else 0.0
+
+            except Exception as e:
+                if err_handling == "warning":
+                    warnings.warn("Suppressed exception: {}".format(e))
+                elif err_handling == "exception":
+                    raise e
+
+        return (
+            energies if evaluate_energy else None,
+            forces if evaluate_energy else None,
+        )
 
 
 class OpenMMEnergy(Energy):
