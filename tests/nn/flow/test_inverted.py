@@ -1,0 +1,30 @@
+"""
+Test inverse and its derivative
+"""
+
+import torch
+import pytest
+from bgtorch.nn import flow
+
+
+@pytest.fixture(params=[
+    flow.KroneckerProductFlow(2),
+    flow.PseudoOrthogonalFlow(2),
+    flow.BentIdentity(),
+    flow.FunnelFlow(),
+    flow.AffineFlow(2),
+    flow.SplitFlow(1)
+])
+def simpleflow2d(request):
+    return request.param
+
+
+def test_inverse(simpleflow2d):
+    """Test inverse and inverse logDet of simple 2d flow blocks."""
+    inverse = flow.InverseFlow(simpleflow2d)
+    x = torch.tensor([[1.,2.]])
+    *y, dlogp = simpleflow2d._forward(x)
+    x2, dlogpinv = inverse._forward(*y)
+    assert (dlogp + dlogpinv).detach().numpy() == pytest.approx(0.0, abs=1e-6)
+    assert torch.norm(x2 - x).item() == pytest.approx(0.0, abs=1e-6)
+
