@@ -53,10 +53,10 @@ class SequentialFlow(Flow):
             dlogp += ddlogp
         return (*xs, dlogp)
 
-    def penalty(self):
-        """Evaluate penalty functions for all blocks."""
-        p = 0.0
-        for block in self._blocks:
-            if hasattr(block, "penalty"):
-                p += block.penalty()
-        return p
+    def trigger(self, function_name):
+        """Evaluate functions for all blocks that have a function with that name and return a list of the results."""
+        return [
+            getattr(block, function_name)()
+            for block in self._blocks
+            if hasattr(block, function_name) and callable(getattr(block, function_name))
+        ]
