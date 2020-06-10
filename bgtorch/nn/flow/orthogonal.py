@@ -28,7 +28,7 @@ class PseudoOrthogonalFlow(Flow):
         if shift:
             self.b = torch.nn.Parameter(torch.zeros(dim))
         else:
-            self.b = 0
+            self.register_buffer("b", torch.tensor(0.0))
         self.register_buffer("penalty_parameter", torch.tensor(penalty_parameter))
 
     def _forward(self, x, **kwargs):
