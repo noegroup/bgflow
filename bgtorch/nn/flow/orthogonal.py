@@ -29,7 +29,7 @@ class PseudoOrthogonalFlow(Flow):
             self.b = torch.nn.Parameter(torch.zeros(dim))
         else:
             self.b = 0
-        self.penalty_parameter = penalty_parameter
+        self.register_buffer("penalty_parameter", torch.tensor(penalty_parameter))
 
     def _forward(self, x, **kwargs):
         """Forward transform.
