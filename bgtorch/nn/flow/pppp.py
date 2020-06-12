@@ -10,7 +10,11 @@ __all__ = ["OrthogonalPPPP", "InvertiblePPPP"]
 
 
 class OrthogonalPPPP(Flow):
-    """Orthogonal PPPP layer Q*x+b with double-Householder perturbations
+    """Orthogonal PPPP layer Q*x+b with Givens perturbations
+
+    Notes
+    -----
+    This does not really work well.
 
     Attributes
     ----------
@@ -24,8 +28,10 @@ class OrthogonalPPPP(Flow):
     def __init__(self, dim, shift=True, penalty_parameter=0.0):
         super(OrthogonalPPPP, self).__init__()
         self.dim = dim
-        self.v = torch.nn.Parameter(torch.rand(dim))
-        self.dv = torch.nn.Parameter(torch.zeros(dim))
+        #self.v = torch.nn.Parameter(torch.rand(dim))
+        #self.dv = torch.nn.Parameter(torch.zeros(dim))
+        self.angles = torch.nn.Parameter(torch.zeros(dim//2))
+        self.permutation = torch.randperm(dim)
         self.register_buffer("Q", torch.eye(dim))
         if shift:
             self.b = torch.nn.Parameter(torch.zeros(dim))
@@ -38,13 +44,33 @@ class OrthogonalPPPP(Flow):
         dx = - 2 * torch.einsum("j,i,...i->...j", v, v, x) / torch.einsum("i,i->", v, v)
         return x + dx
 
+    @staticmethod
+    def _nhalfgivens_trafo(x, permutation, angles):
+        """Apply n/2 many Givens transformations in parallel"""
+        xperm = x[...,permutation]
+        s = torch.sin(angles)
+        c = torch.cos(angles)
+        nhalf = x.shape[-1] // 2
+        assert nhalf == angles.shape[0]
+        firsthalf = torch.arange(nhalf)
+        secondhalf = torch.arange(nhalf, 2*nhalf)
+        first = c*xperm[..., firsthalf] + s*xperm[..., secondhalf]
+        second = c*xperm[..., secondhalf] - s*xperm[..., firsthalf]
+        xperm[..., firsthalf] = first
+        xperm[..., secondhalf] = second
+        return xperm[..., permutation]
+
     def pppp_merge(self):
         """PPPP update to hidden parameters."""
         with torch.no_grad():
-            for v in [self.v, self.v + self.dv]:
-                self.Q[:] = self.Q - 2*torch.einsum("ij,j,k->ik",self.Q, v, v) / torch.einsum("i,i->", v, v)
-            self.v[:] = torch.randn(self.dim)
-            self.dv[:] = 0
+            #for v in [self.v, self.v + self.dv]:
+            #    self.Q[:] = self.Q - 2*torch.einsum("ij,j,k->ik",self.Q, v, v) / torch.einsum("i,i->", v, v)
+            self.Q[:] = self._nhalfgivens_trafo(self.Q, self.permutation, -self.angles)
+            #self.v[:] = torch.randn(self.dim)
+            #self.dv[:] = 0
+            #import numpy as np
+            self.angles[:] = 0.0 #torch.rand(self.dim//2)
+            self.permutation = torch.randperm(self.dim)
 
     def _forward(self, x, **kwargs):
         """Forward transform.
@@ -64,7 +90,8 @@ class OrthogonalPPPP(Flow):
             natural log of the Jacobian determinant
         """
         dlogp = torch.zeros_like(x[...,0,None])
-        transformed = self._householder_trafo(self._householder_trafo(x, self.v + self.dv), self.v)
+        #transformed = self._householder_trafo(self._householder_trafo(x, self.v + self.dv), self.v)
+        transformed = self._nhalfgivens_trafo(x, self.permutation, self.angles)
         y = torch.einsum("ab,...b->...a", self.Q, transformed)
         return y + self.b, dlogp
 
@@ -87,7 +114,8 @@ class OrthogonalPPPP(Flow):
         """
         dlogp = torch.zeros_like(y[...,0,None])
         x = torch.einsum("ba,...b->...a", self.Q, y - self.b)
-        transformed = self._householder_trafo(self._householder_trafo(x, self.v), self.v + self.dv)
+        #transformed = self._householder_trafo(self._householder_trafo(x, self.v), self.v + self.dv)
+        transformed = self._nhalfgivens_trafo(x, self.permutation, -self.angles)
         return transformed, dlogp
 
     def penalty(self):
@@ -117,7 +145,7 @@ class InvertiblePPPP(Flow):
     penalty_parameter : float
         Scaling factor for the regularity constraint.
     """
-    def __init__(self, dim, shift=True, penalty_parameter=0.1, min_logdet=-2.0, max_logdet=5.0):
+    def __init__(self, dim, shift=True, penalty_parameter=0.1, min_logdet=-2.0, max_logdet=3.0):
         super(InvertiblePPPP, self).__init__()
         self.dim = dim
         self.u = torch.nn.Parameter(torch.zeros(dim))

@@ -9,13 +9,13 @@ def test_orthogonal_pppp():
     x = torch.tensor([[3.1,-2.0]])
     flow.Q = torch.tensor([[0.0,1.0],[1.0,0.0]])
     flow.b[:] = torch.tensor([2.1, 1.2])
-    dv = torch.tensor([0.1, -0.1])
-    flow.dv[:] = dv
+    #dv = torch.tensor([0.1, -0.1])
+    #flow.dv[:] = dv
+    flow.angles[:] = torch.randn((1,))
 
     y, logdet = flow._forward(x)
     assert torch.isclose(flow._inverse(y, inverse=True)[0], x, atol=1e-5).all()
 
-    assert(flow.penalty() > 0)
     flow.pppp_merge()
     y2, logdet2 = flow.forward(x)
 
@@ -23,7 +23,7 @@ def test_orthogonal_pppp():
     assert torch.isclose(logdet, torch.zeros(1), atol=1e-5)
     assert torch.isclose(logdet2, torch.zeros(1), atol=1e-5)
     assert torch.isclose(y,y2, atol=1e-5).all()
-    assert torch.isclose(flow.dv, torch.zeros(1), atol=1e-5).all()
+    assert torch.isclose(flow.angles, torch.zeros(1), atol=1e-5).all()
 
 
 def test_invertible_pppp():
