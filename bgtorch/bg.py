@@ -82,3 +82,6 @@ class BoltzmannGenerator(Energy, Sampler):
     
     def log_weights_given_latent(self, x, z, dlogp, temperature=None):
         return log_weights_given_latent(x, z, dlogp, self._prior, self._flow, self._target, temperature=None)
+
+    def trigger(self, function_name):
+        return self.flow.trigger(function_name)

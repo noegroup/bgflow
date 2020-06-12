@@ -71,13 +71,17 @@ class KLTrainer(object):
         self.reporter = LossReporter(*loss_names)
 
 
-    def train(self, n_iter, data=None, batchsize=128, w_likelihood=None, w_energy=None, n_print=0):
+    def train(self, n_iter, data=None, batchsize=128, w_likelihood=None, w_energy=None, n_print=0, trigger=[]):
         if w_likelihood is None:
             w_likelihood = self.w_likelihood
         if w_energy is None:
             w_energy = self.w_energy
 
         for iter in range(n_iter):
+
+            for interval, name in trigger:
+                if iter % interval == 0:
+                    self.bg.trigger(name)
             self.optim.zero_grad()
             reports = []
 
