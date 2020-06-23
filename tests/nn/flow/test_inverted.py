@@ -15,7 +15,6 @@ from bgtorch.nn import flow
     flow.AffineFlow(2),
     flow.SplitFlow(1),
     flow.TriuFlow(2),
-    flow.OrthogonalPPPP(2),
     flow.InvertiblePPPP(2)
 ])
 def simpleflow2d(request):

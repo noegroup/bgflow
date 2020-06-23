@@ -1,29 +1,7 @@
 
 import pytest
 import torch
-from bgtorch.nn.flow.pppp import OrthogonalPPPP, InvertiblePPPP, _iterative_solve
-
-
-def test_orthogonal_pppp():
-    flow = OrthogonalPPPP(2, penalty_parameter=0.3)
-    x = torch.tensor([[3.1,-2.0]])
-    flow.Q = torch.tensor([[0.0,1.0],[1.0,0.0]])
-    flow.b[:] = torch.tensor([2.1, 1.2])
-    #dv = torch.tensor([0.1, -0.1])
-    #flow.dv[:] = dv
-    flow.angles[:] = torch.randn((1,))
-
-    y, logdet = flow._forward(x)
-    assert torch.isclose(flow._inverse(y, inverse=True)[0], x, atol=1e-5).all()
-
-    flow.pppp_merge()
-    y2, logdet2 = flow.forward(x)
-
-    assert torch.isclose(flow.forward(y2, inverse=True)[0], x, atol=1e-5).all()
-    assert torch.isclose(logdet, torch.zeros(1), atol=1e-5)
-    assert torch.isclose(logdet2, torch.zeros(1), atol=1e-5)
-    assert torch.isclose(y,y2, atol=1e-5).all()
-    assert torch.isclose(flow.angles, torch.zeros(1), atol=1e-5).all()
+from bgtorch.nn.flow.pppp import InvertiblePPPP, _iterative_solve
 
 
 def test_invertible_pppp():
@@ -32,7 +10,6 @@ def test_invertible_pppp():
     flow.u[:] = torch.tensor([0.4, -0.3])
     flow.v[:] = torch.tensor([0.1, 0.2])
     y, logdet = flow.forward(x)
-
 
     x2, logdetinv = flow.forward(y, inverse=True)
     assert torch.isclose(x2, x, atol=1e-5).all()
