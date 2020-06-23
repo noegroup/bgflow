@@ -59,40 +59,27 @@ class InvertiblePPPP(Flow):
         self.register_buffer("penalty_buffer", torch.zeros_like(self.detA))
         self.register_buffer("penalty_parameter", penalty_parameter*torch.ones_like(self.detA))
 
-    def _compute_scale(self, vtAinvu, detA):
-        """Returns one. I was thinking of """
-        return torch.ones_like(detA)
-
     def _compute_products(self):
         u = self.u
         v = self.v
         Ainv = self.Ainv
-        detA = self.detA
         Ainvu = torch.mv(Ainv, u)
         vtAinvu = torch.dot(v, Ainvu)
-        scale = self._compute_scale(vtAinvu, detA)
-        scaled_Ainvu = scale * Ainvu
-        scaled_vtAinvu = scale ** 2 * vtAinvu
-        det_update = 1 + scaled_vtAinvu
-        return scaled_Ainvu, scaled_vtAinvu, scale, det_update
-
-    #def _update_buffers(self):
-    #    self.scale = self._determine_scale(vtAinvu, self.detA)
-    #    self.det_update = 1.0 + self.scale**2 * vtAinvu
-    #    self.Ainvu = Ainvu * self.scale
+        det_update = 1 + vtAinvu
+        return Ainvu, vtAinvu, det_update
 
     @staticmethod
-    def _mv_rank_one(u, v, x, scale):
-        return scale**2 * torch.einsum("i,j,...j->...i", u, v, x)
+    def _mv_rank_one(u, v, x):
+        return torch.einsum("i,j,...j->...i", u, v, x)
 
     @staticmethod
-    def _inv_rank_one(v, scale, Ainv, Ainvu, det_update):
-        vtAinv = scale * torch.einsum("i,ij->j", v, Ainv)
+    def _inv_rank_one(v, Ainv, Ainvu, det_update):
+        vtAinv = torch.einsum("i,ij->j", v, Ainv)
         return - 1/det_update * torch.einsum("i,j", Ainvu, vtAinv)
 
     @staticmethod
-    def _inv_mv_rank_one(Ainvy, v, scale, Ainvu, det_update):
-        return - 1/det_update * scale * torch.einsum("i,k,...k->...i", Ainvu, v, Ainvy)
+    def _inv_mv_rank_one(Ainvy, v, Ainvu, det_update):
+        return - 1/det_update * torch.einsum("i,k,...k->...i", Ainvu, v, Ainvy)
 
     def pppp_merge(self, force_merge=True):
         """PPPP update to hidden parameters."""
@@ -102,7 +89,7 @@ class InvertiblePPPP(Flow):
                 self.v[:] = torch.randn(self.dim)
                 self.u[:] = 0
                 return False
-            scaled_Ainvu, scaled_vtAinvu, scale, det_update = (
+            Ainvu, vtAinvu, det_update = (
                 self._compute_products()
             )
 
@@ -118,8 +105,8 @@ class InvertiblePPPP(Flow):
                 print("NOT SANE", logabsdet_update.item(), logabsdet_new.item())
             if sane_update or force_merge:
                 self.detA *= det_update
-                self.A[:] = self.A + scale**2 * torch.einsum("i,j->ij", self.u, self.v)
-                self.Ainv[:] = self.Ainv + self._inv_rank_one(self.v, scale, self.Ainv, scaled_Ainvu, det_update)
+                self.A[:] = self.A + torch.einsum("i,j->ij", self.u, self.v)
+                self.Ainv[:] = self.Ainv + self._inv_rank_one(self.v, self.Ainv, Ainvu, det_update)
                 self.v[:] = torch.randn(self.dim)
                 self.u[:] = 0
                 #if det_update < 0:
@@ -163,10 +150,10 @@ class InvertiblePPPP(Flow):
             natural log of the Jacobian determinant
         """
         if self.training:
-            scaled_Ainvu, scaled_vtAinvu, scale, det_update = self._compute_products()
+            Ainvu, vtAinvu, det_update = self._compute_products()
             new_detA = self.detA * det_update
             dlogp = torch.ones_like(x[...,0,None]) * torch.log(torch.abs(new_detA))
-            y = torch.einsum("ij,...j->...i", self.A, x) + self._mv_rank_one(self.u, self.v, x, scale)
+            y = torch.einsum("ij,...j->...i", self.A, x) + self._mv_rank_one(self.u, self.v, x)
             self._buffer_penalty(det_update, new_detA)
         else:
             dlogp = torch.ones_like(x[..., 0, None]) * torch.log(torch.abs(self.detA))
@@ -191,11 +178,11 @@ class InvertiblePPPP(Flow):
             natural log of the Jacobian determinant
         """
         if self.training:
-            scaled_Ainvu, scaled_vtAinvu, scale, det_update = self._compute_products()
+            Ainvu, vtAinvu, det_update = self._compute_products()
             new_detA = self.detA * det_update
             dlogp = - torch.ones_like(y[..., 0, None]) * torch.log(torch.abs(new_detA))
             Ainvy = torch.einsum("ij,...j->...i", self.Ainv, y - self.b)
-            x = Ainvy + self._inv_mv_rank_one(Ainvy, self.v, scale, scaled_Ainvu, det_update)
+            x = Ainvy + self._inv_mv_rank_one(Ainvy, self.v, Ainvu, det_update)
             self._buffer_penalty(det_update, new_detA)
         else:
             dlogp = - torch.ones_like(y[..., 0, None]) * torch.log(torch.abs(self.detA))
@@ -219,16 +206,11 @@ class InvertiblePPPP(Flow):
 
     def correct(self):
         before = torch.mm(self.A, self.Ainv)
-        error_before = torch.norm(before - torch.eye(self.dim)).item()
+        # error_before = torch.norm(before - torch.eye(self.dim)).item()
         with torch.no_grad():
             self.Ainv[:] = _iterative_solve(self.A, self.Ainv)
-                #self.Ainv[:] = torch.inverse(self.A)
             after = torch.norm(torch.mm(self.A, self.Ainv) - torch.eye(self.dim))
-            #if torch.norm(before - torch.eye(self.dim)).item() > 1e-3:
-            print(f"{error_before:10.7f} -> {after.item():10.7f}")
-            #olddet = torch.det(self.A)
-            #self.detA = torch.det(self.A)
-            #print(f"{olddet.item():10.7f} -> {self.detA.item():10.7f}")
+            # print(f"{error_before:10.7f} -> {after.item():10.7f}")
 
     @staticmethod
     def _penalty(x, sigma_left=None, sigma_right=None):
