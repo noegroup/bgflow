@@ -101,17 +101,14 @@ class InvertiblePPPP(Flow):
             sane_update = sane_update and logabsdet_new > self.min_logdet - 0.5
             sane_update = sane_update and logabsdet_new < self.max_logdet + 0.5
             #print("{:10.4} {:10.4} {}".format(det_update.item(), self.detA.item(), sane_update))
-            if not sane_update:
-                print("NOT SANE", logabsdet_update.item(), logabsdet_new.item())
+            #if not sane_update:
+            #    print("NOT SANE", logabsdet_update.item(), logabsdet_new.item())
             if sane_update or force_merge:
                 self.detA *= det_update
                 self.A[:] = self.A + torch.einsum("i,j->ij", self.u, self.v)
                 self.Ainv[:] = self.Ainv + self._inv_rank_one(self.v, self.Ainv, Ainvu, det_update)
                 self.v[:] = torch.randn(self.dim)
                 self.u[:] = 0
-                #if det_update < 0:
-                #if not sane_update:
-                #    self.correct()
                 return True
             else:
                 return False
@@ -231,6 +228,7 @@ class InvertiblePPPP(Flow):
 
 
 class PPPPScheduler:
+    """A scheduler for PPPP merges and correction steps."""
     def __init__(self, model, optimizer, n_merge=10, n_force_merge=100, n_correct=500, n_correct_steps=1):
         self.model = model
         self.optimizer = optimizer
