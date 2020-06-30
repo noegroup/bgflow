@@ -1,6 +1,5 @@
 """
 Property-preserving parameter perturbations
-# TODO: maybe speed this up by avoiding torch.einsum and using torch.func.linear instead
 """
 
 import torch
@@ -84,7 +83,19 @@ class InvertiblePPPP(Flow):
         return - 1/det_update * torch.einsum("i,k,...k->...i", Ainvu, v, Ainvy)
 
     def pppp_merge(self, force_merge=True):
-        """PPPP update to hidden parameters."""
+        """PPPP update to hidden parameters.
+
+        Parameters
+        ----------
+        force_merge : bool
+            Whether to update even if the update might hurt numerical stability.
+
+        Returns
+        -------
+        merged : bool
+            Whether a merge was performed.
+
+        """
         with torch.no_grad():
             # never merge nans or infs; instead reset
             if not torch.isfinite(torch.cat([self.u, self.v])).all():
@@ -102,9 +113,6 @@ class InvertiblePPPP(Flow):
             sane_update = sane_update and logabsdet_update > self.min_logdet - 4
             sane_update = sane_update and logabsdet_new > self.min_logdet - 0.5
             sane_update = sane_update and logabsdet_new < self.max_logdet + 0.5
-            #print("{:10.4} {:10.4} {}".format(det_update.item(), self.detA.item(), sane_update))
-            #if not sane_update:
-            #    print("NOT SANE", logabsdet_update.item(), logabsdet_new.item())
             if sane_update or force_merge:
                 self.detA *= det_update
                 self.A[:] = self.A + torch.einsum("i,j->ij", self.u, self.v)
@@ -203,13 +211,11 @@ class InvertiblePPPP(Flow):
         else:
             return self.penalty_buffer
 
-    def correct(self):
-        before = torch.mm(self.A, self.Ainv)
-        # error_before = torch.norm(before - torch.eye(self.dim)).item()
+    def correct(self, recompute_det=False):
         with torch.no_grad():
             self.Ainv[:] = _iterative_solve(self.A, self.Ainv)
-            after = torch.norm(torch.mm(self.A, self.Ainv) - torch.eye(self.dim))
-            # print(f"{error_before:10.7f} -> {after.item():10.7f}")
+            if recompute_det:
+                self.detA = torch.det(self.A)*torch.ones_like(self.detA)
 
     @staticmethod
     def _penalty(x, sigma_left=None, sigma_right=None):
@@ -246,14 +252,18 @@ class PPPPScheduler:
         Number of iterations of the iterative matrix inversion solver
     n_recompute_det : int
         Number of step() invocations between recomputations of the determinant; None means never
+    reset_optimizer : bool
+        Whether to reset the optimizer after merge.
     """
-    def __init__(self, model, optimizer, n_force_merge=10, n_correct=50, n_correct_steps=1, n_recompute_det=None):
+    def __init__(self, model, optimizer, n_force_merge=10, n_correct=50,
+                 n_correct_steps=1, n_recompute_det=None, reset_optimizer=True):
         self._blocks = self._find_invertible_pppp_blocks(model)
         self.optimizer = optimizer
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
         self.n_correct_steps = n_correct_steps
         self.n_recompute_det = n_recompute_det
+        self.reset_optimizer = reset_optimizer
         self.i = 0
 
     def step(self):
@@ -265,16 +275,16 @@ class PPPPScheduler:
         Every `self.n_recompute_det` invocations, compute the determinant of the weight matrices from scratch.
         """
         self.i += 1
+        merged = []
         for block in self._blocks:
-            block.pppp_merge(force_merge=self.n_force_merge is not None and self.i % self.n_force_merge == 0)
-        self.optimizer.state = defaultdict(dict)
+            res = block.pppp_merge(force_merge=self.n_force_merge is not None and self.i % self.n_force_merge == 0)
+            merged.append(res)
+        if any(merged) and self.reset_optimizer:
+            self.optimizer.state = defaultdict(dict)
         if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
                 for block in self._blocks:
-                    block.correct()
-        if self.n_recompute_det is not None and self.i % self.n_recompute_det == 0:
-            for block in self._blocks:
-                block.detA = torch.det(block.A)
+                    block.correct(self.n_recompute_det is not None and self.i % self.n_recompute_det == 0)
 
     @staticmethod
     def _find_invertible_pppp_blocks(model):
