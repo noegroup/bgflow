@@ -6,6 +6,8 @@ Property-preserving parameter perturbations
 import torch
 from bgtorch.nn.flow.base import Flow
 from collections import defaultdict
+from collections.abc import Iterable
+import warnings
 
 __all__ = ["InvertiblePPPP", "PPPPScheduler"]
 
@@ -228,24 +230,66 @@ class InvertiblePPPP(Flow):
 
 
 class PPPPScheduler:
-    """A scheduler for PPPP merges and correction steps."""
-    def __init__(self, model, optimizer, n_merge=10, n_force_merge=100, n_correct=500, n_correct_steps=1):
-        self.model = model
+    """A scheduler for PPPP merges and correction steps.
+
+    Parameters
+    ----------
+    model : InvertiblePPPP or torch.nn.Module
+        A neural net that contains at least one InvertiblePPPP layer.
+    optimizer : torch.optim.Optimizer
+        An optimizer
+    n_force_merge : int
+        Number of step() invocations between force merges (PPPP merges even if updates are not sane); None means never
+    n_correct : int
+        Number of  step() invocations between correction steps; None means never
+    n_correct_steps : int
+        Number of iterations of the iterative matrix inversion solver
+    n_recompute_det : int
+        Number of step() invocations between recomputations of the determinant; None means never
+    """
+    def __init__(self, model, optimizer, n_force_merge=10, n_correct=50, n_correct_steps=1, n_recompute_det=None):
+        self._blocks = self._find_invertible_pppp_blocks(model)
         self.optimizer = optimizer
-        self.n_merge = n_merge
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
         self.n_correct_steps = n_correct_steps
+        self.n_recompute_det = n_recompute_det
         self.i = 0
 
     def step(self):
+        """Perform a merging step.
+
+        Every `self.n_force_merge` invocations, force merge even if update is not sane.
+        Every `self.n_correct` invocations, perform `self.n_correct_steps` many iterative
+        inversion steps to improve the inverse matrix.
+        Every `self.n_recompute_det` invocations, compute the determinant of the weight matrices from scratch.
+        """
         self.i += 1
-        if self.i % self.n_merge == 0:
-            self.model.pppp_merge(force_merge=self.i % self.n_force_merge == 0)
-            self.optimizer.state = defaultdict(dict)
-        if self.i % self.n_correct == 0:
+        for block in self._blocks:
+            block.pppp_merge(force_merge=self.n_force_merge is not None and self.i % self.n_force_merge == 0)
+        self.optimizer.state = defaultdict(dict)
+        if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
-                self.model.correct()
+                for block in self._blocks:
+                    block.correct()
+        if self.n_recompute_det is not None and self.i % self.n_recompute_det == 0:
+            for block in self._blocks:
+                block.detA = torch.det(block.A)
+
+    @staticmethod
+    def _find_invertible_pppp_blocks(model):
+        if isinstance(model, InvertiblePPPP):
+            return [model]
+        elif isinstance(model, Iterable):
+            pppp_blocks = [block for block in model if isinstance(block, InvertiblePPPP)]
+            if len(pppp_blocks) == 0:
+                warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
+            return pppp_blocks
+
+    def penalty(self):
+        """Sum of penalty functions for all InvertiblePPPP blocks."""
+        penalties = [block.penalty() for block in self._blocks]
+        return torch.sum(torch.stack(penalties))
 
 
 _iterative_solve_coefficients = {
@@ -256,7 +300,8 @@ _iterative_solve_coefficients = {
 
 
 def _iterative_solve(matrix, inverse_guess, order=7):
-    """see Soleymani, https://doi.org/10.1155/2012/134653"""
+    """Perform one iteration of iterative inversion.
+    See Soleymani, https://doi.org/10.1155/2012/134653"""
     coeffs = _iterative_solve_coefficients[order]
     factor = coeffs[:2]
     coeffs = coeffs[2:]

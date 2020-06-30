@@ -67,3 +67,5 @@ class SequentialFlow(Flow):
         else:
             return torch.zeros(0)
 
+    def __iter__(self):
+        return iter(self._blocks)

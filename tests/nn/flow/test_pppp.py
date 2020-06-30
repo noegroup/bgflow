@@ -1,7 +1,8 @@
 
 import pytest
 import torch
-from bgtorch.nn.flow.pppp import InvertiblePPPP, _iterative_solve
+from bgtorch.nn.flow.pppp import InvertiblePPPP, PPPPScheduler, _iterative_solve
+from bgtorch.nn.flow.sequential import SequentialFlow
 
 
 def test_invertible_pppp():
@@ -53,4 +54,28 @@ def test_iterative_solve(order):
     for i in range(10):
         inv = _iterative_solve(a, inv, order)
     assert torch.mm(inv, a).numpy() == pytest.approx(torch.eye(3).numpy(), abs=1e-5)
+
+
+@pytest.mark.parametrize("model", [InvertiblePPPP(3), SequentialFlow([InvertiblePPPP(3), InvertiblePPPP(3)])])
+def test_scheduler(model):
+    """API test for a full example."""
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-1)
+    scheduler = PPPPScheduler(model, optimizer, n_force_merge=5, n_correct=5, n_recompute_det=5)
+    torch.seed = 0
+    a = -1e-6*torch.eye(3)
+    data = torch.randn(800, 3)
+    target = torch.einsum("ij,...j->...i", a, data)
+    loss = torch.nn.MSELoss()
+    for iter in range(100):
+        optimizer.zero_grad()
+        batch = data[8*iter:8*(iter+1)]
+        y, _ = model.forward(batch)
+        mse = loss(y, target[8*iter:8*(iter+1)]) + scheduler.penalty()
+        mse.backward()
+        optimizer.step()
+        if iter % 10 == 0:
+            scheduler.step()
+    assert scheduler.penalty().item() >= 0.0
+    assert scheduler.i == 10
+
 

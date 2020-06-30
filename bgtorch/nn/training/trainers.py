@@ -70,18 +70,43 @@ class KLTrainer(object):
             self.w_energy = 1.0
         self.reporter = LossReporter(*loss_names)
 
+    def train(self, n_iter, data=None, batchsize=128, w_likelihood=None, w_energy=None, n_print=0, schedulers=()):
+        """
+        Train the network.
 
-    def train(self, n_iter, data=None, batchsize=128, w_likelihood=None, w_energy=None, n_print=0, trigger=[]):
+        Parameters
+        ----------
+        n_iter : int
+            Number of training iterations.
+        data : list
+            Training data
+        batchsize : int
+            Batchsize
+        w_likelihood : float or None
+            Weight for backward KL divergence during training;
+            if specified, this argument overrides self.w_likelihood
+        w_energy : float or None
+            Weight for forward KL divergence divergence during training;
+            if specified, this argument overrides self.w_energy
+        n_print : int
+            Print interval
+        schedulers : iterable
+            A list of pairs (int, scheduler), where the integer specifies the number of iterations between
+            steps of the scheduler. Scheduler steps are invoked before the optimization step.
+
+        Returns
+        -------
+        """
         if w_likelihood is None:
             w_likelihood = self.w_likelihood
         if w_energy is None:
             w_energy = self.w_energy
 
         for iter in range(n_iter):
-
-            for interval, name in trigger:
+            # invoke schedulers
+            for interval, scheduler in schedulers:
                 if iter % interval == 0:
-                    self.bg.trigger(name)
+                    scheduler.step()
             self.optim.zero_grad()
             reports = []
 
