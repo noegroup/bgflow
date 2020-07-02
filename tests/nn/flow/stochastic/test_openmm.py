@@ -51,4 +51,4 @@ def test_path_probability_integrator(integrator):
 
     # check if we can bind the reverse integrator to a context and use it
     mm.Context(system, integ.get_reverse_integrator(), mm.Platform.getPlatformByName("Reference"))
-    assert integ.get_reverse_integrator().ratio == 0.0
+    assert integ.get_reverse_integrator()._ratio == 0.0

@@ -5,7 +5,6 @@ OpenMM Interface for Stochastic Normalizing Flows
 import pickle
 
 from ..base import Flow
-from simtk.openmm import CustomIntegrator, XmlSerializer
 from openmmtools.integrators import ThermostatedIntegrator
 
 
@@ -30,32 +29,52 @@ class OpenMMStochasticFlow(Flow):
         super(OpenMMStochasticFlow, self).__init__()
 
     def _forward(self, *xs, **kwargs):
-        pass
+        return NotImplemented
 
     def _inverse(self, *xs, **kwargs):
-        pass
+        return NotImplemented
 
 
 class PathProbabilityIntegrator(ThermostatedIntegrator):
     """Abstract base class for path probability integrators.
     These integrators track the path probability ratio which is required in stochastic normalizing flows.
+
+    Parameters
+    ----------
+    temperature : float or unit.Quantity
+        Temperature in kelvin.
+    stepsize : float or unit.Quantity
+        Step size in picoseconds.
     """
     def __init__(self, temperature, stepsize):
         super(PathProbabilityIntegrator, self).__init__(temperature, stepsize)
         self.addGlobalVariable("log_path_probability_ratio", 0.0)
 
     @property
-    def ratio(self):
+    def _ratio(self):
         return self.getGlobalVariableByName("log_path_probability_ratio")
 
-    @ratio.setter
-    def ratio(self, value):
-        return self.setGlobalVariableByName("log_path_probability_ratio", value)
+    @_ratio.setter
+    def _ratio(self, value):
+        self.setGlobalVariableByName("log_path_probability_ratio", value)
 
     def step(self, n_steps):
+        """Propagate the system using the integrator.
+        This method returns the current log path probability ratio and resets it to 0.0 afterwards.
+
+        Parameters
+        ----------
+        n_steps : int
+            The number of steps
+
+        Returns
+        -------
+        ratio : float
+            The logarithmic path probability ratio summed over n_steps steps.
+        """
         super().step(n_steps)
-        ratio = self.ratio
-        self.ratio = 0.0
+        ratio = self._ratio
+        self._ratio = 0.0
         return ratio
 
     def get_reverse_integrator(self):
