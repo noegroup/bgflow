@@ -45,17 +45,22 @@ class PathProbabilityIntegrator(ThermostatedIntegrator):
         Temperature in kelvin.
     stepsize : float or unit.Quantity
         Step size in picoseconds.
+
+    Attributes
+    ----------
+    ratio : float
+        The logarithmic path probability ratio summed over all steps taken during the previous invocation of `step`.
     """
     def __init__(self, temperature, stepsize):
         super(PathProbabilityIntegrator, self).__init__(temperature, stepsize)
         self.addGlobalVariable("log_path_probability_ratio", 0.0)
 
     @property
-    def _ratio(self):
+    def ratio(self):
         return self.getGlobalVariableByName("log_path_probability_ratio")
 
-    @_ratio.setter
-    def _ratio(self, value):
+    @ratio.setter
+    def ratio(self, value):
         self.setGlobalVariableByName("log_path_probability_ratio", value)
 
     def step(self, n_steps):
@@ -72,15 +77,17 @@ class PathProbabilityIntegrator(ThermostatedIntegrator):
         ratio : float
             The logarithmic path probability ratio summed over n_steps steps.
         """
+        self.ratio = 0.0
         super().step(n_steps)
-        ratio = self._ratio
-        self._ratio = 0.0
+        ratio = self.ratio
         return ratio
 
     def get_reverse_integrator(self):
         """Default behavior: the forward and reverse integrator are identical."""
         pickled = pickle.dumps(self)
-        return pickle.loads(pickled)
+        reverse = pickle.loads(pickled)
+        reverse.ratio = 0
+        return reverse
 
 
 class BrownianPathProbabilityIntegrator(PathProbabilityIntegrator):
