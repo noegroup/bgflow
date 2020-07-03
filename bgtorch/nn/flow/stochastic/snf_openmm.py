@@ -14,25 +14,62 @@ class OpenMMStochasticFlow(Flow):
 
     Parameters
     ----------
-    openmm_system : simtk.openmm.System
-        The system object that defines molecular energies and forces.
+    openmm_bridge : bgtorch.distribution.energy.openmm.OpenMMBridge
+        The openmm energy bridge instance that propagates the SNF.
 
-    stochastic_flow_integrator : simtk.openmm.CustomIntegrator
-        A custom integrator that has a getter for the path probability ratio.
+    inverse_openmm_bridge : None or bgtorch.distribution.energy.openmm.OpenMMBridge
+        The bridge instance that propagates the inverse transform. If None, use the forward transform.
 
-    reverse_integrator : simtk.openmm.CustomIntegrator
-        The integrator that defines the reverse step. If None, create the reverse integrator
-        from the forward integrator.
+    Examples
+    --------
+    The class should be used with one of the integrators defined in this module.
+    For example
+    >>>     from bgtorch.distribution.energy.openmm import OpenMMBridge
+    >>>     from openmmtools.testsystems import AlanineDipeptideImplicit
+    >>>     integrator = BrownianPathProbabilityIntegrator(1, 100, 0.001)
+    >>>     ala2 = AlanineDipeptideImplicit()
+    >>>     bridge = OpenMMBridge(ala2.system, integrator, n_workers=1, n_simulation_steps=5)
+    >>>     snf = OpenMMStochasticFlow(bridge)
 
+    >>>     x = torch.tensor(ala2.positions.value_in_unit(unit.nanometer)).view(1,len(ala2.positions)*3)
+    >>>     y, dlogP = snf._forward(x)
     """
-    def __init__(self, openmm_system, stochastic_flow_integrator, reverse_integrator=None):
+    def __init__(self, openmm_bridge, inverse_openmm_bridge=None):
         super(OpenMMStochasticFlow, self).__init__()
 
+        assert isinstance(openmm_bridge.integrator, PathProbabilityIntegrator), \
+            "OpenMMStochasticFlow requires an integrator that tracks the log path probability ratio."
+        #assert openmm_bridge.n_simulation_steps > 0, \
+        #    "OpenMMStochasticFlow requires a bridge that performs integration steps in OpenMM."
+
+        if inverse_openmm_bridge is not None:
+            assert isinstance(inverse_openmm_bridge.integrator, PathProbabilityIntegrator), \
+            "OpenMMStochasticFlow requires an integrator that tracks the log path probability ratio."
+            #assert inverse_openmm_bridge.n_simulation_steps > 0, \
+            #    "OpenMMStochasticFlow requires a bridge that performs integration steps in OpenMM."
+
+        self.openmm_bridge = openmm_bridge
+        self.inverse_openmm_bridge = inverse_openmm_bridge if inverse_openmm_bridge is not None else openmm_bridge
+
     def _forward(self, *xs, **kwargs):
-        return NotImplemented
+        _, _, y, dlog = self.openmm_bridge.evaluate(
+            xs[0],
+            evaluate_force=False,
+            evaluate_energy=False,
+            evaluate_positions=True,
+            evaluate_path_probability_ratio=True
+        )
+        return y, dlog
 
     def _inverse(self, *xs, **kwargs):
-        return NotImplemented
+        _, _, y, dlog = self.inverse_openmm_bridge.evaluate(
+            xs[0],
+            evaluate_force=False,
+            evaluate_energy=False,
+            evaluate_positions=True,
+            evaluate_path_probability_ratio=True
+        )
+        return y, dlog
 
 
 class PathProbabilityIntegrator(ThermostatedIntegrator):
@@ -125,16 +162,19 @@ class LangevinPathProbabilityIntegrator(PathProbabilityIntegrator):
     """Langevin Dynamics"""
     def __init__(self, temperature, friction_coeff, stepsize):
         super(LangevinPathProbabilityIntegrator, self).__init__(temperature, stepsize)
+        raise NotImplementedError()
 
 
 class MCMCPathProbabilityIntegrator(PathProbabilityIntegrator):
     """Markov Chain Monte Carlo"""
     def __init__(self, temperature, friction_coeff, stepsize):
         super(MCMCPathProbabilityIntegrator, self).__init__(temperature, stepsize)
+        raise NotImplementedError()
 
 
 class HamiltonianMCPathProbabilityIntegrator(PathProbabilityIntegrator):
     """Hamiltonial Monte Carlo Integrator"""
     def __init__(self, temperature, friction_coeff, stepsize):
         super(HamiltonianMCPathProbabilityIntegrator, self).__init__(temperature, stepsize)
+        raise NotImplementedError()
 

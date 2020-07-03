@@ -1,12 +1,15 @@
 
 
-from bgtorch.nn.flow.stochastic.openmm import BrownianPathProbabilityIntegrator
+from bgtorch.nn.flow.stochastic.snf_openmm import BrownianPathProbabilityIntegrator, OpenMMStochasticFlow
+
+import copy
 
 import pytest
 import numpy as np
+import torch
+
 from simtk import openmm as mm
 from simtk import unit
-import copy
 
 
 def make_harmonic_system(n_particles, force_constant):
@@ -56,6 +59,26 @@ def test_path_probability(integrator):
     # check if we can bind the reverse integrator to a context and use it
     mm.Context(system, integ.get_reverse_integrator(), mm.Platform.getPlatformByName("Reference"))
     assert integ.get_reverse_integrator().ratio == 0.0
+
+
+@pytest.mark.parametrize("temperature", (1, 500))
+def test_flow_bridge(temperature):
+    """Test the API of the flow interface"""
+    from bgtorch.distribution.energy.openmm import OpenMMBridge
+    from openmmtools.testsystems import AlanineDipeptideImplicit
+    integrator = BrownianPathProbabilityIntegrator(temperature, 100, 0.001)
+    ala2 = AlanineDipeptideImplicit()
+    bridge = OpenMMBridge(ala2.system, integrator, n_workers=1, n_simulation_steps=4)
+    snf = OpenMMStochasticFlow(bridge)
+
+    x = torch.tensor(ala2.positions.value_in_unit(unit.nanometer)).view(1,len(ala2.positions)*3)
+    y, dlogP = snf._forward(x)
+    assert not torch.all(x.isclose(y, atol=1e-3))  # assert that output differs from input
+    assert torch.all(x.isclose(y, atol=0.5))  # assert that output does not differ too much
+    if temperature < 300:
+        assert dlogP[0].item() < 0.0   # should be a space-contracting update since temperature is low
+    else:
+        assert dlogP[0].item() > 0.0   # should be a space-expanding update since temperature is high
 
 
 @pytest.mark.parametrize(
