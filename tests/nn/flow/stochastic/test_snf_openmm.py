@@ -62,16 +62,18 @@ def test_path_probability(integrator):
 
 
 @pytest.mark.parametrize("temperature", (1, 500))
-def test_flow_bridge(temperature):
+@pytest.mark.parametrize("n_workers", (1, 2))
+def test_flow_bridge(temperature, n_workers):
     """Test the API of the flow interface"""
     from bgtorch.distribution.energy.openmm import OpenMMBridge
     from openmmtools.testsystems import AlanineDipeptideImplicit
     integrator = BrownianPathProbabilityIntegrator(temperature, 100, 0.001)
     ala2 = AlanineDipeptideImplicit()
-    bridge = OpenMMBridge(ala2.system, integrator, n_workers=1, n_simulation_steps=4)
+    bridge = OpenMMBridge(ala2.system, integrator, n_workers=n_workers, n_simulation_steps=4)
     snf = OpenMMStochasticFlow(bridge)
 
-    x = torch.tensor(ala2.positions.value_in_unit(unit.nanometer)).view(1,len(ala2.positions)*3)
+    batch_size = 2
+    x = torch.tensor([ala2.positions.value_in_unit(unit.nanometer)] * batch_size).view(batch_size,len(ala2.positions)*3)
     y, dlogP = snf._forward(x)
     assert not torch.all(x.isclose(y, atol=1e-3))  # assert that output differs from input
     assert torch.all(x.isclose(y, atol=0.5))  # assert that output does not differ too much

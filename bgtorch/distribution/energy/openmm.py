@@ -345,7 +345,11 @@ class MultiContext:
                     log_path_probability_ratio = self._openmm_integrator.step(n_simulation_steps)
 
                     # compute energy and forces
-                    state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
+                    state = self._openmm_context.getState(
+                        getEnergy=evaluate_energy,
+                        getForces=evaluate_force,
+                        getPositions=evaluate_positions
+                    )
                     energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
                     forces = (
                         state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
@@ -359,7 +363,9 @@ class MultiContext:
                         raise e
 
                 # push energies and forces to the results queue
-                self._result_queue.put([index, energy, forces, new_positions, log_path_probability_ratio])
+                self._result_queue.put(
+                    [index, energy, forces, new_positions, log_path_probability_ratio]
+                )
 
 
 class SingleContext:
