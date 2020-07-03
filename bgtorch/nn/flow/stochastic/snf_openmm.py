@@ -36,20 +36,11 @@ class OpenMMStochasticFlow(Flow):
     """
     def __init__(self, openmm_bridge, inverse_openmm_bridge=None):
         super(OpenMMStochasticFlow, self).__init__()
-
-        assert isinstance(openmm_bridge.integrator, PathProbabilityIntegrator), \
-            "OpenMMStochasticFlow requires an integrator that tracks the log path probability ratio."
-        #assert openmm_bridge.n_simulation_steps > 0, \
-        #    "OpenMMStochasticFlow requires a bridge that performs integration steps in OpenMM."
-
+        self.openmm_bridge = self._check_bridge(openmm_bridge)
         if inverse_openmm_bridge is not None:
-            assert isinstance(inverse_openmm_bridge.integrator, PathProbabilityIntegrator), \
-            "OpenMMStochasticFlow requires an integrator that tracks the log path probability ratio."
-            #assert inverse_openmm_bridge.n_simulation_steps > 0, \
-            #    "OpenMMStochasticFlow requires a bridge that performs integration steps in OpenMM."
-
-        self.openmm_bridge = openmm_bridge
-        self.inverse_openmm_bridge = inverse_openmm_bridge if inverse_openmm_bridge is not None else openmm_bridge
+            self.inverse_openmm_bridge = self._check_bridge(inverse_openmm_bridge)
+        else:
+            self.inverse_openmm_bridge = openmm_bridge
 
     def _forward(self, *xs, **kwargs):
         _, _, y, dlog = self.openmm_bridge.evaluate(
@@ -70,6 +61,14 @@ class OpenMMStochasticFlow(Flow):
             evaluate_path_probability_ratio=True
         )
         return y, dlog
+
+    @staticmethod
+    def _check_bridge(bridge):
+        assert isinstance(bridge.integrator, PathProbabilityIntegrator), \
+            "OpenMMStochasticFlow requires an integrator that tracks the log path probability ratio."
+        assert bridge.n_simulation_steps > 0, \
+            "OpenMMStochasticFlow requires a bridge that performs integration steps in OpenMM."
+        return bridge
 
 
 class PathProbabilityIntegrator(ThermostatedIntegrator):
