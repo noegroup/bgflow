@@ -5,6 +5,7 @@ import warnings
 import multiprocessing as mp
 
 import numpy as np
+import pickle
 import torch
 
 from ...utils.types import assert_numpy
@@ -19,7 +20,7 @@ class _OpenMMEnergyWrapper(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, input, openmm_energy_bridge):
-        energy, force = openmm_energy_bridge.evaluate(input)
+        energy, force, *_ = openmm_energy_bridge.evaluate(input)
         ctx.save_for_backward(-force)
         return energy
 
@@ -33,7 +34,7 @@ class _OpenMMEnergyWrapper(torch.autograd.Function):
 _evaluate_openmm_energy = _OpenMMEnergyWrapper.apply
 
 
-class OpenMMEnergyBridge:
+class OpenMMBridge:
     """Bridge object to evaluate energies in OpenMM.
     Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
 
@@ -71,6 +72,7 @@ class OpenMMEnergyBridge:
         # This might be problematic if an energy has already been computed in the same program on the parent thread,
         # see https://github.com/openmm/openmm/issues/2602
         self._openmm_system = openmm_system
+        self._openmm_integrator = openmm_integrator
         if platform_name in ["CUDA", "OpenCL"] or n_workers == 1:
             self.context_wrapper = SingleContext(
                 1, openmm_system, openmm_integrator, platform_name, platform_properties
@@ -86,10 +88,26 @@ class OpenMMEnergyBridge:
         self.last_energies = None
         self.last_forces = None
 
+    @property
+    def integrator(self):
+        return self._openmm_integrator
+
+    @property
+    def n_simulation_steps(self):
+        return self._n_simulation_steps
+
     def _reduce_units(self, x):
+        if x is None: return None
         return x * self._unit_reciprocal
 
-    def evaluate(self, batch, evaluate_force=True, evaluate_energy=True):
+    def evaluate(
+            self,
+            batch,
+            evaluate_force=True,
+            evaluate_energy=True,
+            evaluate_positions=False,
+            evaluate_path_probability_ratio=False
+    ):
         """
         Compute energies/forces for a batch of positions.
 
@@ -101,6 +119,21 @@ class OpenMMEnergyBridge:
             Whether to compute forces.
         evaluate_energy : bool, optional
             Whether to compute energies.
+        evaluate_positions : bool, optional
+            Whether to return positions.
+        evaluate_path_probability_ratio : bool, optional
+            Whether to compute the log path probability ratio. Makes only sense for PathProbabilityIntegrator instances.
+
+        Returns
+        -------
+        energies : torch.Tensor or None
+            The energies in units of kilojoule/mole; its shape  is (len(batch), )
+        forces : torch.Tensor or None
+            The forces in units of kilojoule/mole/nm; its shape is (len(batch), num_particles*3)
+        new_positions : torch.Tensor or None
+            The positions in units of nm; its shape is (len(batch), num_particles*3)
+        log_path_probability_ratio : torch.Tensor or None
+            The logarithmic path probability ratios; its shape  is (len(batch), )
         """
 
         # make a list of positions
@@ -111,10 +144,12 @@ class OpenMMEnergyBridge:
 
         # reshape to (B, N, D)
         batch_array = batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM)
-        energies, forces = self.context_wrapper.evaluate(
+        energies, forces, new_positions, log_path_probability_ratio = self.context_wrapper.evaluate(
             batch_array,
             evaluate_energy=evaluate_energy,
             evaluate_force=evaluate_force,
+            evaluate_positions=evaluate_positions,
+            evaluate_path_probability_ratio=evaluate_path_probability_ratio,
             err_handling=self._err_handling,
             n_simulation_steps=self._n_simulation_steps
         )
@@ -124,14 +159,25 @@ class OpenMMEnergyBridge:
         forces = self._reduce_units(forces)
 
         # to PyTorch tensors
-        energies = torch.tensor(energies).to(batch).reshape(-1, 1)
-        forces = torch.tensor(forces).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+        energies = torch.tensor(energies).to(batch).reshape(-1, 1) if evaluate_energy else None
+        forces = (
+            torch.tensor(forces).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+            if evaluate_force else None
+        )
+        new_positions = (
+            torch.tensor(new_positions).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+            if evaluate_positions else None
+        )
+        log_path_probability_ratio = (
+            torch.tensor(log_path_probability_ratio).to(batch).reshape(-1, 1)
+            if evaluate_path_probability_ratio else None
+        )
 
         # store
         self.last_energies = energies
         self.last_forces = forces
 
-        return energies, forces
+        return energies, forces, new_positions, log_path_probability_ratio
 
 
 class MultiContext:
@@ -173,13 +219,15 @@ class MultiContext:
             box_vectors=None,
             evaluate_energy=True,
             evaluate_force=True,
+            evaluate_positions=False,
+            evaluate_path_probability_ratio=False,
             err_handling="warning",
             n_simulation_steps=0
     ):
         """Delegate energy and force computations to the workers.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         positions : numpy.ndarray
             The particle positions in nanometer; its shape is (batch_size, num_particles, 3).
         box_vectors : numpy.ndarray, optional
@@ -189,29 +237,41 @@ class MultiContext:
             Whether to compute energies.
         evaluate_force : bool, optional
             Whether to compute forces.
+        evaluate_positions : bool, optional
+            Whether to return positions.
+        evaluate_path_probability_ratio : bool, optional
+            Whether to compute the log path probability ratio. Makes only sense for PathProbabilityIntegrator instances.
         _err_handling : str, optional
             How to handle infinite energies (one of {"warning", "ignore", "exception"}).
         n_simulation_steps : int, optional
             If > 0, perform a number of simulation steps and compute energy and forces for the resulting state.
 
-        Returns:
-        --------
+        Returns
+        -------
         energies : np.ndarray or None
             The energies in units of kilojoule/mole; its shape  is (len(positions), )
         forces : np.ndarray or None
             The forces in units of kilojoule/mole/nm; its shape is (len(positions), num_particles, 3)
+        new_positions : np.ndarray or None
+            The positions in units of nm; its shape is (len(positions), num_particles, 3)
+        log_path_probability_ratio : np.ndarray or None
+            The logarithmic path probability ratios; its shape  is (len(positions), )
         """
-        assert evaluate_energy or evaluate_force, "MultiContext has to compute either forces or energies"
         assert box_vectors is None or len(box_vectors) == len(positions), \
             "box_vectors and positions have to be the same length"
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
         for i, (p, bv) in enumerate(zip(positions, box_vectors)):
-            self._task_queue.put([i, p, bv, evaluate_energy, evaluate_force, err_handling, n_simulation_steps])
+            self._task_queue.put([
+                i, p, bv, evaluate_energy, evaluate_force, evaluate_positions,
+                evaluate_path_probability_ratio, err_handling, n_simulation_steps
+            ])
         results = [self._result_queue.get() for _ in positions]
         results = sorted(results, key=lambda x: x[0])
         return (
             np.array([res[1] for res in results]) if evaluate_energy else None,
-            np.array([res[2] for res in results]) if evaluate_force else None
+            np.array([res[2] for res in results]) if evaluate_force else None,
+            np.array([res[3] for res in results]) if evaluate_positions else None,
+            np.array([res[4] for res in results]) if evaluate_path_probability_ratio else None
         )
 
     def __del__(self):
@@ -244,11 +304,10 @@ class MultiContext:
 
         def __init__(self, task_queue, result_queue, system, integrator, platform_name, platform_properties):
             super(MultiContext.Worker, self).__init__()
-            from simtk.openmm import XmlSerializer
             self._task_queue = task_queue
             self._result_queue = result_queue
             self._openmm_system = system
-            self._openmm_integrator = XmlSerializer.deserialize(XmlSerializer.serialize(integrator))  # copy integrator
+            self._openmm_integrator = pickle.loads( pickle.dumps(integrator))
             self._openmm_platform_name = platform_name
             self._openmm_platform_properties = platform_properties
             self._openmm_context = None
@@ -276,21 +335,27 @@ class MultiContext:
 
             # get tasks from the task queue
             for task in iter(self._task_queue.get, None):
-                index, positions, box_vectors, evaluate_energy, evaluate_force, err_handling, n_simulation_steps = task
+                (index, positions, box_vectors, evaluate_energy, evaluate_force,
+                 evaluate_positions, evaluate_path_probability_ratio, err_handling, n_simulation_steps) = task
                 try:
                     # initialize state
                     self._openmm_context.setPositions(positions)
                     if box_vectors is not None:
                         self._openmm_context.setPeriodicBoxVectors(box_vectors)
-                    self._openmm_integrator.step(n_simulation_steps)
+                    log_path_probability_ratio = self._openmm_integrator.step(n_simulation_steps)
 
                     # compute energy and forces
-                    state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
+                    state = self._openmm_context.getState(
+                        getEnergy=evaluate_energy,
+                        getForces=evaluate_force,
+                        getPositions=evaluate_positions
+                    )
                     energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
                     forces = (
                         state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
                         if evaluate_force else None
                     )
+                    new_positions = state.getPositions().value_in_unit(unit.nanometers) if evaluate_positions else None
                 except Exception as e:
                     if err_handling == "warning":
                         warnings.warn("Suppressed exception: {}".format(e))
@@ -298,7 +363,9 @@ class MultiContext:
                         raise e
 
                 # push energies and forces to the results queue
-                self._result_queue.put([index, energy, forces])
+                self._result_queue.put(
+                    [index, energy, forces, new_positions, log_path_probability_ratio]
+                )
 
 
 class SingleContext:
@@ -331,6 +398,8 @@ class SingleContext:
             box_vectors=None,
             evaluate_energy=True,
             evaluate_force=True,
+            evaluate_positions=False,
+            evaluate_path_probability_ratio=False,
             err_handling="warning",
             n_simulation_steps=0
     ):
@@ -347,6 +416,10 @@ class SingleContext:
             Whether to compute energies.
         evaluate_force : bool, optional
             Whether to compute forces.
+        evaluate_positions : bool, optional
+            Whether to return positions.
+        evaluate_path_probability_ratio : bool, optional
+            Whether to compute the log path probability ratio. Makes only sense for PathProbabilityIntegrator instances.
         _err_handling : str, optional
             How to handle infinite energies (one of {"warning", "ignore", "exception"}).
         n_simulation_steps : int, optional
@@ -358,16 +431,20 @@ class SingleContext:
             The energies in units of kilojoule/mole; its shape  is (len(positions), )
         forces : np.ndarray or None
             The forces in units of kilojoule/mole/nm; its shape is (len(positions), num_particles, 3)
+        new_positions : np.ndarray or None
+            The positions in units of nm; its shape is (len(positions), num_particles, 3)
+        log_path_probability_ratio : np.ndarray or None
+            The logarithmic path probability ratios; its shape  is (len(positions), )
         """
         from simtk import unit
-
-        assert evaluate_energy or evaluate_force, "MultiContext has to compute either forces or energies"
         assert box_vectors is None or len(box_vectors) == len(positions), \
             "box_vectors and positions have to be the same length"
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
 
         forces = np.zeros_like(positions)
         energies = np.zeros_like(positions[:,0,0])
+        new_positions = np.zeros_like(positions)
+        log_path_probability_ratios = np.zeros_like(positions[:,0,0])
 
         for i, (p, bv) in enumerate(zip(positions, box_vectors)):
 
@@ -376,17 +453,25 @@ class SingleContext:
                 self._openmm_context.setPositions(p)
                 if bv is not None:
                     self._openmm_context.setPeriodicBoxVectors(bv)
-                self._openmm_context.getIntegrator().step(n_simulation_steps)
+                log_path_probability_ratio = self._openmm_context.getIntegrator().step(n_simulation_steps)
 
                 # compute energy and forces
-                state = self._openmm_context.getState(getEnergy=evaluate_energy, getForces=evaluate_force)
+                state = self._openmm_context.getState(
+                    getEnergy=evaluate_energy,
+                    getForces=evaluate_force,
+                    getPositions=evaluate_positions
+                )
                 energy = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) if evaluate_energy else None
                 force = (
                     state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
                     if evaluate_force else None
                 )
+                new_pos = state.getPositions().value_in_unit(unit.nanometers) if evaluate_positions else None
+
                 energies[i] = energy if evaluate_energy else 0.0
                 forces[i,:,:] = force if evaluate_force else 0.0
+                new_positions[i,:,:] = new_pos if evaluate_positions else 0.0
+                log_path_probability_ratios[i] = log_path_probability_ratio if evaluate_path_probability_ratio else 0.0
 
             except Exception as e:
                 if err_handling == "warning":
@@ -397,6 +482,8 @@ class SingleContext:
         return (
             energies if evaluate_energy else None,
             forces if evaluate_force else None,
+            new_positions if evaluate_positions else None,
+            log_path_probability_ratios if evaluate_path_probability_ratio else None
         )
 
 
