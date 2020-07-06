@@ -24,7 +24,7 @@ class NormalDistribution(Energy, Sampler):
                 "`cov` must be square matrix"
             assert cov.shape[0] == self.dim and cov.shape[1] == self.dim,\
                 "`cov` must have dimension `[dim, dim]`"
-            assert _is_symmetric_matrix, "`cov` must be symmetric"
+            assert _is_symmetric_matrix(cov), "`cov` must be symmetric"
             diag, rot = torch.eig(cov, eigenvectors=True)
             assert torch.allclose(diag[:, 1], torch.zeros_like(diag[:, 1])),\
                 "`cov` possesses complex valued eigenvalues"
@@ -52,10 +52,10 @@ class NormalDistribution(Energy, Sampler):
             inv_diag = torch.exp(0.5 * self._log_diag)
             samples = samples * inv_diag
             samples = samples @ self._rot.t()
+        samples = samples * np.sqrt(temperature)
         if self._has_mean:
             samples.to(self._mean)
             samples = samples + self._mean
-        samples = samples * np.sqrt(temperature)
         return samples
     
     def _sample(self, n_samples):
