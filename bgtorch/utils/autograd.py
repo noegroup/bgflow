@@ -61,22 +61,27 @@ def brute_force_jacobian(y, x):
     --------
     TODO
     """
-    system_dim = x.shape[-1]
+    output_dim = y.shape[-1]
+    input_dim = x.shape[-1]
     rows = []
-    for i in range(system_dim):
+    for i in range(output_dim):
         row = torch.autograd.grad(
-            y[:, i], x, torch.ones_like(y[:, i]), create_graph=True, retain_graph=True
+            y[..., i],
+            x,
+            torch.ones_like(y[..., i]),
+            create_graph=True,
+            retain_graph=True,
         )[0]
-        rows.append(row.view(-1, 1, system_dim))
+        rows.append(row.view(-1, 1, input_dim))
     jac = torch.cat(rows, dim=-2)
     return jac
 
 
 def batch_jacobian(y, x):
-    '''
+    """
     Compute the Jacobian matrix in batch form.
     Return (B, D_y, D_x)
-    '''
+    """
     import numpy as np
 
     batch = y.shape[0]
@@ -87,11 +92,12 @@ def batch_jacobian(y, x):
     # Compute Jacobian row by row.
     # dy_i / dx -> dy / dx
     # (B, D) -> (B, 1, D) -> (B, D, D)
-    jac = [torch.autograd.grad(y[:, i], x,
-                               grad_outputs=vector,
-                               retain_graph=True,
-                               create_graph=True)[0].view(batch, -1)
-                for i in range(single_y_size)]
+    jac = [
+        torch.autograd.grad(
+            y[:, i], x, grad_outputs=vector, retain_graph=True, create_graph=True
+        )[0].view(batch, -1)
+        for i in range(single_y_size)
+    ]
     jac = torch.stack(jac, dim=1)
 
     return jac
