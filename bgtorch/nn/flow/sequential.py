@@ -52,4 +52,11 @@ class SequentialFlow(Flow):
             *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             dlogp += ddlogp
         return (*xs, dlogp)
-        
+
+    def penalty(self):
+        """Evaluate penalty functions for all blocks."""
+        p = 0.0
+        for block in self._blocks:
+            if hasattr(block, "penalty"):
+                p += block.penalty()
+        return p
