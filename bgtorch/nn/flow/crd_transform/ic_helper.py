@@ -70,7 +70,7 @@ def dist_deriv(x1, x2):
     return dist, J
 
 
-def angle_deriv(x1, x2, x3, cossin=False):
+def angle_deriv(x1, x2, x3):
     """
         computes angle between input points together with
         the Jacobian wrt to `x1`
@@ -98,11 +98,7 @@ def angle_deriv(x1, x2, x3, cossin=False):
     J = -J / torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None])
     # J = _safe_div(-J, torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None]))
 
-    if cossin:
-        sin_angle = torch.sin(a)
-        return torch.cat([cos_angle, sin_angle], dim=-1)
-    else:
-        return a, J[..., 0, :]
+    return a, J[..., 0, :]
 
 
 def torsion_deriv(x1, x2, x3, x4):
