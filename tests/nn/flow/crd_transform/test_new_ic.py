@@ -19,6 +19,8 @@ from bgtorch.nn.flow.crd_transform.new_ic import (
 #      Revision should include numerically more robust
 #      implementations - especially for angular values.
 
+# TODO missing test for global IC layer
+
 torch.set_default_tensor_type = torch.DoubleTensor
 
 N_REPETITIONS = 500
