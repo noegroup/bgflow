@@ -53,10 +53,19 @@ class SequentialFlow(Flow):
             dlogp += ddlogp
         return (*xs, dlogp)
 
-    def penalty(self):
-        """Evaluate penalty functions for all blocks."""
-        p = 0.0
-        for block in self._blocks:
-            if hasattr(block, "penalty"):
-                p += block.penalty()
-        return p
+    def trigger(self, function_name):
+        """
+        Evaluate functions for all blocks that have a function with that name and return a tensor of the stacked results.
+        """
+        results = [
+            getattr(block, function_name)()
+            for block in self._blocks
+            if hasattr(block, function_name) and callable(getattr(block, function_name))
+        ]
+        if len(results) > 0 and all(res is not None for res in results):
+            return torch.stack(results)
+        else:
+            return torch.zeros(0)
+
+    def __iter__(self):
+        return iter(self._blocks)

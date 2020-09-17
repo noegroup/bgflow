@@ -7,6 +7,8 @@ from bgtorch.nn.flow.base import Flow
 
 __all__ = ["PseudoOrthogonalFlow"]
 
+# Note: OrthogonalPPPP is implemented in pppp.py
+
 
 class PseudoOrthogonalFlow(Flow):
     """Linear flow W*x+b with a penalty function
