@@ -132,16 +132,30 @@ class _LinearBlockTransformation(torch.nn.Module):
         weight = torch.Tensor(a * dim, b * dim).normal_() / np.sqrt(a * dim + b * dim)
         weight[self._diag_mask] = weight[self._diag_mask].abs().log()
         self._weight = torch.nn.Parameter(weight)
+        log_diag = torch.Tensor(1, b * dim).uniform_().log()
+        self._log_diag = torch.nn.Parameter(log_diag)
         self._bias = torch.nn.Parameter(torch.Tensor(1, b * dim).zero_())
 
     @property
     def _weight_and_log_diag(self):
-        log_diag_blocks = self._weight[self._diag_mask].view(
-            1, self._dim, self._a, self._b
-        )
+        # log_diag_blocks = self._weight[self._diag_mask].view(
+        # 1, self._dim, self._a, self._b
+        # )
         diag = self._weight.exp() * self._diag_mask
         offdiag = self._weight * self._off_diag_mask
-        return diag + offdiag, log_diag_blocks
+        weight = diag + offdiag
+
+        # perform weight normalization
+        weight_norm = torch.norm(weight, dim=-1, keepdim=True)
+        weight = weight / weight_norm
+        weight = self._log_diag.exp() * weight
+
+        # accumulate diagonal log blocks
+        log_diag_blocks = self._log_diag + self._weight - weight_norm.log()
+        log_diag_blocks = log_diag_blocks[self._diag_mask].view(
+            1, self._dim, self._a, self._b
+        )
+        return weight, log_diag_blocks
 
     def forward(self, x: torch.Tensor, accum_blocks: torch.Tensor = None):
         """ Apply this layer to the input and accumulate the block diagonals
@@ -225,7 +239,7 @@ class BNARFlow(Flow):
         self._layers = torch.nn.ModuleList(layers)
         self._alpha = torch.nn.Parameter(torch.Tensor(1, 1).zero_())
 
-    def _forward(self, x):
+    def _forward(self, x, *args, **kwargs):
         accum_blocks = None
         for layer in self._layers:
             x, accum_blocks = layer(x, accum_blocks)

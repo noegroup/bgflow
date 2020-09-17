@@ -22,3 +22,4 @@ class Energy(torch.nn.Module):
     def force(self, x, temperature=None):
         x = x.requires_grad_(True)
         e = self.energy(x, temperature=temperature)
+        return -torch.autograd.grad(e.sum(), x, create_graph=True, retain_graph=True)[0]
