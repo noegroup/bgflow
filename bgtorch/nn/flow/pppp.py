@@ -293,7 +293,7 @@ class PPPPScheduler:
             pppp_list.append(model)
         elif isinstance(model, Iterable) or hasattr(model, "__iter__"):
             for block in model:
-                pppp_list += InvertiblePPPP._find_invertible_pppp_blocks(block, warn=False)
+                pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
         if len(pppp_list) == 0 and warn:
             warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
         return pppp_list
