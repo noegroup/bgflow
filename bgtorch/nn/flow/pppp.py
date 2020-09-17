@@ -286,15 +286,17 @@ class PPPPScheduler:
                 for block in self._blocks:
                     block.correct(self.n_recompute_det is not None and self.i % self.n_recompute_det == 0)
 
-    @staticmethod
-    def _find_invertible_pppp_blocks(model):
+    @classmethod
+    def _find_invertible_pppp_blocks(model, warn=True):
+        pppp_list = []
         if isinstance(model, InvertiblePPPP):
-            return [model]
+            pppp_list.append(model)
         elif isinstance(model, Iterable):
-            pppp_blocks = [block for block in model if isinstance(block, InvertiblePPPP)]
-            if len(pppp_blocks) == 0:
-                warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
-            return pppp_blocks
+            for block in model:
+                pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
+        if len(pppp_list) == 0 and warn:
+            warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
+        return pppp_list
 
     def penalty(self):
         """Sum of penalty functions for all InvertiblePPPP blocks."""
