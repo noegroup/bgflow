@@ -287,13 +287,14 @@ class PPPPScheduler:
                     block.correct(self.n_recompute_det is not None and self.i % self.n_recompute_det == 0)
 
     @classmethod
-    def _find_invertible_pppp_blocks(model, warn=True):
+    def find_invertible_pppp_blocks(model, warn=True):
         pppp_list = []
+        print(model.__class__.__name__)
         if isinstance(model, InvertiblePPPP):
             pppp_list.append(model)
         elif isinstance(model, Iterable) or hasattr(model, "__iter__"):
             for block in model:
-                pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
+                pppp_list += InvertiblePPPP.find_invertible_pppp_blocks(block, warn=False)
         if len(pppp_list) == 0 and warn:
             warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
         return pppp_list
