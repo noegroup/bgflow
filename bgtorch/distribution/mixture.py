@@ -7,7 +7,7 @@ from ..utils.types import assert_numpy
 
 
 class MixtureDistribution(Energy, Sampler):
-    def __init__(self, components, unnormed_log_weights=None):
+    def __init__(self, components, unnormed_log_weights=None, trainable_weights=False):
         assert all([c.dim == components[0].dim for c in components]),\
             "All mixture components must have the same dimensionality."
         super().__init__(components[0].dim)
@@ -20,7 +20,10 @@ class MixtureDistribution(Energy, Sampler):
                 "Mixture weights must be a Tensor of shape `[n_components]`."
             assert len(unnormed_log_weights) == len(components),\
                 "Number of mixture weights does not match number of components."
-        self.register_buffer("_unnormed_log_weights", unnormed_log_weights)
+        if trainable_weights:
+            self._unnormed_log_weights = torch.nn.Parameter(unnormed_log_weights)
+        else:
+            self.register_buffer("_unnormed_log_weights", unnormed_log_weights)
     
     @property
     def _log_weights(self):
@@ -33,5 +36,9 @@ class MixtureDistribution(Energy, Sampler):
         return torch.cat(samples, dim=0)
         
     def _energy(self, x):
-        energies = torch.stack([c.energy(x) for c in self._components], dim=0)
-        return -torch.logsumexp(-energies + self._log_weights.view(-1, 1, 1), dim=0)
+        energies = torch.stack([c.energy(x) for c in self._components], dim=-1)
+        return -torch.logsumexp(-energies + self._log_weights.view(1, 1, -1), dim=-1)
+    
+    def _log_assignments(self, x):
+        energies = torch.stack([c.energy(x) for c in self._components], dim=-1)
+        return -energies

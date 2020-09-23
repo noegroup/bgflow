@@ -55,7 +55,7 @@ class BoltzmannGenerator(Energy, Sampler):
     def prior(self):
         return self._prior
         
-    def sample(self, n_samples, temperature=None, with_latent=False, with_dlogp=False, with_energy=False):
+    def sample(self, n_samples, temperature=None, with_latent=False, with_dlogp=False, with_energy=False, with_log_weights=False, with_weights=False):
         z = self._prior.sample(n_samples, temperature=temperature)
         x, dlogp = self._flow(z)
         results = [x]
@@ -64,8 +64,17 @@ class BoltzmannGenerator(Energy, Sampler):
         if with_dlogp:
             results.append(dlogp)
         if with_energy:
-            energy = self._prior(z) + dlogp
+            energy = self._prior.energy(z) + dlogp
             results.append(energy)
+        if with_log_weights or with_weights:
+            target_energy = self._target.energy(x)
+            bg_energy = self._prior.energy(z) + dlogp
+            log_weights = bg_energy - target_energy
+            if with_log_weights: 
+                results.append(log_weights)
+            weights = torch.softmax(log_weights, dim=0).view(-1)
+            if with_weights: 
+                results.append(weights)
         if len(results) > 1:
             return (*results,)
         else:

@@ -13,7 +13,8 @@ class GaussianMCMCSampler(Energy, Sampler):
         temperature=1.,
         noise_std=.1,
         n_stride=1,
-        n_burnin=0
+        n_burnin=0,
+        box_constraint=None
     ):
         super().__init__(energy.dim)
         self._energy_function = energy
@@ -22,6 +23,8 @@ class GaussianMCMCSampler(Energy, Sampler):
         self._noise_std = noise_std
         self._n_stride = n_stride
         self._n_burnin = n_burnin
+        self._box_constraint = box_constraint
+        
         self._reset(init_state)
         
     def _step(self):
@@ -35,6 +38,8 @@ class GaussianMCMCSampler(Energy, Sampler):
         rej = 1. - acc
         self._x_curr = rej * self._x_curr + acc * x_prop
         self._e_curr = rej * self._e_curr + acc * e_prop
+        if self._box_constraint is not None:
+            self._x_curr = self._box_constraint(self._x_curr)
         self._xs.append(self._x_curr)
         self._es.append(self._e_curr)
         self._acc.append(acc.bool())

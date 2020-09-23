@@ -31,7 +31,7 @@ class DensityDynamics(torch.nn.Module):
         self._n_evals = 0
         
     def forward(self, t, state):
-        *xs, _ = state
+        xs = state[:-1]
         *dxs, dlogp = self._dynamics(t, *xs)
         return (*dxs, -dlogp)
 
