@@ -14,7 +14,6 @@ class Energy(torch.nn.Module):
         raise NotImplementedError()
 
     def energy(self, x, temperature=None):
-        assert x.shape[-1] == self._dim, "`x` does not match `dim`"
         if temperature is None:
             temperature = 1.0
         return self._energy(x) / temperature
