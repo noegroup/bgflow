@@ -4,6 +4,7 @@ Property-preserving parameter perturbations
 
 import torch
 from bgtorch.nn.flow.base import Flow
+from bgtorch.nn.flow.inverted import InverseFlow
 from collections import defaultdict
 from collections.abc import Iterable
 import warnings
@@ -291,6 +292,8 @@ class PPPPScheduler:
         pppp_list = []
         if isinstance(model, InvertiblePPPP):
             pppp_list.append(model)
+        if isinstance(model, InverseFlow) and isinstance(model._delegate, InvertiblePPPP):
+            pppp_list.append(model._delegate)
         elif isinstance(model, Iterable) or hasattr(model, "__iter__"):
             for block in model:
                 pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
