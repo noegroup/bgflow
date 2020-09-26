@@ -133,7 +133,7 @@ class KLTrainer(object):
 
             if any(hasattr(s[1], "penalty") for s in schedulers):
                 penalties = [getattr(s[1], "penalty")() for s in schedulers if hasattr(s[1], "penalty")]
-                torch.sum(penalties).backward(retain_graph=True)
+                (torch.sum(torch.cat(penalties))).backward(retain_graph=True)
 
             self.reporter.report(*reports)
             if n_print > 0:
