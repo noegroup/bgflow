@@ -259,7 +259,10 @@ class PPPPScheduler:
     def __init__(self, model, optimizer, n_force_merge=10, n_correct=50,
                  n_correct_steps=1, n_recompute_det=None, reset_optimizer=True):
         self._blocks = self._find_invertible_pppp_blocks(model)
-        self._parameters = [p[i] for block in self._blocks for p in block.parameters() for i in range(2)]
+        self._parameters = []
+        for b in self._blocks:
+            self._parameters.append(b.v)
+            self._parameters.append(b.u)
         self.optimizer = optimizer
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
