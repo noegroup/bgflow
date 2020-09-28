@@ -259,6 +259,7 @@ class PPPPScheduler:
     def __init__(self, model, optimizer, n_force_merge=10, n_correct=50,
                  n_correct_steps=1, n_recompute_det=None, reset_optimizer=True):
         self._blocks = self._find_invertible_pppp_blocks(model)
+        self._parameters = [p[i] for block in self._blocks for p in block.parameters() for i in range(2)]
         self.optimizer = optimizer
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
@@ -281,7 +282,10 @@ class PPPPScheduler:
             res = block.pppp_merge(force_merge=self.n_force_merge is not None and self.i % self.n_force_merge == 0)
             merged.append(res)
         if any(merged) and self.reset_optimizer:
-            self.optimizer.state = defaultdict(dict)
+            if isinstance(self.optimizer, torch.optim.Adam):
+                self._reset_adam()
+            else:
+                self.optimizer.state = defaultdict(dict)
         if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
                 for block in self._blocks:
@@ -305,6 +309,12 @@ class PPPPScheduler:
         """Sum of penalty functions for all InvertiblePPPP blocks."""
         penalties = [block.penalty() for block in self._blocks]
         return torch.sum(torch.stack(penalties))
+
+    def _reset_adam(self):
+        for p in self._parameters:
+            self.optimizer.state[p]["exp_avg"] = torch.zeros_like(p)
+            self.optimizer.state[p]["exp_avg_sq"] = torch.zeros_like(p)
+            self.optimizer.state[p]["max_exp_avg_sq"] = torch.zeros_like(p)
 
 
 _iterative_solve_coefficients = {
