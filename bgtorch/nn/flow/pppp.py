@@ -289,7 +289,6 @@ class PPPPScheduler:
             if isinstance(self.optimizer, torch.optim.Adam):
                 self._reset_adam()
             else:
-                print("other reset")
                 self.optimizer.state = defaultdict(dict)
         if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
@@ -316,11 +315,12 @@ class PPPPScheduler:
         return torch.sum(torch.stack(penalties))
 
     def _reset_adam(self):
-        print("reset adam")
         for p in self._parameters_to_reset:
+            self.optimizer.state[p]["step"] = 0
             self.optimizer.state[p]["exp_avg"] = torch.zeros_like(p)
             self.optimizer.state[p]["exp_avg_sq"] = torch.zeros_like(p)
-            self.optimizer.state[p]["max_exp_avg_sq"] = torch.zeros_like(p)
+            if "max_exp_avg_sq" in self.optimizer.state[p]:
+                self.optimizer.state[p]["max_exp_avg_sq"] = torch.zeros_like(p)
 
 
 _iterative_solve_coefficients = {
