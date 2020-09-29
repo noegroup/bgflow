@@ -289,6 +289,7 @@ class PPPPScheduler:
             if isinstance(self.optimizer, torch.optim.Adam):
                 self._reset_adam()
             else:
+                print("other reset")
                 self.optimizer.state = defaultdict(dict)
         if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
