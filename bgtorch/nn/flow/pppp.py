@@ -4,6 +4,7 @@ Property-preserving parameter perturbations
 
 import torch
 from bgtorch.nn.flow.base import Flow
+from bgtorch.nn.flow.inverted import InverseFlow
 from collections import defaultdict
 from collections.abc import Iterable
 import warnings
@@ -258,6 +259,11 @@ class PPPPScheduler:
     def __init__(self, model, optimizer, n_force_merge=10, n_correct=50,
                  n_correct_steps=1, n_recompute_det=None, reset_optimizer=True):
         self._blocks = self._find_invertible_pppp_blocks(model)
+        self._parameters_to_reset = []
+        for b in self._blocks:
+            self._parameters_to_reset.append(b.v)
+            #self._parameters_to_reset.append(b.u)
+            # keeping the history for u is beneficial for training efficiency
         self.optimizer = optimizer
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
@@ -280,26 +286,44 @@ class PPPPScheduler:
             res = block.pppp_merge(force_merge=self.n_force_merge is not None and self.i % self.n_force_merge == 0)
             merged.append(res)
         if any(merged) and self.reset_optimizer:
-            self.optimizer.state = defaultdict(dict)
+            if isinstance(self.optimizer, torch.optim.Adam):
+                self._reset_adam()
+            else:
+                self.optimizer.state = defaultdict(dict)
         if self.n_correct is not None and self.i % self.n_correct == 0:
             for _ in range(self.n_correct_steps):
                 for block in self._blocks:
                     block.correct(self.n_recompute_det is not None and self.i % self.n_recompute_det == 0)
 
-    @staticmethod
-    def _find_invertible_pppp_blocks(model):
+    @classmethod
+    def _find_invertible_pppp_blocks(cls, model, warn=True):
+        pppp_list = []
         if isinstance(model, InvertiblePPPP):
-            return [model]
-        elif isinstance(model, Iterable):
-            pppp_blocks = [block for block in model if isinstance(block, InvertiblePPPP)]
-            if len(pppp_blocks) == 0:
-                warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
-            return pppp_blocks
+            pppp_list.append(model)
+        #elif isinstance(model, InverseFlow) and isinstance(model._delegate, InvertiblePPPP):
+        #    pppp_list.append(model._delegate)
+        elif isinstance(model, torch.nn.Module):
+            for block in model.children():
+                pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
+        elif isinstance(model, Iterable) or hasattr(model, "__iter__"):
+            for block in model:
+                pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
+        if len(pppp_list) == 0 and warn:
+            warnings.warn("PPPPScheduler not effective. No InvertiblePPPP blocks found in model.")
+        return pppp_list
 
     def penalty(self):
         """Sum of penalty functions for all InvertiblePPPP blocks."""
         penalties = [block.penalty() for block in self._blocks]
         return torch.sum(torch.stack(penalties))
+
+    def _reset_adam(self):
+        for p in self._parameters_to_reset:
+            self.optimizer.state[p]["step"] = 0
+            self.optimizer.state[p]["exp_avg"] = torch.zeros_like(p)
+            self.optimizer.state[p]["exp_avg_sq"] = torch.zeros_like(p)
+            if "max_exp_avg_sq" in self.optimizer.state[p]:
+                self.optimizer.state[p]["max_exp_avg_sq"] = torch.zeros_like(p)
 
 
 _iterative_solve_coefficients = {
