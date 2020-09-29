@@ -300,8 +300,8 @@ class PPPPScheduler:
         pppp_list = []
         if isinstance(model, InvertiblePPPP):
             pppp_list.append(model)
-        if isinstance(model, InverseFlow) and isinstance(model._delegate, InvertiblePPPP):
-            pppp_list.append(model._delegate)
+        #elif isinstance(model, InverseFlow) and isinstance(model._delegate, InvertiblePPPP):
+        #    pppp_list.append(model._delegate)
         elif isinstance(model, torch.nn.Module):
             for block in model.children():
                 pppp_list += PPPPScheduler._find_invertible_pppp_blocks(block, warn=False)
