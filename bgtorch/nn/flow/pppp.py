@@ -259,10 +259,11 @@ class PPPPScheduler:
     def __init__(self, model, optimizer, n_force_merge=10, n_correct=50,
                  n_correct_steps=1, n_recompute_det=None, reset_optimizer=True):
         self._blocks = self._find_invertible_pppp_blocks(model)
-        self._parameters = []
+        self._parameters_to_reset = []
         for b in self._blocks:
-            self._parameters.append(b.v)
-            self._parameters.append(b.u)
+            self._parameters_to_reset.append(b.v)
+            #self._parameters_to_reset.append(b.u)
+            # keeping the history for u is beneficial for training efficiency
         self.optimizer = optimizer
         self.n_force_merge = n_force_merge
         self.n_correct = n_correct
@@ -314,7 +315,8 @@ class PPPPScheduler:
         return torch.sum(torch.stack(penalties))
 
     def _reset_adam(self):
-        for p in self._parameters:
+        print("reset adam")
+        for p in self._parameters_to_reset:
             self.optimizer.state[p]["exp_avg"] = torch.zeros_like(p)
             self.optimizer.state[p]["exp_avg_sq"] = torch.zeros_like(p)
             self.optimizer.state[p]["max_exp_avg_sq"] = torch.zeros_like(p)
