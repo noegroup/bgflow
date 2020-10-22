@@ -11,11 +11,7 @@ from .ic_helper import (
     det3x3,
     det2x2,
 )
-
-# TODO add local IC transformation
-# TODO optimize ic -> xyz transformation
-#      using tree-based decomposition
-#      of the z-matrix (see old code)
+from .pca import WhitenFlow
 
 
 def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
@@ -27,8 +23,8 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
     v1 = p1 - p2
     v2 = p1 - p3
 
-    n = torch.cross(v1, v2)
-    nn = torch.cross(v1, n)
+    n = torch.cross(v1, v2, dim=-1)
+    nn = torch.cross(v1, n, dim=-1)
 
     n_normalized = n / torch.norm(n, dim=-1, keepdim=True)
     nn_normalized = nn / torch.norm(nn, dim=-1, keepdim=True)
@@ -81,33 +77,142 @@ def ic2xy0_deriv(p1, p2, d14, a124):
     return xyz, J
 
 
-class GlobalInternalCoordinatesTransformation(Flow):
+def decompose_z_matrix(z_matrix, fixed):
+    atoms = [fixed]
+
+    blocks = []
+    given = np.sort(fixed)
+
+    # filter out conditioned variables
+    non_given = ~np.isin(z_matrix[:, 0], given)
+    z_matrix = z_matrix[non_given]
+    z_matrix = np.concatenate([np.arange(len(z_matrix))[:, None], z_matrix], axis=1)
+
+    order = []
+    while len(z_matrix) > 0:
+
+        is_satisfied = np.all(np.isin(z_matrix[:, 2:], given), axis=-1)
+        if (not np.any(is_satisfied)) and len(z_matrix) > 0:
+            raise ValueError("Not satisfiable")
+
+        pos = z_matrix[is_satisfied, 0]
+        atom = z_matrix[is_satisfied, 1]
+
+        atoms.append(atom)
+        order.append(pos)
+
+        blocks.append(z_matrix[is_satisfied][:, 1:])
+        given = np.union1d(given, atom)
+        z_matrix = z_matrix[~is_satisfied]
+
+    index2atom = np.concatenate(atoms)
+    atom2index = np.argsort(index2atom)
+    index2order = np.concatenate(order)
+    return blocks, index2atom, atom2index, index2order
+
+
+def slice_initial_atoms(z_matrix):
+    s = np.sum(z_matrix == -1, axis=-1)
+    order = np.argsort(s)[::-1][:3]
+    return z_matrix[:, 0][order], z_matrix[s == 0]
+
+
+def normalize_angles(angles):
+    dlogp = -np.log(2 * np.pi) * (angles.shape[-1])
+    return (angles + np.pi) / (2 * np.pi), dlogp
+
+
+def unnormalize_angles(angles):
+    dlogp = np.log(2 * np.pi) * (angles.shape[-1])
+    return angles * (2 * np.pi) - np.pi, dlogp
+
+
+class ReferenceSystemTranformation(Flow):
+    def __init__(self, normalize_angles=True):
+        super().__init__()
+        self._normalize_angles = normalize_angles
+
+    def _forward(self, x0, x1, x2):
+
+        R = orientation(x0, x1, x2)
+        d01, _ = dist_deriv(x0, x1)
+        d12, _ = dist_deriv(x1, x2)
+        a012, _ = angle_deriv(x0, x1, x2)
+
+        dlogp = 0
+
+        _, _, _, neg_dlogp = self._init_points(x0, R, d01, d12, a012)
+
+        if self._normalize_angles:
+            a012, dlogp_a = normalize_angles(a012)
+            dlogp += dlogp_a
+
+        dlogp += -neg_dlogp
+
+        return x0, R, d01, d12, a012, dlogp
+
+    def _init_points(self, x0, R, d01, d12, a012):
+        n_batch = d01.shape[0]
+        dlogp = 0
+
+        # first point placed in origin
+        p0 = torch.zeros(n_batch, 1, 3).to(d01)
+
+        # second point placed in z-axis
+        p1 = torch.zeros_like(x0).to(d01)
+        p1[..., 2] = d01
+
+        # third point placed wrt to p0 and p1
+        p2, J = ic2xy0_deriv(p1, p0, d12[:, None], a012[:, None])
+        dlogp += det2x2(J[..., [0, 2], :]).abs().log()
+
+        # bring back to original reference frame
+        x1 = torch.einsum("bnd, bned -> bne", p1, R) + x0
+        x2 = torch.einsum("bnd, bned -> bne", p2, R) + x0
+
+        return x0, x1, x2, dlogp
+
+    def _inverse(self, x0, R, d01, d12, a012):
+        dlogp = 0
+
+        if self._normalize_angles:
+            a012, dlogp_a = unnormalize_angles(a012)
+            dlogp += dlogp_a
+
+        *res, dlogp_b = self._init_points(x0, R, d01, d12, a012)
+        dlogp += dlogp_b
+        return (*res, dlogp)
+
+
+class RelativeInternalCoordinatesTransformation(Flow):
     """ global internal coordinate transformation:
         transforms a system from xyz to ic coordinates and back.
     """
 
-    def __init__(self, z_matrix, normalize_angles=True):
+    def __init__(self, z_matrix, fixed_atoms, normalize_angles=True):
         super().__init__()
 
         self._z_matrix = z_matrix
-        self._inv_z_indices = z_matrix[:, 0].sort().indices
 
-        print(self._inv_z_indices, self._z_matrix[:, 0])
+        self._fixed_atoms = fixed_atoms
 
-        self._bond_indices = self._z_matrix[1:, :2]
-        self._angle_indices = self._z_matrix[2:, :3]
-        self._torsion_indices = self._z_matrix[3:, :4]
+        (
+            self._z_blocks,
+            self._index2atom,
+            self._atom2index,
+            self._index2order,
+        ) = decompose_z_matrix(z_matrix, fixed_atoms)
+
+        self._bond_indices = self._z_matrix[:, :2]
+        self._angle_indices = self._z_matrix[:, :3]
+        self._torsion_indices = self._z_matrix[:, :4]
+
         self._normalize_angles = normalize_angles
 
     def _forward(self, x, with_pose=True, *args, **kwargs):
         """ Computes xyz -> ic
 
-            Returns bonds, angles, torsions, x0 and R
-
-            Here x0 is the first point of the system
-            and R is the rotation spanned by the first
-            three points. Together this determines
-            all DOFs
+            Returns bonds, angles, torsions and fixed coordinates.
         """
 
         n_batch = x.shape[0]
@@ -116,122 +221,183 @@ class GlobalInternalCoordinatesTransformation(Flow):
         # compute bonds, angles, torsions
         # together with jacobians (wrt. to diagonal atom)
         bonds, jbonds = dist_deriv(
-            x[:, self._bond_indices[:, 0]], x[:, self._bond_indices[:, 1]]
+            x[:, self._z_matrix[:, 0]], x[:, self._z_matrix[:, 1]]
         )
         angles, jangles = angle_deriv(
-            x[:, self._angle_indices[:, 0]],
-            x[:, self._angle_indices[:, 1]],
-            x[:, self._angle_indices[:, 2]],
+            x[:, self._z_matrix[:, 0]],
+            x[:, self._z_matrix[:, 1]],
+            x[:, self._z_matrix[:, 2]],
         )
         torsions, jtorsions = torsion_deriv(
-            x[:, self._torsion_indices[:, 0]],
-            x[:, self._torsion_indices[:, 1]],
-            x[:, self._torsion_indices[:, 2]],
-            x[:, self._torsion_indices[:, 3]],
+            x[:, self._z_matrix[:, 0]],
+            x[:, self._z_matrix[:, 1]],
+            x[:, self._z_matrix[:, 2]],
+            x[:, self._z_matrix[:, 3]],
         )
 
-        # aggregate induced volume change
+        # slice fixed coordinates needed to reconstruct the system
+        x_fixed = x[:, self._fixed_atoms].view(n_batch, -1)
+
+        # aggregated induced volume change
         dlogp = 0.0
 
         # transforms angles from [-pi, pi] to [0, 1]
         if self._normalize_angles:
-            angles = (angles + np.pi) / (2 * np.pi)
-            torsions = (torsions + np.pi) / (2 * np.pi)
-            dlogp += -np.log(2 * np.pi) * (angles.shape[-1] + torsions.shape[-1])
+            angles, dlogp_a = normalize_angles(angles)
+            torsions, dlogp_t = normalize_angles(torsions)
+            dlogp += dlogp_a + dlogp_t
 
-        # first point necessary to fix first three
-        # unconstrained DOFs
-        x0 = x[:, [0]]
+        # compute volume change
+        j = torch.stack([jbonds, jangles, jtorsions], dim=-2)
+        dlogp += det3x3(j).abs().log().sum(dim=1, keepdim=True)
 
-        # orientation matrix necessary to fix other
-        # three unconstrained DOFs
-        R = orientation(x[:, 0], x[:, 1], x[:, 2])
+        return bonds, angles, torsions, x_fixed, dlogp
 
-        # compute volume change for the transformation
-        # of the first three points
-        _, _, _, neg_dlogp = self._init_det(
-            bonds[..., 0], bonds[..., 1], angles[..., 0]
-        )
-        dlogp += -neg_dlogp
+    def _inverse(self, bonds, angles, torsions, x_fixed, **kwargs):
 
-        # the volume change of the other points
-        # is computed the in one step
-        j2 = torch.stack(
-            [jbonds[..., 2:, :], jangles[..., 1:, :], jtorsions[..., :, :]], dim=-2
-        )
-        dlogp += det3x3(j2).abs().log().sum(dim=1, keepdim=True)
-
-        return bonds, angles, torsions, x0, R, dlogp
-
-    def _init_det(self, d01, d12, a012):
-        """ computes volume change for placing the first two atoms relative x0
-
-            d01: distance between p0 and p1
-            d12: distance between p1 and p2
-            a012: angle between p0, p1 and p2
-
-            returns p0, p1, p2 and the volume change
-        """
-
-        n_batch = d01.shape[0]
-
-        # first point placed in origin
-        p0 = torch.zeros(n_batch, 1, 3).to(d01)
-
-        # second point placed in z-axis
-        p1 = torch.zeros_like(p0).to(d01)
-        p1[..., 2] = d01[:, None]
-
-        # third point placed wrt to p0 and p1
-        p2, J = ic2xy0_deriv(p1, p0, d12[:, None, None], a012[:, None, None])
-
-        return p0, p1, p2, det2x2(J[..., [0, 2], :]).abs().log()
-
-    def _inverse(self, bonds, angles, torsions, x0, R, *args, **kwargs):
-
+        # aggregated induced volume change
         dlogp = 0
 
         # transforms angles from [0, 1] to [-pi, pi]
         if self._normalize_angles:
-            angles = angles * (2 * np.pi) - np.pi
-            torsions = torsions * (2 * np.pi) - np.pi
-            dlogp += np.log(2 * np.pi) * (angles.shape[-1] + torsions.shape[-1])
+            angles, dlogp_a = unnormalize_angles(angles)
+            torsions, dlogp_t = unnormalize_angles(torsions)
+            dlogp += dlogp_a + dlogp_t
 
-        # compute position of first three points
-        # together with volume change
-        p0, p1, p2, dlogp_ = self._init_det(
-            bonds[..., 0], bonds[..., 1], angles[..., 0]
+        n_batch = x_fixed.shape[0]
+
+        # initial points are the fixed points
+        ps = x_fixed.view(n_batch, -1, 3).clone()
+
+        # blockwise reconstruction of points left
+        for block in self._z_blocks:
+
+            # map atoms from z matrix
+            # to indices in reconstruction order
+            ref = self._atom2index[block]
+
+            # slice three context points
+            # from the already reconstructed
+            # points using the indices
+            context = ps[:, ref[:, 1:]]
+            p0 = context[:, :, 0]
+            p1 = context[:, :, 1]
+            p2 = context[:, :, 2]
+
+            # obtain index of currently placed
+            # point in original z-matrix
+            idx = self._index2order[ref[:, 0] - len(self._fixed_atoms)]
+
+            # get bonds, angles, torsions
+            # using this z-matrix index
+            b = bonds[:, idx, None]
+            a = angles[:, idx, None]
+            t = torsions[:, idx, None]
+
+            # now we have three context points
+            # and correct ic values to reconstruct the current point
+            p, J = ic2xyz_deriv(p0, p1, p2, b, a, t)
+
+            # compute jacobian
+            dlogp += det3x3(J).abs().log().sum(-1)[:, None]
+
+            # update list of reconstructed points
+            ps = torch.cat([ps, p], dim=1)
+
+        # finally make sure that atoms are sorted
+        # from reconstruction order to original order
+        ps = ps[:, self._atom2index]
+
+        return ps.view(n_batch, -1), dlogp
+
+
+class GlobalInternalCoordinateTransformation(Flow):
+    def __init__(self, z_matrix, normalize_angles=True):
+        super().__init__()
+
+        # find initial atoms
+        initial_atoms, z_matrix = slice_initial_atoms(z_matrix)
+
+        self._rel_ic = RelativeInternalCoordinatesTransformation(
+            z_matrix=z_matrix,
+            fixed_atoms=initial_atoms,
+            normalize_angles=normalize_angles,
         )
-        dlogp += dlogp_
+        self._ref_ic = ReferenceSystemTranformation(normalize_angles=normalize_angles)
 
-        # initially maintain a list of three points
-        # which will be updated for each newly computed
-        # point poistion
-        ps = torch.cat([p0, p1, p2], dim=1)
+    def _forward(self, x):
+        n_batch = x.shape[0]
 
-        # iterate through the z matrix and place
-        # points one-by-one
-        #
-        # TODO this is currently O(N) and could be
-        #      sped up significantly if the topology
-        #      of the z-matrix is utilized
-        #
-        #      have a look into the old implementation
-        #      as was used in the Science paper!
-        for i in range(torsions.shape[-1]):
-            ref = self._z_matrix[3 + i, 1:]
-            b = bonds[..., i + 2, None]
-            a = angles[..., i + 1, None]
-            t = torsions[..., i, None]
-            ps_ref = ps[:, ref]
-            p, J = ic2xyz_deriv(ps_ref[:, 0], ps_ref[:, 1], ps_ref[:, 2], b, a, t)
-            dlogp += det3x3(J).abs().log()[:, None]
+        x = x.view(n_batch, -1, 3)
 
-            ps = torch.cat([ps, p[:, None, :]], dim=1)
+        # transform relative system wrt reference system
+        bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x)
 
-        # apply rotation and initial point position
-        # to make it a full-rank transformation
-        ps = ps @ R.transpose(-1, -2)
-        ps = ps + x0
+        x_fixed = x_fixed.view(n_batch, -1, 3)
 
-        return ps, dlogp
+        # transform reference system
+        x0, R, d01, d12, a012, dlogp_ref = self._ref_ic(
+            x_fixed[:, [0]], x_fixed[:, [1]], x_fixed[:, [2]]
+        )
+
+        # gather bonds and angles
+        bonds = torch.cat([d01, d12, bonds], dim=-1)
+
+        angles = torch.cat([a012, angles], dim=-1)
+
+        # aggregate volume change
+        dlogp = dlogp_rel + dlogp_ref
+
+        return bonds, angles, torsions, x0, R, dlogp
+
+    def _inverse(self, bonds, angles, torsions, x0, R):
+
+        # get ics of reference system
+        d01 = bonds[:, [0]]
+        d12 = bonds[:, [1]]
+        a012 = angles[:, [0]]
+
+        # transform reference system back
+        x0, x1, x2, dlogp_ref = self._ref_ic(x0, R, d01, d12, a012, inverse=True)
+        x_init = torch.cat([x0, x1, x2], dim=1)
+
+        # now transform relative system wrt reference system back
+        x, dlogp_rel = self._rel_ic(
+            bonds[:, 2:], angles[:, 1:], torsions, x_init, inverse=True
+        )
+
+        # aggregate volume change
+        dlogp = dlogp_rel + dlogp_ref
+
+        return x, dlogp
+
+
+class MixedCoordinateTransformation(Flow):
+    def __init__(self, data, z_matrix, fixed_atoms, normalize_angles=True):
+        super().__init__()
+        self._whiten = self._setup_whitening_layer(data, fixed_atoms)
+        self._rel_ic = RelativeInternalCoordinatesTransformation(
+            z_matrix, fixed_atoms, normalize_angles
+        )
+
+    def _setup_whitening_layer(self, data, fixed_atoms):
+        n_data = data.shape[0]
+        data = data.view(n_data, -1, 3)
+        fixed = data[:, fixed_atoms].view(n_data, -1)
+        return WhitenFlow(fixed)
+
+    def _forward(self, x):
+        n_batch = x.shape[0]
+        bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x)
+        x_fixed = x_fixed.view(n_batch, -1)
+        z_fixed, dlogp_ref = self._whiten(x_fixed)
+        dlogp = dlogp_rel + dlogp_ref
+        return bonds, angles, torsions, z_fixed, dlogp
+
+    def _inverse(self, bonds, angles, torsions, z_fixed):
+        n_batch = z_fixed.shape[0]
+        x_fixed, dlogp_ref = self._whiten(z_fixed, inverse=True)
+        x_fixed = x_fixed.view(n_batch, -1, 3)
+        x, dlogp_rel = self._rel_ic(bonds, angles, torsions, x_fixed, inverse=True)
+        dlogp = dlogp_rel + dlogp_ref
+        return x, dlogp
