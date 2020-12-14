@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from bgtorch.nn.flow.base import Flow
 
+
 def _pca(X0, keepdims=None):
     """ Implements PCA in Numpy.
 
@@ -53,18 +54,24 @@ class WhitenFlow(Flow):
 
         X0_np = X0.detach().numpy()
         X0mean, Twhiten, Tblacken, std = _pca(X0_np, keepdims=keepdims)
-        self.X0mean = torch.tensor(X0mean)
-        self.Twhiten = torch.tensor(Twhiten)
-        self.Tblacken = torch.tensor(Tblacken)
-        self.std = torch.tensor(std)
+        # self.X0mean = torch.tensor(X0mean)
+        self.register_buffer("X0mean", torch.tensor(X0mean))
+        # self.Twhiten = torch.tensor(Twhiten)
+        self.register_buffer("Twhiten", torch.tensor(Twhiten))
+        # self.Tblacken = torch.tensor(Tblacken)
+        self.register_buffer("Tblacken", torch.tensor(Tblacken))
+        # self.std = torch.tensor(std)
+        self.register_buffer("std", torch.tensor(std))
         if torch.any(self.std <= 0):
-            raise ValueError('Cannot construct whiten layer because trying to keep nonpositive eigenvalues.')
+            raise ValueError(
+                "Cannot construct whiten layer because trying to keep nonpositive eigenvalues."
+            )
         self.jacobian_xz = -torch.sum(torch.log(self.std))
 
     def _whiten(self, x):
         # Whiten
         output_z = torch.matmul(x - self.X0mean, self.Twhiten)
-        #if self.keepdims < self.dim:
+        # if self.keepdims < self.dim:
         #    junk_dims = self.dim - self.keepdims
         #    output_z = torch.cat([output_z, torch.Tensor(x.shape[0], junk_dims).normal_()], dim=1)
         # Jacobian
@@ -74,7 +81,7 @@ class WhitenFlow(Flow):
 
     def _blacken(self, x):
         # if we have reduced the dimension, we ignore the last dimensions from the z-direction.
-        #if self.keepdims < self.dim:
+        # if self.keepdims < self.dim:
         #    x = x[:, 0:self.keepdims]
         output_x = torch.matmul(x, self.Tblacken) + self.X0mean
         # Jacobian

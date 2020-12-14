@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from ..base import Flow
+from .base import Flow
 
 
 # TODO UNIT TESTS!
