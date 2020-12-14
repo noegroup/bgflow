@@ -373,18 +373,20 @@ class GlobalInternalCoordinateTransformation(Flow):
 
 
 class MixedCoordinateTransformation(Flow):
-    def __init__(self, data, z_matrix, fixed_atoms, normalize_angles=True):
+    def __init__(
+        self, data, z_matrix, fixed_atoms, keepdims=None, normalize_angles=True
+    ):
         super().__init__()
-        self._whiten = self._setup_whitening_layer(data, fixed_atoms)
+        self._whiten = self._setup_whitening_layer(data, fixed_atoms, keepdims=keepdims)
         self._rel_ic = RelativeInternalCoordinatesTransformation(
             z_matrix, fixed_atoms, normalize_angles
         )
 
-    def _setup_whitening_layer(self, data, fixed_atoms):
+    def _setup_whitening_layer(self, data, fixed_atoms, keepdims):
         n_data = data.shape[0]
         data = data.view(n_data, -1, 3)
         fixed = data[:, fixed_atoms].view(n_data, -1)
-        return WhitenFlow(fixed)
+        return WhitenFlow(fixed, keepdims=keepdims, whiten_inverse=False)
 
     def _forward(self, x):
         n_batch = x.shape[0]
