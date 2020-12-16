@@ -50,7 +50,7 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
     J_t2 = (
         1.0
         / v3_norm[..., None]
-        * (torch.eye(3)[None, :] - outer(v3_normalized, v3_normalized))
+        * (torch.eye(3)[None, :].to(p1) - outer(v3_normalized, v3_normalized))
     )
 
     J_n_scaled = n_normalized * -torch.cos(t1234)
