@@ -70,8 +70,8 @@ def ic2xy0_deriv(p1, p2, d14, a124):
         with respect to `p1`.
     """
 
-    t1234 = torch.Tensor([[0.5 * np.pi]])
-    p3 = torch.Tensor([[0, -1, 0]])
+    t1234 = torch.Tensor([[0.5 * np.pi]]).to(p1)
+    p3 = torch.Tensor([[0, -1, 0]]).to(p1)
     xyz, J = ic2xyz_deriv(p1, p2, p3, d14, a124, t1234)
     J = J[..., [0, 1, 2], :][..., [0, 1]]
     return xyz, J
