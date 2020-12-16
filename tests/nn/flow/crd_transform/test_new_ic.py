@@ -74,6 +74,7 @@ def test_dist_deriv(atol=1e-6, rtol=1e-5):
 # TODO Floating point precision!
 def test_angle_deriv(atol=1e-4, rtol=1e-4):
 
+    np.random.seed(2)
     # check 45 deg angle
     x1 = torch.Tensor([0, 1, 0])
     x2 = torch.Tensor([0, 0, 0])
