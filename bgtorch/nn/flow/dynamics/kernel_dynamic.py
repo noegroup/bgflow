@@ -2,10 +2,16 @@ import torch
 import numpy as np
 from ....utils import distance_vectors, distances_from_vectors, rbf_kernels
 
-# TODO: write docstrings
+
+# TODO: write longer docstring, i.e. include math
 
 
 class KernelDynamics(torch.nn.Module):
+    """
+    Equivariant dynamics functions that allows an efficient and exact divergence computation [1].
+    [1] Equivariant Flows: Exact Likelihood Generative Learning for Symmetric Densities, Koehler et. al,
+        https://arxiv.org/abs/2006.02425
+    """
 
     def __init__(self, n_particles, n_dimensions,
                  mus, gammas,
@@ -27,7 +33,8 @@ class KernelDynamics(torch.nn.Module):
         if self._mus_time is None:
             self._n_out = 1
         else:
-            assert self._neg_log_gammas_time is not None and self._neg_log_gammas_time.shape[0] == self._mus_time.shape[0]
+            assert self._neg_log_gammas_time is not None and self._neg_log_gammas_time.shape[0] == self._mus_time.shape[
+                0]
             self._n_out = self._mus_time.shape[0]
 
         if optimize_d_gammas:
@@ -35,8 +42,6 @@ class KernelDynamics(torch.nn.Module):
 
         if optimize_t_gammas:
             self._neg_log_gammas_time = torch.nn.Parameter(self._neg_log_gammas_time)
-
-
 
         self._weights = torch.nn.Parameter(
             torch.Tensor(self._n_kernels, self._n_out).normal_() * np.sqrt(1. / self._n_kernels)
@@ -48,8 +53,6 @@ class KernelDynamics(torch.nn.Module):
         self._importance = torch.nn.Parameter(
             torch.Tensor(self._n_kernels).zero_()
         )
-
-
 
     def _force_mag(self, t, d, derivative=False):
 
@@ -69,8 +72,28 @@ class KernelDynamics(torch.nn.Module):
                 d_force_mag = (d_force_mag * trbfs).sum(dim=-1, keepdim=True)
         return force_mag, d_force_mag
 
-
     def forward(self, t, x, compute_divergence=True):
+        """
+        Computes the change of the system `dxs` at state `x` and
+        time `t` due to the kernel dynamic. Furthermore, can also compute the exact change of log density
+        which is equal to the divergence of the change.
+
+        Parameters
+        ----------
+        t : PyTorch tensor
+            The current time
+        x : PyTorch tensor
+            The current configuration of the system
+        compute_divergence : boolean
+            Whether the divergence is computed
+
+        Returns
+        forces, -divergence: PyTorch tensors
+            The combined state update of shape `[n_batch, n_dimensions]`
+            containing the state update of the system state `dx/dt`
+            (`forces`) and the negative exact update of the log density (`-divergence`)
+
+        """
         n_batch = x.shape[0]
 
         x = x.view(n_batch, self._n_particles, self._n_dimensions)

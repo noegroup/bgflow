@@ -1,8 +1,10 @@
 import numpy as np
 import torch
+from typing import Union
 
 
-def kernelize_with_rbf(d, mu, gamma=1.0, eps=1e-6):
+def kernelize_with_rbf(d: torch.Tensor, mu: Union[torch.Tensor, float], gamma: Union[torch.Tensor, float] = 1.0,
+                       eps=1e-6) -> torch.Tensor:
     """
     Takes a distance matrix `d` of shape
 
@@ -84,8 +86,29 @@ class RbfEncoder(torch.nn.Module):
         return kernelize_with_rbf(d, self._mus, gammas)
 
 
-def rbf_kernels(d, mu, neg_log_gamma, derivative=False):
+def rbf_kernels(d: torch.Tensor, mu: Union[torch.Tensor, float], neg_log_gamma: Union[torch.Tensor, float],
+                derivative=False) -> torch.Tensor:
     """
+    Takes a distance matrix `d` of shape
+
+        `[n_batch, n_particles, n_particles, 1]`
+
+    and maps it onto a normalized radial basis function (RBF) kernel
+    representation of shape
+
+        `[n_batch, n_particles, n_particles, n_kernels]`
+
+    via
+
+        `d_{ij} -> f_{ij}
+
+    where
+
+        `f_{ij} = (g_{ij1}, ..., g_{ijK}) / sum_{k} g_{ijk}
+
+    and
+
+        `g_{ijk} = exp(-(d_{ij} - mu_{k})^{2} / gamma^{2})`.
 
     Parameters
     ----------
