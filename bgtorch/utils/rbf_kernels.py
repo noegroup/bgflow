@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+
 def kernelize_with_rbf(d, mu, gamma=1.0, eps=1e-6):
     """
     Takes a distance matrix `d` of shape
@@ -57,6 +58,19 @@ def compute_gammas(mus, gain=1.0):
 
 
 class RbfEncoder(torch.nn.Module):
+    """Encoder for distances via rbf kernels.
+
+    Attributes
+    ----------
+    mus: PyTorch tensor / scalar
+        Means of RBF kernels. Either of shape `[1, 1, 1, n_kernels]` or
+        scalar
+    log_gammas: PyTorch tensor / scalar
+        Log Bandwidth of RBF kernels. Either same shape as `mu` or scalar.
+    trainable : boolean
+        Whether to allow training of mus and gammas
+    """
+
     def __init__(self, mus, log_gammas, trainable=True):
         super().__init__()
         self._mus = mus
@@ -71,6 +85,29 @@ class RbfEncoder(torch.nn.Module):
 
 
 def rbf_kernels(d, mu, neg_log_gamma, derivative=False):
+    """
+
+    Parameters
+    ----------
+    d: PyTorch tensor
+        distance matrix of shape `[n_batch, n_particles, n_particles, 1]`
+    mu: PyTorch tensor / scalar
+        Means of RBF kernels. Either of shape `[1, 1, 1, n_kernels]` or
+        scalar
+    neg_log_gamma: PyTorch tensor / scalar
+        Negative logarithm of bandwidth of RBF kernels. Either same shape as `mu` or scalar.
+    derivative: boolean
+        Whether the derivative of the rbf kernels is computed.
+
+    Returns
+    -------
+    kernels: PyTorch tensor
+        RBF representation of distance matrix of shape
+        `[n_batch, n_particles, n_particles, n_kernels]`
+    dkernels: PyTorch tensor
+        Corresponding derivatives of shape
+        `[n_batch, n_particles, n_particles, n_kernels]`
+    """
     inv_gamma = torch.exp(neg_log_gamma)
     rbfs = torch.exp(-(d - mu).pow(2) * inv_gamma.pow(2))
     srbfs = rbfs.sum(dim=-1, keepdim=True)

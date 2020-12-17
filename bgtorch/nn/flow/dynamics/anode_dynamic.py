@@ -1,21 +1,14 @@
 import torch
 
+# TODO: update docstrings?
+
 class AnodeDynamics(torch.nn.Module):
-    """
-    Converts the the concatenated state, which is required for the ANODE ode solver,
-    to the tuple (`xs`, `dlogp`) for the following dynamics functions.
-    Parameters
+    """Wrapper class to allow the use of the ANODE ode solver.
+
+    Attributes
     ----------
-    t: PyTorch tensor
-        The current time
-    state: PyTorch tensor
-        The current state of the system
-    Returns
-    -------
-    state: PyTorch tensor
-        The combined state update of shape `[n_batch, n_dimensions]`
-        containing the state update of the system state `dx/dt`
-        (`state[:, :-1]`) and the update of the log density (`state[:, -1]`).
+    dynamics : dynamics or torch.nn.Module
+        A dynamics function that computes the change of the system
     """
 
     def __init__(self, dynamics):
@@ -23,6 +16,24 @@ class AnodeDynamics(torch.nn.Module):
         self._dynamics = dynamics
 
     def forward(self, t, state):
+        """
+        Converts the the concatenated state, which is required for the ANODE ode solver,
+        to the tuple (`xs`, `dlogp`) for the following dynamics functions.
+
+        Parameters
+        ----------
+        t: PyTorch tensor
+            The current time
+        state: PyTorch tensor
+            The current state of the system
+
+        Returns
+        -------
+        state: PyTorch tensor
+            The combined state update of shape `[n_batch, n_dimensions]`
+            containing the state update of the system state `dx/dt`
+            (`state[:, :-1]`) and the update of the log density (`state[:, -1]`).
+        """
         xs = state[:, :-1]
         dlogp = state[:, -1:]
         state = (xs, dlogp)
