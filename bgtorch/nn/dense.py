@@ -5,10 +5,10 @@ from ..utils.types import is_list_or_tuple
 
 
 class DenseNet(torch.nn.Module):
-    def __init__(self, n_units, activation=None, weight_scale=1., bias_scale=0.):
+    def __init__(self, n_units, activation=None, weight_scale=1.0, bias_scale=0.0):
         """
             Simple multi-layer perceptron.
-            
+
             Parameters:
             -----------
             n_units : List / Tuple of integers.
@@ -29,8 +29,10 @@ class DenseNet(torch.nn.Module):
         for i, (dim_in, dim_out) in enumerate(zip(dims_in, dims_out)):
             layers.append(torch.nn.Linear(dim_in, dim_out))
             layers[-1].weight.data *= weight_scale
-            if bias_scale > 0.:
-                layers[-1].bias.data = torch.Tensor(layers[-1].bias.data).uniform_() * bias_scale
+            if bias_scale > 0.0:
+                layers[-1].bias.data = (
+                    torch.Tensor(layers[-1].bias.data).uniform_() * bias_scale
+                )
             if i < len(n_units) - 2:
                 if activation is not None:
                     if is_list_or_tuple(activation):
@@ -42,3 +44,9 @@ class DenseNet(torch.nn.Module):
 
     def forward(self, x):
         return self._layers(x)
+
+
+class MeanFreeDenseNet(DenseNet):
+    def forward(self, x):
+        y = self._layers(x)
+        return y - y.mean(dim=1, keepdim=True)

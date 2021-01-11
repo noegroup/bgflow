@@ -61,7 +61,10 @@ class NormalDistribution(Energy, Sampler):
             inv_diag = torch.exp(0.5 * self._log_diag)
             samples = samples * inv_diag
             samples = samples @ self._rot.t()
-        samples = samples * np.sqrt(temperature)
+        if isinstance(temperature, torch.Tensor):
+            samples = samples * temperature.sqrt()
+        else:
+            samples = samples * np.sqrt(temperature)
         if self._has_mean:
             samples.to(self._mean)
             samples = samples + self._mean
