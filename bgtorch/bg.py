@@ -44,10 +44,9 @@ class BoltzmannGenerator(Energy, Sampler):
         flow : Flow object
             Flow that can be evaluated forward and reverse
         target : object
-            Prior distribution implementing the energy() function
-
+            Target distribution implementing the energy() function
         """
-        super().__init__(target.dim)
+        super().__init__(target.dim if target is not None else prior.dim)
         self._prior = prior
         self._flow = flow
         self._target = target
