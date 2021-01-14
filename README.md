@@ -14,14 +14,14 @@ Bgtorch is a [pytorch](https://github.com/pytorch/pytorch) framework for
 This framework provides:
 
 * A general API for Boltzmann Generators
-* Different invertible [normalizing flow]() structures to build BGs
+* Different invertible [normalizing flow](https://arxiv.org/abs/1912.02762) structures to build BGs
     * [Coupling flows]()
-    * [Neural ODEs]()
-    * [Stochastic flows]()
-    * [Equivariant flows]()
-    * [Temperature-steerable flows]()
-    * [Neural spline flows]()
-    * [Augmented normalizing flows]()
+    * [Neural Ordinary Differential Equations](https://arxiv.org/abs/1806.07366)
+    * [Stochastic Normalizing Flows](https://arxiv.org/abs/2002.06707)
+    * [Equivariant flows](https://arxiv.org/abs/2006.02425)
+    * [Temperature-steerable flows](https://arxiv.org/abs/2012.00429)
+    * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
+    * [Augmented Normalizing Flows](https://arxiv.org/abs/2002.07101)
 * Other sampling methods
     * Markov-Chain Monte Carlo
     * Molecular dynamics
