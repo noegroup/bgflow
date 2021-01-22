@@ -32,7 +32,7 @@ class NormalDistribution(Energy, Sampler):
         return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) + self._log_Z
 
     def _compute_Z(self):
-        self._log_Z = self._dim / 2 * np.log(2 * np.pi)
+        self._log_Z = self.dim / 2 * np.log(2 * np.pi)
         if self._has_cov:
             self._log_Z += 1 / 2 * self._log_diag.sum()  # * torch.slogdet(cov)[1]
 
@@ -55,7 +55,7 @@ class NormalDistribution(Energy, Sampler):
         self.register_buffer("_rot", rot)
 
     def _sample_with_temperature(self, n_samples, temperature=1.0):
-        samples = torch.Tensor(n_samples, self._dim).normal_()
+        samples = torch.Tensor(n_samples, self.dim).normal_()
         if self._has_cov:
             samples.to(self._rot)
             inv_diag = torch.exp(0.5 * self._log_diag)
