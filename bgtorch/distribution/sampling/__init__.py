@@ -1,2 +1,2 @@
-from .base import Sampler
-from .mcmc import GaussianMCMCSampler
+from .base import *
+from .mcmc import *
