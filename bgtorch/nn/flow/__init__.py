@@ -11,3 +11,4 @@ from .elementwise import *
 from .orthogonal import *
 from .triangular import *
 from .pppp import *
+from .diffeq import DiffEqFlow

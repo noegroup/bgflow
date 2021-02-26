@@ -4,3 +4,4 @@ from .double_well import (
     MultiDimensionalDoubleWell,
 )
 from .particles import RepulsiveParticles, HarmonicParticles
+from .lennard_jones import LennardJonesPotential
