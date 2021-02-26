@@ -1,6 +1,9 @@
 import torch
 
 
+__all__ = ["Flow"]
+
+
 class Flow(torch.nn.Module):
     def __init__(self):
         super().__init__()
