@@ -4,6 +4,8 @@ from .base import Transformer
 
 # TODO: write docstring
 
+__all__ = ["AffineTransformer"]
+
 
 class AffineTransformer(Transformer):
     def __init__(

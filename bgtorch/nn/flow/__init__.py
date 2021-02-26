@@ -2,6 +2,7 @@ from .crd_transform import *
 from .dynamics import *
 from .estimator import *
 from .stochastic import *
+from .transformer import *
 
 from .affine import *
 from .coupling import *
