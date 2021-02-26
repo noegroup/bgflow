@@ -139,8 +139,11 @@ class KLTrainer(object):
             if n_print > 0:
                 if iter % n_print == 0:
                     self.reporter.print(*reports)
-
-            self.optim.step()
+            
+            if any(torch.any(torch.isnan(p.grad)) for p in self.bg.parameters()):
+                print("found nan in grad; skipping optimization step")
+            else:
+                self.optim.step()
 
     def losses(self, n_smooth=1):
         return self.reporter.losses(n_smooth=n_smooth)

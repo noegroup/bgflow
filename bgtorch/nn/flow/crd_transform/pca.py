@@ -52,16 +52,16 @@ class WhitenFlow(Flow):
         self.keepdims = keepdims
         self.whiten_inverse = whiten_inverse
 
-        X0_np = X0.detach().numpy()
+        X0_np = X0.detach().cpu().numpy()
         X0mean, Twhiten, Tblacken, std = _pca(X0_np, keepdims=keepdims)
         # self.X0mean = torch.tensor(X0mean)
-        self.register_buffer("X0mean", torch.tensor(X0mean))
+        self.register_buffer("X0mean", torch.tensor(X0mean).to(X0))
         # self.Twhiten = torch.tensor(Twhiten)
-        self.register_buffer("Twhiten", torch.tensor(Twhiten))
+        self.register_buffer("Twhiten", torch.tensor(Twhiten).to(X0))
         # self.Tblacken = torch.tensor(Tblacken)
-        self.register_buffer("Tblacken", torch.tensor(Tblacken))
+        self.register_buffer("Tblacken", torch.tensor(Tblacken).to(X0))
         # self.std = torch.tensor(std)
-        self.register_buffer("std", torch.tensor(std))
+        self.register_buffer("std", torch.tensor(std).to(X0))
         if torch.any(self.std <= 0):
             raise ValueError(
                 "Cannot construct whiten layer because trying to keep nonpositive eigenvalues."
@@ -75,7 +75,7 @@ class WhitenFlow(Flow):
         #    junk_dims = self.dim - self.keepdims
         #    output_z = torch.cat([output_z, torch.Tensor(x.shape[0], junk_dims).normal_()], dim=1)
         # Jacobian
-        dlogp = self.jacobian_xz * torch.ones((x.shape[0], 1))
+        dlogp = self.jacobian_xz * torch.ones((x.shape[0], 1)).to(x)
 
         return output_z, dlogp
 
@@ -85,7 +85,7 @@ class WhitenFlow(Flow):
         #    x = x[:, 0:self.keepdims]
         output_x = torch.matmul(x, self.Tblacken) + self.X0mean
         # Jacobian
-        dlogp = -self.jacobian_xz * torch.ones((x.shape[0], 1))
+        dlogp = -self.jacobian_xz * torch.ones((x.shape[0], 1)).to(x)
 
         return output_x, dlogp
 

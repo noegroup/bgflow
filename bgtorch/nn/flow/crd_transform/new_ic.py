@@ -388,7 +388,7 @@ class MixedCoordinateTransformation(Flow):
         fixed = data[:, fixed_atoms].view(n_data, -1)
         return WhitenFlow(fixed, keepdims=keepdims, whiten_inverse=False)
 
-    def _forward(self, x):
+    def _forward(self, x, *args, **kwargs):
         n_batch = x.shape[0]
         bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x)
         x_fixed = x_fixed.view(n_batch, -1)
@@ -396,7 +396,7 @@ class MixedCoordinateTransformation(Flow):
         dlogp = dlogp_rel + dlogp_ref
         return bonds, angles, torsions, z_fixed, dlogp
 
-    def _inverse(self, bonds, angles, torsions, z_fixed):
+    def _inverse(self, bonds, angles, torsions, z_fixed, *args, **kwargs):
         n_batch = z_fixed.shape[0]
         x_fixed, dlogp_ref = self._whiten(z_fixed, inverse=True)
         x_fixed = x_fixed.view(n_batch, -1, 3)
