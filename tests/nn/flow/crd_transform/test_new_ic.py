@@ -33,7 +33,7 @@ def deg2rad(x):
     return x * np.pi / 180.0
 
 
-#def test_outer(device, dtype, atol=1e-6, rtol=1e-5):
+# def test_outer(device, dtype, atol=1e-6, rtol=1e-5):
 #    for _ in range(N_REPETITIONS):
 #        x, y = torch.Tensor(2, 5, 7, 3).to(device, dtype).normal_()
 #        A = outer(x, y).view(-1)
@@ -84,15 +84,23 @@ def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
 
         # random reference angle
         # TODO: more stable angle derivatives
-        a_ref = np.random.uniform(1e-2, np.pi - 1e-2)   # prevent angles with numerical issues
-        x1 = torch.Tensor([np.cos(a_ref), np.sin(a_ref), 0]).to(device, dtype).requires_grad_(True)
+        a_ref = np.random.uniform(
+            1e-2, np.pi - 1e-2
+        )  # prevent angles with numerical issues
+        x1 = (
+            torch.Tensor([np.cos(a_ref), np.sin(a_ref), 0])
+            .to(device, dtype)
+            .requires_grad_(True)
+        )
 
         # construct system in standard basis
         x2 = torch.Tensor([0, 0, 0]).to(device, dtype)
         x3 = torch.Tensor([1, 0, 0]).to(device, dtype)
 
         # apply random rotation to system
-        R = torch.tensor(np.linalg.qr(np.random.uniform(size=(3, 3)))[0], dtype=dtype, device=device)
+        R = torch.tensor(
+            np.linalg.qr(np.random.uniform(size=(3, 3)))[0], dtype=dtype, device=device
+        )
         x1, x2, x3 = (x @ R for x in (x1, x2, x3))
 
         a, J = angle_deriv(x1, x2, x3)
@@ -100,7 +108,9 @@ def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
         # compute Jacobian with autograd
         J_ref = torch.autograd.grad(a.sum(), x1)[0]
 
-        assert torch.allclose(a, torch.tensor(a_ref, dtype=dtype, device=device), atol=atol, rtol=rtol)
+        assert torch.allclose(
+            a, torch.tensor(a_ref, dtype=dtype, device=device), atol=atol, rtol=rtol
+        )
         assert torch.allclose(J, J_ref, atol=atol, rtol=rtol)
 
 
@@ -111,13 +121,19 @@ def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
         a_ref = np.random.uniform(0, np.pi)
 
         # construct system in standard basis
-        x1 = torch.Tensor([np.cos(a_ref), np.sin(a_ref), 1]).to(device, dtype).requires_grad_(True)
+        x1 = (
+            torch.Tensor([np.cos(a_ref), np.sin(a_ref), 1])
+            .to(device, dtype)
+            .requires_grad_(True)
+        )
         x2 = torch.Tensor([0, 0, 1]).to(device, dtype).unsqueeze(0)
         x3 = torch.Tensor([0, 0, -1]).to(device, dtype).unsqueeze(0)
         x4 = torch.Tensor([1, 0, -1]).to(device, dtype).unsqueeze(0)
 
         # apply random rotation to system
-        R = torch.Tensor(np.linalg.qr(np.random.uniform(size=(3, 3)))[0]).to(device, dtype)
+        R = torch.Tensor(np.linalg.qr(np.random.uniform(size=(3, 3)))[0]).to(
+            device, dtype
+        )
         x1, x2, x3, x4 = (x @ R for x in (x1, x2, x3, x4))
 
         # torsion angle should be invariant under rotation
@@ -126,7 +142,9 @@ def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
         # compute Jacobian with autograd
         J_ref = torch.autograd.grad(a.sum(), x1)[0]
 
-        assert torch.allclose(a, torch.tensor(a_ref, device=device, dtype=dtype), atol=atol, rtol=rtol)
+        assert torch.allclose(
+            a, torch.tensor(a_ref, device=device, dtype=dtype), atol=atol, rtol=rtol
+        )
         assert torch.allclose(J, J_ref, atol=atol, rtol=rtol)
 
 

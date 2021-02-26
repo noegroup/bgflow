@@ -117,24 +117,30 @@ def slice_initial_atoms(z_matrix):
     return z_matrix[:, 0][order], z_matrix[s == 0]
 
 
-def normalize_angles(angles, is_torsion=False):
-    if is_torsion:
-        period = 2 * np.pi
-        angles = (angles + period / 2) / period
-    else:
-        period = np.pi
-        angles = angles / period
+def normalize_torsions(torsions):
+    period = 2 * np.pi
+    torsions = (torsions + period / 2) / period
+    dlogp = -np.log(period) * (torsions.shape[-1])
+    return torsions, dlogp
+
+
+def normalize_angles(angles):
+    period = np.pi
+    angles = angles / period
     dlogp = -np.log(period) * (angles.shape[-1])
     return angles, dlogp
 
 
-def unnormalize_angles(angles, is_torsion=False):
-    if is_torsion:
-        period = 2 * np.pi
-        angles = angles * (period) - period / 2
-    else:
-        period = np.pi
-        angles = angles * period
+def unnormalize_torsions(torsions):
+    period = 2 * np.pi
+    torsions = torsions * (period) - period / 2
+    dlogp = np.log(period) * (torsions.shape[-1])
+    return torsions, dlogp
+
+
+def unnormalize_angles(angles):
+    period = np.pi
+    angles = angles * period
     dlogp = np.log(period) * (angles.shape[-1])
     return angles, dlogp
 
@@ -156,7 +162,7 @@ class ReferenceSystemTranformation(Flow):
         _, _, _, neg_dlogp = self._init_points(x0, R, d01, d12, a012)
 
         if self._normalize_angles:
-            a012, dlogp_a = normalize_angles(a012, is_torsion=False)
+            a012, dlogp_a = normalize_angles(a012)
             dlogp += dlogp_a
 
         dlogp += -neg_dlogp
@@ -188,7 +194,7 @@ class ReferenceSystemTranformation(Flow):
         dlogp = 0
 
         if self._normalize_angles:
-            a012, dlogp_a = unnormalize_angles(a012, is_torsion=False)
+            a012, dlogp_a = unnormalize_angles(a012)
             dlogp += dlogp_a
 
         *res, dlogp_b = self._init_points(x0, R, d01, d12, a012)
@@ -255,8 +261,8 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
         # transforms angles from [-pi, pi] to [0, 1]
         if self._normalize_angles:
-            angles, dlogp_a = normalize_angles(angles, is_torsion=False)
-            torsions, dlogp_t = normalize_angles(torsions, is_torsion=True)
+            angles, dlogp_a = normalize_angles(angles)
+            torsions, dlogp_t = normalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
         # compute volume change
@@ -272,8 +278,8 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
         # transforms angles from [0, 1] to [-pi, pi]
         if self._normalize_angles:
-            angles, dlogp_a = unnormalize_angles(angles, is_torsion=False)
-            torsions, dlogp_t = unnormalize_angles(torsions, is_torsion=True)
+            angles, dlogp_a = unnormalize_angles(angles)
+            torsions, dlogp_t = normalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
         n_batch = x_fixed.shape[0]
