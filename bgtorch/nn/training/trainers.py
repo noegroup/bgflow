@@ -6,7 +6,7 @@ from bgtorch.utils.types import assert_numpy
 
 class LossReporter:
     """
-        Simple reporter use for reporting losses and plotting them.
+    Simple reporter use for reporting losses and plotting them.
     """
 
     def __init__(self, *labels):
@@ -21,13 +21,13 @@ class LossReporter:
 
     def print(self, *losses):
         iter = len(self._raw[0])
-        report_str = '{0}\t'.format(iter)
+        report_str = "{0}\t".format(iter)
         for i in range(self._n_reported):
             report_str += "{0}: {1:.4f}\t".format(self._labels[i], self._raw[i][-1])
         print(report_str)
 
     def losses(self, n_smooth=1):
-        x = np.arange(n_smooth, len(self._raw[0])+1)
+        x = np.arange(n_smooth, len(self._raw[0]) + 1)
         ys = []
         for (label, raw) in zip(self._labels, self._raw):
             raw = assert_numpy(raw).reshape(-1)
@@ -40,9 +40,10 @@ class LossReporter:
 
 
 class KLTrainer(object):
-
-    def __init__(self, bg, optim=None, train_likelihood=True, train_energy=True):
-        """ Trainer for minimizing the forward or reverse
+    def __init__(
+        self, bg, optim=None, train_likelihood=True, train_energy=True, custom_loss=None
+    ):
+        """Trainer for minimizing the forward or reverse
 
         Trains in either of two modes, or a mixture of them:
         1. Forward KL divergence / energy based training. Minimize KL divergence between
@@ -69,8 +70,20 @@ class KLTrainer(object):
             loss_names.append("KLL")
             self.w_energy = 1.0
         self.reporter = LossReporter(*loss_names)
+        self.custom_loss = custom_loss
 
-    def train(self, n_iter, data=None, batchsize=128, w_likelihood=None, w_energy=None, n_print=0, schedulers=()):
+    def train(
+        self,
+        n_iter,
+        data=None,
+        batchsize=128,
+        w_likelihood=None,
+        w_energy=None,
+        w_custom=None,
+        n_print=0,
+        temperature=1.0,
+        schedulers=(),
+    ):
         """
         Train the network.
 
@@ -90,6 +103,8 @@ class KLTrainer(object):
             if specified, this argument overrides self.w_energy
         n_print : int
             Print interval
+        temperature : float
+            Temperature at which the training is performed
         schedulers : iterable
             A list of pairs (int, scheduler), where the integer specifies the number of iterations between
             steps of the scheduler. Scheduler steps are invoked before the optimization step.
@@ -116,7 +131,7 @@ class KLTrainer(object):
                 batch = data[idxs]
 
                 # negative log-likelihood of the batch is equal to the energy of the BG
-                nll = self.bg.energy(batch).mean()
+                nll = self.bg.energy(batch, temperature=temperature).mean()
                 reports.append(nll)
                 # aggregate weighted gradient
                 if w_likelihood > 0:
@@ -124,7 +139,7 @@ class KLTrainer(object):
                     (l * nll).backward(retain_graph=True)
             if self.train_energy:
                 # kl divergence to the target
-                kll = self.bg.kldiv(batchsize).mean()
+                kll = self.bg.kldiv(batchsize, temperature=temperature).mean()
                 reports.append(kll)
                 # aggregate weighted gradient
                 if w_energy > 0:
@@ -132,8 +147,16 @@ class KLTrainer(object):
                     (l * kll).backward(retain_graph=True)
 
             if any(hasattr(s[1], "penalty") for s in schedulers):
-                penalties = [getattr(s[1], "penalty")() for s in schedulers if hasattr(s[1], "penalty")]
+                penalties = [
+                    getattr(s[1], "penalty")()
+                    for s in schedulers
+                    if hasattr(s[1], "penalty")
+                ]
                 (torch.sum(torch.cat(penalties))).backward(retain_graph=True)
+
+            if w_custom is not None:
+                cl = self.custom_loss()
+                (w_custom * cl).backward(retain_graph=True)
 
             self.reporter.report(*reports)
             if n_print > 0:

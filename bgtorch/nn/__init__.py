@@ -1,1 +1,1 @@
-from .dense import DenseNet
+from .dense import DenseNet, MeanFreeDenseNet

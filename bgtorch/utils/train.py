@@ -55,17 +55,17 @@ class IndexBatchIterator(object):
 
 
 def linlogcut(vals, high_val=1e3, max_val=1e9, inplace=False):
-    # cutoff x after b - this should also cutoff infinities
-    vals = torch.where(vals < max_val, vals, max_val * torch.ones_like(vals))
-    # log after a
-    vals_soft = high_val + torch.where(vals < high_val, vals - high_val, torch.log(vals - high_val + 1))
-    # make sure everything is finite
-    vals_finite = torch.where(torch.isfinite(vals_soft), vals_soft, max_val * torch.ones_like(vals_soft))
-    return vals_finite
+    if not inplace:
+        vals = vals.clone()
+    filt = vals >= high_val
+    diff = vals[filt] - high_val
+    vals[filt] = torch.min(
+        high_val + torch.log(1 + diff), max_val * torch.ones_like(diff)
+    )
+    return vals
 
 
 class _ClipGradient(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, input, max_norm):
         ctx._max_norm = max_norm
@@ -77,6 +77,7 @@ class _ClipGradient(torch.autograd.Function):
         grad_norm = torch.norm(grad_output, p=2, dim=1)
         coeff = max_norm / torch.max(grad_norm, max_norm * torch.ones_like(grad_norm))
         return grad_output * coeff.view(-1, 1), None, None
+
 
 clip_grad = _ClipGradient.apply
 
