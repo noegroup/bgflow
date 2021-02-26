@@ -2,7 +2,6 @@ import torch
 import numpy as np
 
 from bgtorch.nn.flow.crd_transform.ic_helper import (
-    outer,
     det2x2,
     det3x3,
     dist_deriv,
@@ -12,13 +11,12 @@ from bgtorch.nn.flow.crd_transform.ic_helper import (
 from bgtorch.nn.flow.crd_transform.new_ic import (
     ic2xy0_deriv,
     ic2xyz_deriv,
+    GlobalInternalCoordinateTransformation,
 )
 
 # TODO Floating point precision is brittle!
 #      Revision should include numerically more robust
 #      implementations - especially for angular values.
-
-# TODO missing test for global IC layer
 
 torch.set_default_tensor_type = torch.DoubleTensor
 
@@ -179,6 +177,109 @@ def test_ic2xyz_deriv(device, dtype, atol=1e-5, rtol=1e-4):
         assert torch.allclose(x4_new, x4, atol=atol, rtol=rtol)
 
 
-def test_global_ic_transform():
-    # TODO
-    pass
+# TODO: floating point precision is terrible...
+def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
+    N_SAMPLES = 10
+    N_BONDS = 4
+    N_ANGLES = 3
+    N_TORSIONS = 2
+    N_PARTICLES = 5
+
+    _Z_MATRIX = np.array(
+        [[0, -1, -1, -1], [1, 0, -1, -1], [2, 1, 0, -1], [3, 2, 1, 0], [4, 3, 2, 1]]
+    )
+
+    for _ in range(N_REPETITIONS):
+
+        for normalize_angles in [True, False]:
+
+            ic = GlobalInternalCoordinateTransformation(
+                _Z_MATRIX, normalize_angles=normalize_angles
+            )
+
+            # Test ic -> xyz -> ic reconstruction
+            bonds = torch.randn(N_SAMPLES, N_BONDS, device=device, dtype=dtype).exp()
+            angles = torch.rand(N_SAMPLES, N_ANGLES, device=device, dtype=dtype)
+            torsions = torch.rand(N_SAMPLES, N_TORSIONS, device=device, dtype=dtype)
+
+            if not normalize_angles:
+                angles *= np.pi
+                torsions = (2 * torsions - 1) * np.pi
+
+            x0 = torch.randn(N_SAMPLES, 1, 3, device=device, dtype=dtype)
+            R = torch.qr(torch.randn(N_SAMPLES, 3, 3, device=device, dtype=dtype))[0][
+                :, None
+            ]
+            x, dlogp_fwd = ic(bonds, angles, torsions, x0, R, inverse=True)
+            (
+                bonds_recon,
+                angles_recon,
+                torsions_recon,
+                x0_recon,
+                R_recon,
+                dlogp_inv,
+            ) = ic(x)
+
+            failure_message = f"normalize_angles={normalize_angles};"
+
+            # check valid reconstructions
+            for name, truth, recon in zip(
+                ["bonds", "angles", "torsions", "x0", "R"],
+                [bonds, angles, torsions, x0, R],
+                [bonds_recon, angles_recon, torsions_recon, x0_recon, R_recon],
+            ):
+                assert torch.allclose(truth, recon, atol=atol, rtol=rtol), (
+                    failure_message + f"{name} != {name}_recon;"
+                )
+            assert torch.allclose(
+                (dlogp_fwd + dlogp_inv).exp(),
+                torch.ones_like(dlogp_fwd),
+                atol=atol,
+                rtol=rtol,
+            ), failure_message
+
+            # Test xyz -> ic -> xyz reconstruction
+            x = torch.randn(N_SAMPLES, N_PARTICLES * 3, device=device, dtype=dtype)
+
+            *ics, dlogp_fwd = ic(x)
+            x_recon, dlogp_inv = ic(*ics, inverse=True)
+
+            assert torch.allclose(x, x_recon, atol=atol, rtol=rtol), failure_message
+            assert torch.allclose(
+                (dlogp_fwd + dlogp_inv).exp(),
+                torch.ones_like(dlogp_fwd),
+                atol=atol,
+                rtol=rtol,
+            ), failure_message
+
+            # Test IC independence
+            bonds, bonds_noise = torch.randn(
+                2, N_SAMPLES, N_BONDS, device=device, dtype=dtype
+            ).exp()
+            angles, angles_noise = torch.rand(
+                2, N_SAMPLES, N_ANGLES, device=device, dtype=dtype
+            )
+            torsions, torsions_noise = torch.rand(
+                2, N_SAMPLES, N_TORSIONS, device=device, dtype=dtype
+            )
+            x0, x0_noise = torch.randn(2, N_SAMPLES, 1, 3, device=device, dtype=dtype)
+            R = torch.qr(torch.randn(N_SAMPLES, 3, 3, device=device, dtype=dtype))[0][
+                :, None
+            ]
+            R_noise = torch.qr(
+                torch.randn(N_SAMPLES, 3, 3, device=device, dtype=dtype)
+            )[0][:, None]
+
+            names = ["bonds", "angles", "torsions", "x0", "R"]
+            orig = [bonds, angles, torsions, x0, R]
+            noise = [bonds_noise, angles_noise, torsions_noise, x0_noise, R_noise]
+
+            for i, name_noise in enumerate(names):
+                noisy_ics = orig[:i] + [noise[i]] + orig[i + 1 :]
+                x, _ = ic(*noisy_ics, inverse=True)
+                *noisy_ics_recon, _ = ic(x)
+                for j, name_recon in enumerate(names):
+                    if i != j:
+                        assert torch.allclose(
+                            orig[j], noisy_ics_recon[j], atol=atol, rtol=rtol
+                        ), (failure_message + f"{name_noise} != {name_recon}_recon")
