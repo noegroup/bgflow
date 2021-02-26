@@ -94,6 +94,10 @@ def angle_deriv(x1, x2, x3):
     J = rn32[..., None, :] @ J
 
     a = torch.acos(cos_angle)
+
+    import numpy as np
+
+    print(a.min(), a.max(), np.pi / 2)
     # TODO replaced for safe division - remove in factoring
     J = -J / torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None])
     # J = _safe_div(-J, torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None]))
