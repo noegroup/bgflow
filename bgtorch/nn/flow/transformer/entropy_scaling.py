@@ -3,6 +3,9 @@ from torch.nn.parameter import Parameter
 import torch
 
 
+__all__ = ["ScalingLayer", "EntropyScalingLayer"]
+
+
 class ScalingLayer(Flow):
     def __init__(self, init_factor=1.0, dim=1):
         super().__init__()
