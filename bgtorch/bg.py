@@ -5,7 +5,9 @@ from .distribution.sampling import Sampler
 
 
 def unnormalized_kl_div(prior, flow, target, n_samples, temperature=None):
-    *z, = prior.sample(n_samples, temperature=temperature)
+    z = prior.sample(n_samples, temperature=temperature)
+    if isinstance(z, torch.Tensor):
+        z = (z,)
     *x, dlogp = flow(*z, temperature=temperature)
     return target.energy(*x, temperature=temperature) - dlogp
 
@@ -21,6 +23,10 @@ def log_weights(*x, prior, flow, target, temperature=None):
 
 
 def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=None):
+    if isinstance(x, torch.Tensor):
+        x = (x,)
+    if isinstance(z, torch.Tensor):
+        z = (z,)
     logw = prior.energy(*z, temperature=temperature) + dlogp - target.energy(*x, temperature=temperature)
     logw = logw - logw.max()
     logw = logw - torch.logsumexp(logw, dim=0)
@@ -63,7 +69,9 @@ class BoltzmannGenerator(Energy, Sampler):
         with_log_weights=False,
         with_weights=False,
     ):
-        *z, = self._prior.sample(n_samples, temperature=temperature)
+        z = self._prior.sample(n_samples, temperature=temperature)
+        if isinstance(z, torch.Tensor):
+            z = (z,)
         *results, dlogp = self._flow(*z)
         results = list(results)
         
