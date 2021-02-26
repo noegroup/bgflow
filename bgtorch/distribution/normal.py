@@ -91,8 +91,11 @@ class TruncatedNormalDistribution(Energy, Sampler):
             Lower truncation bound.
         upper_bound : float, np.infty, or tensor of floats of shape (dim, )
             Upper truncation bound.
+        assert_range : bool
+            Whether to raise an error when `energy` is called on input that falls out of bounds.
+            Otherwise the energy is set to infinity.
     """
-    def __init__(self, dim, mu=0.0, sigma=1.0, lower_bound=0.0, upper_bound=np.infty):
+    def __init__(self, dim, mu=0.0, sigma=1.0, lower_bound=0.0, upper_bound=np.infty, assert_range=True):
         super(TruncatedNormalDistribution, self).__init__(dim=dim)
         for t in [mu, sigma, lower_bound, upper_bound]:
             assert type(t) is float or type(t) is torch.Tensor
@@ -104,6 +107,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
         self._standard_normal = distributions.normal.Normal(0.0, 1.0)
         self._upper_bound = upper_bound
         self._lower_bound = lower_bound
+        self.assert_range = assert_range
         self._phi_upper = self._standard_normal.cdf((upper_bound-mu)/sigma)
         self._phi_lower = self._standard_normal.cdf((lower_bound-mu)/sigma)
 
@@ -124,10 +128,21 @@ class TruncatedNormalDistribution(Energy, Sampler):
         return samples
 
     def _energy(self, x):
-        """The energy is the same as for a untruncated normal distribution (only the partition function changes)."""
+        """The energy is the same as for a untruncated normal distribution
+        (only the partition function changes).
+
+        Raises
+        ------
+        ValueError
+            If input is out of bounds and assert_ranges is True.
+        """
         energies = ((x - self._mu) / self._sigma) ** 2  # the sqrt(2) amounts to the 0.5 factor (see return statement)
-        energies[x < self._lower_bound] = np.infty
-        energies[x > self._upper_bound] = np.infty
+        if self.assert_range:
+            if (x < self._lower_bound).any() or (x > self._upper_bound).any():
+                raise ValueError("input out of bounds")
+        else:
+            energies[x < self._lower_bound] = np.infty
+            energies[x > self._upper_bound] = np.infty
         return 0.5 * energies.sum(dim=-1, keepdim=True)
 
     @property
