@@ -28,7 +28,7 @@ class AffineFlow(Flow):
         if self._mu is not None:
             x = x + self._mu.to(x)
         return x, dlogp
-    
+
     def _inverse(self, x, **kwargs):
         assert x.shape[-1] == self._n_dims, "dimension `x` does not match `n_dims`"
         dlogp = torch.zeros(*x.shape[:-1], 1).to(x)

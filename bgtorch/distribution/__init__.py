@@ -1,2 +1,2 @@
-from .normal import NormalDistribution
+from .normal import *
 from .mixture import MixtureDistribution
