@@ -1,5 +1,7 @@
 import torch
 
+__all__ = ["Energy"]
+
 
 class Energy(torch.nn.Module):
     def __init__(self, dim):

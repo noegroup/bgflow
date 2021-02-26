@@ -4,6 +4,9 @@ import numpy as np
 from .base import Flow
 
 
+__all__ = ["AffineFlow"]
+
+
 class AffineFlow(Flow):
     def __init__(self, n_dims, use_scaling=True, use_translation=True):
         super().__init__()

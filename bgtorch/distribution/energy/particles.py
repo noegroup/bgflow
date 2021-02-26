@@ -3,6 +3,8 @@ import torch
 
 from .base import Energy
 
+__all__ = ["RepulsiveParticles", "HarmonicParticles"]
+
 
 MAX_BATCHSIZE_NUMPY = 10000
 MAX_BATCHSIZE_TORCH = 100000

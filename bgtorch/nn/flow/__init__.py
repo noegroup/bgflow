@@ -1,10 +1,15 @@
-from .affine import AffineFlow
-from .coupling import CouplingFlow, SplitFlow, MergeFlow, SwapFlow
+from .crd_transform import *
+from .dynamics import *
+from .estimator import *
+from .stochastic import *
+
+from .affine import *
+from .coupling import *
 from .funnel import FunnelFlow
 from .spline import LinearSplineFlow
 from .kronecker import KroneckerProductFlow
 from .sequential import SequentialFlow
-from .inverted import InverseFlow
+from .inverted import *
 from .checkerboard import CheckerboardFlow
 from .bnaf import BNARFlow
 from .elementwise import *

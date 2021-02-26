@@ -4,6 +4,9 @@ import numpy as np
 from ..utils.types import is_list_or_tuple
 
 
+__all__ = ["DenseNet", "MeanFreeDenseNet"]
+
+
 class DenseNet(torch.nn.Module):
     def __init__(self, n_units, activation=None, weight_scale=1.0, bias_scale=0.0):
         """

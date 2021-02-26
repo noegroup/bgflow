@@ -3,6 +3,9 @@ import torch
 from bgtorch.nn.flow.base import Flow
 
 
+__all__ = ["WhitenFlow"]
+
+
 def _pca(X0, keepdims=None):
     """Implements PCA in Numpy.
 

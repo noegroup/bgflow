@@ -3,6 +3,9 @@ import torch
 from .base import Energy
 
 
+__all__ = ["DoubleWellEnergy", "MultiDimensionalDoubleWell"]
+
+
 class DoubleWellEnergy(Energy):
     def __init__(self, dim, a=0, b=-4.0, c=1.0):
         super().__init__(dim)
