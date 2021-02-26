@@ -279,7 +279,7 @@ class RelativeInternalCoordinatesTransformation(Flow):
         # transforms angles from [0, 1] to [-pi, pi]
         if self._normalize_angles:
             angles, dlogp_a = unnormalize_angles(angles)
-            torsions, dlogp_t = normalize_torsions(torsions)
+            torsions, dlogp_t = unnormalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
         n_batch = x_fixed.shape[0]
