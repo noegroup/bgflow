@@ -11,6 +11,8 @@ import torch
 from ...utils.types import assert_numpy
 from .base import Energy
 
+__all__ = ["OpenMMBridge", "OpenMMEnergy"]
+
 
 _OPENMM_FLOATING_TYPE = np.float64
 _SPATIAL_DIM = 3

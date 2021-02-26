@@ -1,6 +1,9 @@
 import torch
 
 
+__all__ = ["Sampler"]
+
+
 class Sampler(torch.nn.Module):
     
     def __init__(self):

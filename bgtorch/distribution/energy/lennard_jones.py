@@ -3,6 +3,9 @@ from bgtorch.utils import distance_vectors, distances_from_vectors
 import torch
 
 
+__all__ = ["LennardJonesPotential"]
+
+
 def lennard_jones_energy_torch(r, eps=1.0, rm=1.0):
     lj = eps * ((rm / r) ** 12 - 2 * (rm / r) ** 6)
     return lj

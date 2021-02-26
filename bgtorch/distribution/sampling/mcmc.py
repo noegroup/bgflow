@@ -5,6 +5,9 @@ from ..energy import Energy
 from .base import Sampler
 
 
+__all__ = ["GaussianMCMCSampler"]
+
+
 class GaussianMCMCSampler(Energy, Sampler):
     def __init__(
         self,

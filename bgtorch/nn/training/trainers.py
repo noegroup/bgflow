@@ -4,6 +4,9 @@ import numpy as np
 from bgtorch.utils.types import assert_numpy
 
 
+__all__ = ["LossReporter", "KLTrainer"]
+
+
 class LossReporter:
     """
     Simple reporter use for reporting losses and plotting them.
@@ -145,14 +148,6 @@ class KLTrainer(object):
                 if w_energy > 0:
                     l = w_energy / (w_likelihood + w_energy)
                     (l * kll).backward(retain_graph=True)
-
-            if any(hasattr(s[1], "penalty") for s in schedulers):
-                penalties = [
-                    getattr(s[1], "penalty")()
-                    for s in schedulers
-                    if hasattr(s[1], "penalty")
-                ]
-                (torch.sum(torch.cat(penalties))).backward(retain_graph=True)
 
             if w_custom is not None:
                 cl = self.custom_loss()
