@@ -12,24 +12,27 @@ __all__ = ["SplitFlow", "MergeFlow", "SwapFlow", "CouplingFlow"]
 
 
 class SplitFlow(Flow):
-    def __init__(self, n_left=1):
+    def __init__(self, *sizes, dim=-1):
         super().__init__()
-        self._n_left = n_left
-
-    def _forward(self, x, *cond, **kwargs):
-        assert x.shape[-1] > self._n_left, "input dim must be larger than `n_left`"
-        dlogp = torch.zeros(*x.shape[:-1], 1).to(x)
-        x_left = x[..., : self._n_left]
-        x_right = x[..., self._n_left :]
-        return (x_left, x_right, *cond, dlogp)
+        self._sizes = sizes
+        self._split_dim = dim
+    
+    def _forward(self, x, **kwargs):
+        last_size = x.shape[self._split_dim] - sum(self._sizes)
+        if last_size == 0:
+            sizes = self._sizes
+        elif last_size > 0:
+            sizes = [*self._sizes, last_size]
+        else:
+            raise ValueError(f"can't split x [{x.shape}] into sizes {self._sizes} along {self._split_dim}")
+        *y, = torch.split(x, sizes, dim=self._split_dim)
+        dlogp = torch.zeros_like(x[...,[0]])
+        return (*y, dlogp)
     
     def _inverse(self, *xs, **kwargs):
-        cond = xs[2:]
-        xs = xs[:2]
-        x_left, x_right = xs
-        dlogp = torch.zeros(*x_left.shape[:-1], 1).to(x_left)
-        x = torch.cat([x_left, x_right], dim=-1)
-        return (x, *cond, dlogp)
+        y = torch.cat(xs, dim=self._split_dim)
+        dlogp = torch.zeros_like(xs[0][...,[0]])
+        return (y, dlogp)
 
 
 class MergeFlow(InverseFlow):
