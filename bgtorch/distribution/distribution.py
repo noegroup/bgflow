@@ -14,7 +14,6 @@ class Distribution(Energy, Sampler):
     """
     def __init__(self, distribution: torch.distributions.Distribution):
         self._delegate = distribution
-        print(distribution.event_shape)
         Energy.__init__(self, dim=distribution.event_shape)
         Sampler.__init__(self)
 
@@ -33,5 +32,4 @@ class Distribution(Energy, Sampler):
         except AttributeError as e:
             msg = str(e)
             msg = msg.replace(self._delegate.__class__.__name__, "Distribution")
-            print(msg)
             raise AttributeError(msg)

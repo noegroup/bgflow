@@ -46,6 +46,3 @@ def test_distribution_samples(dim, sample_shape, device, dtype):
                             (-p.energy(x) + q.energy(y))
                         )
                         assert torch.abs(div) < 5e-2
-
-
-
