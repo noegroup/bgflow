@@ -44,7 +44,7 @@ class LossReporter:
 
 class KLTrainer(object):
     def __init__(
-        self, bg, optim=None, train_likelihood=True, train_energy=True, custom_loss=None
+        self, bg, optim=None, train_likelihood=True, train_energy=True, custom_loss=None, test_likelihood=False,
     ):
         """Trainer for minimizing the forward or reverse
 
@@ -66,12 +66,15 @@ class KLTrainer(object):
         self.w_likelihood = 0.0
         self.train_energy = train_energy
         self.w_energy = 0.0
-        if train_likelihood:
-            loss_names.append("NLL")
-            self.w_likelihood = 1.0
+        self.test_likelihood = test_likelihood
         if train_energy:
             loss_names.append("KLL")
             self.w_energy = 1.0
+        if train_likelihood:
+            loss_names.append("NLL")
+            self.w_likelihood = 1.0
+        if test_likelihood: 
+            loss_names.append("NLL(Test)")
         self.reporter = LossReporter(*loss_names)
         self.custom_loss = custom_loss
 
@@ -79,6 +82,7 @@ class KLTrainer(object):
         self,
         n_iter,
         data=None,
+        testdata=None,
         batchsize=128,
         w_likelihood=None,
         w_energy=None,
@@ -86,6 +90,7 @@ class KLTrainer(object):
         n_print=0,
         temperature=1.0,
         schedulers=(),
+        clip_forces=None
     ):
         """
         Train the network.
@@ -128,18 +133,6 @@ class KLTrainer(object):
             self.optim.zero_grad()
             reports = []
 
-            if self.train_likelihood:
-                N = data.shape[0]
-                idxs = np.random.choice(N, size=batchsize, replace=True)
-                batch = data[idxs]
-
-                # negative log-likelihood of the batch is equal to the energy of the BG
-                nll = self.bg.energy(batch, temperature=temperature).mean()
-                reports.append(nll)
-                # aggregate weighted gradient
-                if w_likelihood > 0:
-                    l = w_likelihood / (w_likelihood + w_energy)
-                    (l * nll).backward(retain_graph=True)
             if self.train_energy:
                 # kl divergence to the target
                 kll = self.bg.kldiv(batchsize, temperature=temperature).mean()
@@ -148,6 +141,28 @@ class KLTrainer(object):
                 if w_energy > 0:
                     l = w_energy / (w_likelihood + w_energy)
                     (l * kll).backward(retain_graph=True)
+                # constrain forces
+                if clip_forces is not None:
+                    torch.nn.utils.clip_grad_value_(self.bg.parameters(), clip_forces)
+
+            if self.train_likelihood:
+                N = data.shape[0]
+                idxs = np.random.choice(N, size=batchsize, replace=True)
+                batch = data[idxs]
+                # negative log-likelihood of the batch is equal to the energy of the BG
+                nll = self.bg.energy(batch, temperature=temperature).mean()
+                reports.append(nll)
+                # aggregate weighted gradient
+                if w_likelihood > 0:
+                    l = w_likelihood / (w_likelihood + w_energy)
+                    (l * nll).backward(retain_graph=True)
+            # compute NLL over test data 
+            if self.test_likelihood:
+                testnll = torch.zeros_like(nll)
+                if testdata is not None:
+                    testbatch = testdata[idxs]
+                    testnll = self.bg.energy(testbatch, temperature=temperature).mean()
+                reports.append(testnll)
 
             if w_custom is not None:
                 cl = self.custom_loss()
@@ -157,8 +172,11 @@ class KLTrainer(object):
             if n_print > 0:
                 if iter % n_print == 0:
                     self.reporter.print(*reports)
-
-            self.optim.step()
+            
+            if any(torch.any(torch.isnan(p.grad)) for p in self.bg.parameters()):
+                print("found nan in grad; skipping optimization step")
+            else:
+                self.optim.step()
 
     def losses(self, n_smooth=1):
         return self.reporter.losses(n_smooth=n_smooth)
