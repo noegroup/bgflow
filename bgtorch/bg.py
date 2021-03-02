@@ -103,7 +103,7 @@ class BoltzmannGenerator(Energy, Sampler):
         return unnormalized_kl_div(self._prior, self._flow, self._target, n_samples, temperature=temperature)
     
     def log_weights(self, *x, temperature=1.0):
-        return log_weights(*x, self._prior, self._flow, self._target, temperature=temperature)
+        return log_weights(*x, prior=self._prior, flow=self._flow, target=self._target, temperature=temperature)
     
     def log_weights_given_latent(self, x, z, dlogp, temperature=1.0):
         return log_weights_given_latent(
