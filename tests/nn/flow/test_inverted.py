@@ -14,6 +14,7 @@ from bgtorch.nn import flow
     flow.FunnelFlow(),
     flow.AffineFlow(2),
     flow.SplitFlow(1),
+    flow.SplitFlow(1,1),
     flow.TriuFlow(2),
     flow.InvertiblePPPP(2)
 ])
