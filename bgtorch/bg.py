@@ -4,7 +4,7 @@ from .distribution.energy import Energy
 from .distribution.sampling import Sampler
 
 
-def unnormalized_kl_div(prior, flow, target, n_samples, temperature=None):
+def unnormalized_kl_div(prior, flow, target, n_samples, temperature=1.0):
     z = prior.sample(n_samples, temperature=temperature)
     if isinstance(z, torch.Tensor):
         z = (z,)
@@ -12,17 +12,17 @@ def unnormalized_kl_div(prior, flow, target, n_samples, temperature=None):
     return target.energy(*x, temperature=temperature) - dlogp
 
 
-def unormalized_nll(prior, flow, *x, temperature=None):
+def unormalized_nll(prior, flow, *x, temperature=1.0):
     *z, dlogp = flow(*x, inverse=True, temperature=temperature)
     return prior.energy(*z, temperature=temperature) - dlogp
 
 
-def log_weights(*x, prior, flow, target, temperature=None):
+def log_weights(*x, prior, flow, target, temperature=1.0):
     *z, dlogp = flow(*x, inverse=True, temperature=temperature)
     return log_weights_given_latent(x,z, dlogp, prior, flow, target, temperature=temperature)
 
 
-def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=None):
+def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=1.0):
     if isinstance(x, torch.Tensor):
         x = (x,)
     if isinstance(z, torch.Tensor):
@@ -62,7 +62,7 @@ class BoltzmannGenerator(Energy, Sampler):
     def sample(
         self,
         n_samples,
-        temperature=None,
+        temperature=1.0,
         with_latent=False,
         with_dlogp=False,
         with_energy=False,
@@ -96,18 +96,18 @@ class BoltzmannGenerator(Energy, Sampler):
         else:
             return results[0]
     
-    def energy(self, *x, temperature=None):
+    def energy(self, *x, temperature=1.0):
         return unormalized_nll(self._prior, self._flow, *x, temperature=temperature)
     
-    def kldiv(self, n_samples, temperature=None):
+    def kldiv(self, n_samples, temperature=1.0):
         return unnormalized_kl_div(self._prior, self._flow, self._target, n_samples, temperature=temperature)
     
-    def log_weights(self, *x, temperature=None):
+    def log_weights(self, *x, temperature=1.0):
         return log_weights(*x, self._prior, self._flow, self._target, temperature=temperature)
     
-    def log_weights_given_latent(self, x, z, dlogp, temperature=None):
+    def log_weights_given_latent(self, x, z, dlogp, temperature=1.0):
         return log_weights_given_latent(
-            x, z, dlogp, self._prior, self._flow, self._target, temperature=None
+            x, z, dlogp, self._prior, self._flow, self._target, temperature=temperature
         )
 
     def trigger(self, function_name):
