@@ -16,7 +16,7 @@ class LennardJonesPotential(Energy):
             self, dim, n_particles, eps=1.0, rm=1.0, oscillator=True, oscillator_scale=1.):
         super().__init__(dim)
         self._n_particles = n_particles
-        self._n_dims = self._dim // n_particles
+        self._n_dims = self.dim // n_particles
 
         self._eps = eps
         self._rm = rm

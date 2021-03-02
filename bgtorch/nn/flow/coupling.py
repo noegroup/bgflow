@@ -51,7 +51,7 @@ class SplitFlow(Flow):
     def _inverse(self, *xs, **kwargs):
         y = torch.cat(xs, dim=self._split_dim)
         shape = list(xs[0].shape)
-        shape[self._dim] = 1
+        shape[self._split_dim] = 1
         return y, self._dlogp(xs[0])
 
     def _dlogp(self, x):
