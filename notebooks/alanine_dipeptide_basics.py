@@ -58,7 +58,8 @@ main = (__name__ == "__main__")
 import os
 from openmmsystems.datasets import Ala2TSF300
 
-dataset = Ala2TSF300(download=os.path.isdir("Ala2TSF300"), read=True)
+is_data_here = os.path.isfile("Ala2TSF300.npy")
+dataset = Ala2TSF300(download=(not is_data_here), read=True)
 system = dataset.system
 coordinates = dataset.coordinates
 temperature = dataset.temperature
@@ -317,7 +318,7 @@ nll_trainer = bg.KLTrainer(
 )
 
 
-# In[23]:
+# In[ ]:
 
 
 if main:
@@ -332,21 +333,26 @@ if main:
 
 # To see what the generator has learned so far, let's first create a bunch of samples and compare their backbone angles with the molecular dynamics data. Let's also plot their energies.
 
-# In[24]:
+# In[ ]:
 
 
 def plot_energies(ax, samples, target_energy, test_data):
     sample_energies = target_energy.energy(samples).cpu().detach().numpy()
     md_energies = target_energy.energy(test_data[:len(samples)]).cpu().detach().numpy()
+    cut = max(np.percentile(sample_energies, 80), 20)
     
-    ax.hist(sample_energies, bins=150, log=True, density=True, label="BG")
-    ax.hist(md_energies, bins=150, log=True, density=True, label="MD")
-    ax.set_xlim(-50,200)
-    ax.set_ylim(1e-3, None)
+    ax.set_xlabel("Energy   [$k_B T$]")
+    # y-axis on the right
+    ax2 = plt.twinx(ax)
+    ax.get_yaxis().set_visible(False)
+    
+    ax2.hist(sample_energies, range=(-50, cut), bins=40, density=False, label="BG")
+    ax2.hist(md_energies, range=(-50, cut), bins=40, density=False, label="MD")
+    ax2.set_ylabel(f"Count   [#Samples / {n_samples}]")
     ax.legend()
 
 
-# In[25]:
+# In[ ]:
 
 
 if main:
@@ -354,8 +360,8 @@ if main:
     n_samples = 10000
     samples = generator.sample(n_samples)
 
-    fig, axes = plt.subplots(1, 2, figsize=(8,4))
-    fig.tight_layout(pad=3.0)
+    fig, axes = plt.subplots(1, 2, figsize=(6,3))
+    fig.tight_layout()
 
     plot_phi_psi(axes[0], samples, system)
     plot_energies(axes[1], samples, target_energy, test_data)
@@ -367,7 +373,7 @@ if main:
 # 
 # The next step is "mixed" training with a combination of NLL and KLL. To retain some of the progress made in the NLL phase, we decrease the learning rate and increase the batch size.
 
-# In[26]:
+# In[ ]:
 
 
 mixed_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-4)
@@ -381,9 +387,9 @@ mixed_trainer = bg.KLTrainer(
 # Mixed training will be considerably slower. 
 # To speed it up, you can change the settings for the OpenMM energy when creating the energy model. For example, consider not passing `n_workers=1`.
 # 
-# To avoid large potential energy gradients from singularities, the components of the KL gradient are constrained to (-10, 10). 
+# To avoid large potential energy gradients from singularities, the components of the KL gradient are constrained to (-100, 100). 
 
-# In[27]:
+# In[ ]:
 
 
 if main:
@@ -394,23 +400,24 @@ if main:
         n_print=100, 
         w_energy=0.1,
         w_likelihood=0.9,
-        clip_forces=10.0
+        clip_forces=20.0
     )
 
 
 # Plot the results:
 
-# In[28]:
+# In[ ]:
 
 
 if main:
+    
     n_samples = 10000
     samples = generator.sample(n_samples)
 
-    fig, axes = plt.subplots(1, 2, figsize=(8,4))
-    fig.tight_layout(pad=3.0)
+    fig, axes = plt.subplots(1, 2, figsize=(6,3))
+    fig.tight_layout()
 
-    trajectory = plot_phi_psi(axes[0], samples, system)
+    plot_phi_psi(axes[0], samples, system)
     plot_energies(axes[1], samples, target_energy, test_data)
 
     del samples
@@ -418,7 +425,7 @@ if main:
 
 # With nglview installed, we can also take a look at the samples.
 
-# In[29]:
+# In[ ]:
 
 
 try:
