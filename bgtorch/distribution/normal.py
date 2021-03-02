@@ -5,6 +5,9 @@ from .energy import Energy
 from .sampling import Sampler
 
 
+__all__ = ["NormalDistribution", "TruncatedNormalDistribution"]
+
+
 def _is_symmetric_matrix(m):
     return torch.allclose(m, m.t())
 
@@ -61,7 +64,10 @@ class NormalDistribution(Energy, Sampler):
             inv_diag = torch.exp(0.5 * self._log_diag)
             samples = samples * inv_diag
             samples = samples @ self._rot.t()
-        samples = samples * np.sqrt(temperature)
+        if isinstance(temperature, torch.Tensor):
+            samples = samples * temperature.sqrt()
+        else:
+            samples = samples * np.sqrt(temperature)
         if self._has_mean:
             samples.to(self._mean)
             samples = samples + self._mean
@@ -69,3 +75,123 @@ class NormalDistribution(Energy, Sampler):
 
     def _sample(self, n_samples):
         return self._sample_with_temperature(n_samples)
+
+
+class TruncatedNormalDistribution(Energy, Sampler):
+    """
+    Truncated normal distribution (normal distribution restricted to the interval [lower_bound, upper_bound]
+    of dim many independent variables. Used to model molecular angles and bonds.
+
+    Parameters:
+        dim : int
+            Dimension of the distribution.
+        mu : float or tensor of floats of shape (dim, )
+            Mean of the untruncated normal distribution.
+        sigma : float or tensor of floats of shape (dim, )
+            Standard deviation of the untruncated normal distribution.
+        lower_bound : float, -np.infty, or tensor of floats of shape (dim, )
+            Lower truncation bound.
+        upper_bound : float, np.infty, or tensor of floats of shape (dim, )
+            Upper truncation bound.
+        assert_range : bool
+            Whether to raise an error when `energy` is called on input that falls out of bounds.
+            Otherwise the energy is set to infinity.
+    """
+
+    def __init__(
+        self,
+        dim,
+        mu=torch.tensor(0.0),
+        sigma=torch.tensor(1.0),
+        lower_bound=torch.tensor(0.0),
+        upper_bound=torch.tensor(np.infty),
+        assert_range=True,
+        sampling_method="icdf",
+    ):
+        super(TruncatedNormalDistribution, self).__init__(dim=dim)
+        for t in [mu, sigma, lower_bound, upper_bound]:
+            assert type(t) is torch.Tensor
+            if type(t) is torch.Tensor:
+                assert t.shape in (torch.Size([]), (1,), (dim,))
+
+        self._dim = dim
+        self.register_buffer("_mu", mu)
+        self.register_buffer("_sigma", sigma)
+        self.register_buffer("_upper_bound", upper_bound)
+        self.register_buffer("_lower_bound", lower_bound)
+        self.assert_range = assert_range
+
+        # TODO: seems to be unused - remove?
+        #         self._phi_upper = self._standard_normal.cdf((upper_bound-mu)/sigma)
+        #         self._phi_lower = self._standard_normal.cdf((lower_bound-mu)/sigma)
+
+        self._standard_normal = torch.distributions.normal.Normal(0.0, 1.0)
+
+        if sampling_method == "rejection":
+            self._sample_impl = self._rejection_sampling
+        elif sampling_method == "icdf":
+            self._sample_impl = self._icdf_sampling
+            self._alpha = (lower_bound - self._mu) / self._sigma
+            self._beta = (upper_bound - self._mu) / self._sigma
+            self._cdf_lower_bound = self._standard_normal.cdf(self._alpha)
+            self._cdf_upper_bound = self._standard_normal.cdf(self._beta)
+        else:
+            raise ValueError(f'Unknown sampling method "{sampling_method}"')
+
+    def _sample(self, n_samples):
+        """This is a naive implementation; resample when x falls out of bounds"""
+        return self._sample_with_temperature(n_samples, temperature=1)
+
+    def _rejection_sampling(self, n_samples, temperature):
+        sigma = self._sigma * np.sqrt(temperature)
+        samples = self._standard_normal.sample((n_samples, self.dim)) * sigma + self._mu
+        while True:
+            out_of_bounds = (samples > self._upper_bound) | (
+                samples < self._lower_bound
+            )
+            if torch.any(out_of_bounds):
+                new_samples = (
+                    self._standard_normal.sample((n_samples, self.dim)) * sigma
+                    + self._mu
+                )
+                samples[out_of_bounds] = new_samples[out_of_bounds]
+            else:
+                break
+        return samples
+
+    def _icdf_sampling(self, n_samples, temperature):
+        sigma = self._sigma * np.sqrt(temperature)
+        u = torch.rand(n_samples, self.dim)
+        r = (self._cdf_upper_bound - self._cdf_lower_bound) * u + self._cdf_lower_bound
+        x = self._standard_normal.icdf(r) * sigma + self._mu
+        return x
+
+    def _sample_with_temperature(self, n_samples, temperature):
+        return self._sample_impl(n_samples, temperature)
+
+    def _energy(self, x):
+        """The energy is the same as for a untruncated normal distribution
+        (only the partition function changes).
+
+        Raises
+        ------
+        ValueError
+            If input is out of bounds and assert_ranges is True.
+        """
+        energies = (
+            (x - self._mu) / self._sigma
+        ) ** 2  # the sqrt(2) amounts to the 0.5 factor (see return statement)
+        if self.assert_range:
+            if (x < self._lower_bound).any() or (x > self._upper_bound).any():
+                raise ValueError("input out of bounds")
+        else:
+            energies[x < self._lower_bound] = np.infty
+            energies[x > self._upper_bound] = np.infty
+        return 0.5 * energies.sum(dim=-1, keepdim=True)
+
+    @property
+    def dim(self):
+        return self._dim
+
+    def __len__(self):
+        return self._dim

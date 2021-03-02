@@ -1,4 +1,6 @@
-from .normal import NormalDistribution
-from .mixture import MixtureDistribution
-from .distribution import *
 
+from .distribution import *
+from .energy import *
+from .sampling import *
+from .normal import *
+from .mixture import *

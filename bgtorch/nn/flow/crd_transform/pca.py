@@ -3,8 +3,11 @@ import torch
 from bgtorch.nn.flow.base import Flow
 
 
+__all__ = ["WhitenFlow"]
+
+
 def _pca(X0, keepdims=None):
-    """ Implements PCA in Numpy.
+    """Implements PCA in Numpy.
 
     This is not written for training in torch because derivatives of eig are not implemented
 
@@ -33,7 +36,7 @@ def _pca(X0, keepdims=None):
 
 class WhitenFlow(Flow):
     def __init__(self, X0, keepdims=None, whiten_inverse=True):
-        """ Performs static whitening of the data given PCA of X0
+        """Performs static whitening of the data given PCA of X0
 
         Parameters:
         -----------

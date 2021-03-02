@@ -8,6 +8,8 @@ from .inverted import InverseFlow
 
 # TODO: write docstrings
 
+__all__ = ["SplitFlow", "MergeFlow", "SwapFlow", "CouplingFlow"]
+
 
 class SplitFlow(Flow):
     def __init__(self, n_left=1):
