@@ -7,10 +7,11 @@ __all__ = ["Energy"]
 class Energy(torch.nn.Module):
     def __init__(self, dim):
         super().__init__()
-        if isinstance(dim, int):
-            self._event_shape = torch.Size([dim])
-        else:
+        try:
+            # this will raise a TypeError if dim is an integer or 0-d tensor
             self._event_shape = torch.Size(dim)
+        except TypeError:
+            self._event_shape = torch.Size([dim])
 
     @property
     def dim(self):
