@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+from typing import Union, Optional, Sequence
+from collections.abc import Sequence as _Sequence
 import warnings
 
 import torch
@@ -8,15 +9,15 @@ __all__ = ["Energy"]
 
 def _is_non_empty_sequence_of_integers(x):
     return (
-        isinstance(x, Sequence) and (len(x) > 0) and all(isinstance(y, int) for y in x)
+        isinstance(x, _Sequence) and (len(x) > 0) and all(isinstance(y, int) for y in x)
     )
 
 
 def _is_sequence_of_non_empty_sequences_of_integers(x):
     return (
-        isinstance(x, Sequence)
+        isinstance(x, _Sequence)
         and len(x) > 1
-        and all(isinstance(y, Sequence) and (len(y)) > 0 for y in x)
+        and all(isinstance(y, _Sequence) and (len(y)) > 0 for y in x)
         and all(isinstance(z, int) for y in x for z in y)
     )
 
@@ -38,7 +39,46 @@ def _parse_dim(dim):
 
 
 class Energy(torch.nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim: Union[int, Sequence[int], Sequence[Sequence[int]]]):
+        """
+        Base class for all energy models.
+
+        It supports energies defined over:
+            - simple vector states of shape [..., D]
+            - tensor states of shape [..., D1, D2, ..., Dn]
+            - states composed of multiple tensors (x1, x2, x3, ...)
+              where each xi is of form [..., D1, D2, ...., Dn]
+
+        Each input can have multiple batch dimensions,
+        so a final state could have shape
+            ([B1, B2, ..., Bn, D1, D2, ..., Dn],
+             ...,
+             [B1, B2, ..., Bn, D'1, ..., D'1n]).
+
+        which would return an energy tensor with shape
+            ([B1, B2, ..., Bn, 1]).
+
+        Forces are computed for each input by default.
+        Here the convention is followed, that forces will have
+        the same shape as the input state.
+
+        To define the state shape, the parameter `dim` has to
+        be of the following form:
+            - an integer, e.g. d = 5
+                then each event is a simple vector state
+                of shape [..., 5]
+            - a non-empty list of integers, e.g. d = [3, 6, 7]
+                then each event is a tensor state of shape [..., 3, 6, 7]
+            - a list of len > 1 containing non-empty integer lists,
+                e.g. d = [[1, 3], [5, 3, 6]]. Then each event is
+                a tuple of tensors of shape ([..., 1, 3], [..., 5, 3, 6])
+
+        Parameters:
+        ----------
+        dim: Union[int, Sequence[int], Sequence[Sequence[int]]]
+            The event shape of the states for which energies/forces ar computed.
+
+        """
         super().__init__()
         self._event_shapes = _parse_dim(dim)
 
@@ -50,7 +90,7 @@ class Energy(torch.nn.Module):
                 "Therefore there exists no coherent way to define the dimension of an event."
                 "Consider using Energy.event_shapes instead."
             )
-        elif len(self._event_shape) > 0:
+        elif len(self._event_shapes) > 0:
             warnings.warn(
                 "This Energy instance is defined on multidimensional events. "
                 "Therefore, its Energy.dim is distributed over multiple tensor dimensions. "
@@ -79,16 +119,61 @@ class Energy(torch.nn.Module):
     def energy(self, *xs, temperature=1.0, **kwargs):
         assert len(xs) == len(
             self._event_shapes
-        ), f"expected {len(self._event_shapes)} arguments but only received {len(xs)}"
+        ), f"Expected {len(self._event_shapes)} arguments but only received {len(xs)}"
+        batch_shape = xs[0].shape[: -len(self._event_shapes[0])]
         for i, (x, s) in enumerate(zip(xs, self._event_shapes)):
+            assert x.shape[: -len(s)] == batch_shape, (
+                f"Inconsistent batch shapes."
+                f"Input at index {i} has batch shape {x.shape[:-len(s)]}"
+                f"however input at index 0 has batch shape {batch_shape}."
+            )
             assert (
-                len(x.shape) > 0 and x.shape[1:] == s
-            ), f"input at index {i} as wrong shape {x.shape[1:]} instead of {s}"
+                x.shape[-len(s) :] == s
+            ), f"Input at index {i} as wrong shape {x.shape[-len(s):]} instead of {s}"
         return self._energy(*xs, **kwargs) / temperature
 
     def force(
-        self, *xs, temperature=1.0, with_grad=True, ignore_indices=None, **kwargs
+        self,
+        *xs: Sequence[torch.Tensor],
+        temperature: float = 1.0,
+        ignore_indices: Optional[Sequence[int]] = None,
+        no_grad: Union[bool, Sequence[int]] = False,
+        **kwargs,
     ):
+        """
+        Computes forces with respect to the input tensors.
+
+        If states are tuples of tensors, it returns a tuple of forces for each input tensor.
+        If states are simple tensors / vectors it returns a single forces.
+
+        Depending on the context it might be unnecessary to compute all input forces.
+        For this case `ignore_indices` denotes those input tensors for which no forces.
+        are to be computed.
+
+        E.g. by setting `ignore_indices = [1]` the result of `energy.force(x, y, z)`
+        will be `(fx, None, fz)`.
+
+        Furthermore, the forces will allow for taking high-order gradients by default.
+        If this is unwanted, e.g. to save memory it can be turned off by setting `no_grad=True`.
+        If higher-order gradients should be ignored for only a subset of inputs it can
+        be specified by passing a list of ignore indices to `no_grad`.
+
+        E.g. by setting `no_grad = [1]` the result of `energy.force(x, y, z)`
+        will be `(fx, fy, fz)`, where `fx` and `fz` allow for taking higher order gradients
+        and `fy` will not.
+
+        Parameters:
+        -----------
+        xs: *torch.Tensor
+            Input tensor(s)
+        temperature: float
+            Temperature at which to compute forces
+        ignore_indices: Sequence[int]
+            Which inputs should be skipped in the force computation
+        no_grad: Union[bool, Sequence[int]]
+            Either specifies whether higher-order gradients should be computed at all,
+            or specifies which inputs to leave out when computing higher-order gradients.
+        """
         if ignore_indices is None:
             ignore_indices = []
 
@@ -106,6 +191,10 @@ class Energy(torch.nn.Module):
 
             for i, x in enumerate(xs):
                 if i not in ignore_indices:
+                    if isinstance(no_grad, bool):
+                        with_grad = not no_grad
+                    else:
+                        with_grad = i not in no_grad
                     force = -torch.autograd.grad(
                         energy.sum(), x, create_graph=with_grad,
                     )[0]
@@ -114,6 +203,7 @@ class Energy(torch.nn.Module):
                 else:
                     forces.append(None)
 
+        forces = (*forces,)
         if len(self._event_shapes) == 1:
             forces = forces[0]
         return forces

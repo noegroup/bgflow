@@ -75,8 +75,8 @@ def test_energy_event_parser():
     assert not _is_sequence_of_non_empty_sequences_of_integers([[10, 10, 10]])
 
 
-def test_energy_event_types():
-    n_samples = 1000
+@pytest.mark.parametrize("batch", [[23], [23, 71], [23, 71, 13]])
+def test_energy_event_types(batch):
 
     envs = [torch.no_grad, torch.enable_grad]
     for env in envs:
@@ -85,7 +85,7 @@ def test_energy_event_types():
             # test single dimension input
             dim = 11
             dummy = DummyEnergy(dim)
-            x = torch.randn(n_samples, dim)
+            x = torch.randn(*batch, dim)
             f = dummy.force(x)
             assert torch.allclose(-x, f)
             assert dummy.dim == 11
@@ -102,7 +102,7 @@ def test_energy_event_types():
             # test tensor input
             shape = [11, 7, 4, 3]
             dummy = DummyEnergy(shape)
-            x = torch.randn(n_samples, *shape)
+            x = torch.randn(*batch, *shape)
             f = dummy.force(x)
             assert torch.allclose(-x, f)
             assert dummy.dim == 11 * 7 * 4 * 3
@@ -119,7 +119,7 @@ def test_energy_event_types():
             # test multi-tensor input
             shapes = [[11, 7], [5, 3], [13, 17]]
             dummy = DummyEnergy(shapes)
-            x, y, z = [torch.randn(n_samples, *shape) for shape in shapes]
+            x, y, z = [torch.randn(*batch, *shape) for shape in shapes]
             fx, fy, fz = dummy.force(x, y, z)
             assert all(torch.allclose(-x, f) for (x, f) in zip([x, y, z], [fx, fy, fz]))
             fx, fy, fz = dummy.force(x, y, z, ignore_indices=[1])
@@ -127,19 +127,46 @@ def test_energy_event_types():
                 torch.allclose(-x, f) for (x, f) in zip([x, z], [fx, fz])
             )
 
-            # this should fail
+            # this should fail: inconsistent batch dimension
             failed = False
             try:
-                dummy.dim
+                batches = [[5, 7], [5, 7], [5, 6]]
+                x, y, z = [
+                    torch.randn(*batch, *shape)
+                    for (batch, shape) in zip(batches, shapes)
+                ]
+                fx, fy, fz = dummy.force(x, y, z)
             except AssertionError:
                 failed = True
             assert failed
 
-            # this should fail
+            # this should fail: wrong input shapes
+            failed = False
+            try:
+                batches = [[5, 7], [5, 7], [5, 7]]
+                x, y, z = [
+                    torch.randn(*batch, *shape)
+                    for (batch, shape) in zip(batches, shapes)
+                ]
+                y = y[..., :-1]
+                fx, fy, fz = dummy.force(x, y, z)
+            except AssertionError:
+                failed = True
+            assert failed
+
+            # this should fail: dim not defined for multiple tensor input
+            failed = False
+            try:
+                dummy.dim
+            except ValueError:
+                failed = True
+            assert failed
+
+            # this should fail: single event_shape is not defined for multipe tensor input
             failed = False
             try:
                 dummy.event_shape
-            except AssertionError:
+            except ValueError:
                 failed = True
             assert failed
 
@@ -162,7 +189,7 @@ def test_energy_event_types():
             # test that `requires_grad` state of input vars stays preserved
             shapes = [[11, 7], [5, 3], [13, 17]]
             dummy = DummyEnergy(shapes)
-            x, y, z = [torch.randn(n_samples, *shape) for shape in shapes]
+            x, y, z = [torch.randn(*batch, *shape) for shape in shapes]
             x.requires_grad_(True)
             y.requires_grad_(False)
             z.requires_grad_(False)
@@ -175,7 +202,7 @@ def test_energy_event_types():
             # test for singular shapes in multi-tensor setting
             shapes = [[11], [5], [13]]
             dummy = DummyEnergy(shapes)
-            x, y, z = [torch.randn(n_samples, *shape) for shape in shapes]
+            x, y, z = [torch.randn(*batch, *shape) for shape in shapes]
             fx, fy, fz = dummy.force(x, y, z)
             assert all(torch.allclose(-x, f) for (x, f) in zip([x, y, z], [fx, fy, fz]))
             fx, fy, fz = dummy.force(x, y, z, ignore_indices=[1])
