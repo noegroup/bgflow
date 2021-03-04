@@ -15,13 +15,20 @@ def test_lennard_jones_energy_torch():
 
 
 @pytest.mark.parametrize("oscillator", [True, False])
-def test_lennard_jones_potential(oscillator):
+@pytest.mark.parametrize("two_event_dims", [True, False])
+def test_lennard_jones_potential(oscillator, two_event_dims):
     eps = 5.
 
     # 2 particles in 3D
-    lj_pot = LennardJonesPotential(dim=6, n_particles=2, eps=eps, rm=2.0, oscillator=oscillator, oscillator_scale=1.)
+    lj_pot = LennardJonesPotential(
+        dim=6, n_particles=2, eps=eps, rm=2.0,
+        oscillator=oscillator, oscillator_scale=1.,
+        two_event_dims=two_event_dims
+    )
 
     data3d = torch.tensor([[[-1., 0, 0], [1, 0, 0]]])
+    if not two_event_dims:
+        data3d = data3d.view(-1, 6)
     energy3d = torch.tensor([- eps])
     if oscillator:
         energy3d += 1
@@ -29,9 +36,15 @@ def test_lennard_jones_potential(oscillator):
     assert torch.allclose(energy3d, lj_energy_3d)
 
     # 3 particles in 2D
-    lj_pot = LennardJonesPotential(dim=6, n_particles=3, eps=eps, rm=1.0, oscillator=oscillator, oscillator_scale=1.)
+    lj_pot = LennardJonesPotential(
+        dim=6, n_particles=3, eps=eps, rm=1.0,
+        oscillator=oscillator, oscillator_scale=1.,
+        two_event_dims = two_event_dims
+    )
     h = np.sqrt(0.75)
     data2d = torch.tensor([[[0, 2 / 3 * h], [0.5, -1 / 3 * h], [-0.5, -1 / 3 * h]]], dtype=torch.float)
+    if not two_event_dims:
+        data2d = data2d.view(-1, 6)
     energy2d = torch.tensor([- 3 * eps])
     if oscillator:
         energy2d += 0.5 * (data2d ** 2).sum()
