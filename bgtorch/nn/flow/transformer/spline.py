@@ -8,9 +8,19 @@ __all__ = [
 
 
 class ConditionalSplineTransformer(Transformer):
-    def __init__(self, params_net: torch.nn.Module, is_circular: bool):
+    def __init__(
+        self,
+        params_net: torch.nn.Module,
+        is_circular: bool = False,
+        left: float = 0.0,
+        right: float = 1.0,
+        bottom: float = 0.0,
+        top: float = 1.0,
+    ):
         """
         Spline transformer for variables defined in [0, 1].
+
+        Uses bayesiains/nflows under the hood.
 
         Parameters:
         -----------
@@ -23,6 +33,10 @@ class ConditionalSplineTransformer(Transformer):
         super().__init__()
         self._params_net = params_net
         self._is_circular = is_circular
+        self._left = left
+        self._right = right
+        self._bottom = bottom
+        self._top = top
 
     def _compute_params(self, x, y_dim):
         params = self._params_net(x)
@@ -39,12 +53,32 @@ class ConditionalSplineTransformer(Transformer):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(y, widths, heights, slopes, inverse=True)
+        z, dlogp = rational_quadratic_spline(
+            y,
+            widths,
+            heights,
+            slopes,
+            inverse=True,
+            left=self._left,
+            right=self._right,
+            top=self._top,
+            bottom=self._bottom,
+        )
         return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _inverse(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(y, widths, heights, slopes, inverse=False)
+        z, dlogp = rational_quadratic_spline(
+            y,
+            widths,
+            heights,
+            slopes,
+            inverse=False,
+            left=self._left,
+            right=self._right,
+            top=self._top,
+            bottom=self._bottom,
+        )
         return z, dlogp.sum(dim=-1, keepdim=True)
