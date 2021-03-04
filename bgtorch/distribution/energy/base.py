@@ -17,8 +17,7 @@ def _is_sequence_of_non_empty_sequences_of_integers(x):
     return (
         isinstance(x, _Sequence)
         and len(x) > 1
-        and all(isinstance(y, _Sequence) and (len(y)) > 0 for y in x)
-        and all(isinstance(z, int) for y in x for z in y)
+        and all(_is_non_empty_sequence_of_integers(y) for y in x)
     )
 
 
