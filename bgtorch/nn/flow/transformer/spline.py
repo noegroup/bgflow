@@ -1,253 +1,50 @@
-"""Neural spline flows;
-adapted from
-https://github.com/bayesiains/nsf/blob/master/nde/transforms/splines/rational_quadratic.py
-(MIT License)
-
-"""
-
 import torch
 
 from .base import Transformer
-from torch.nn import functional as F
 
-import numpy as np
-
-DEFAULT_MIN_BIN_WIDTH = 1e-3
-DEFAULT_MIN_BIN_HEIGHT = 1e-3
-DEFAULT_MIN_DERIVATIVE = 1e-3
+__all__ = [
+    "ConditionalSplineTransformer",
+]
 
 
-__all__ = ["ConditionalSplineTransform", "rational_quadratic_spline", "unconstrained_rational_quadratic_spline"]
-
-
-class ConditionalSplineTransform(Transformer):
-    """ Advanced transformer based on rational quadratic splines (see NSF paper)"""
-
-    def __init__(self,
-                 n_bins: int,
-                 width_net: torch.nn.Module,
-                 height_net: torch.nn.Module,
-                 slope_net: torch.nn.Module,
-                 is_circular: bool = False,
-                 left: float = 0.,
-                 right: float = 1.,
-                 top: float = 0.,
-                 bottom: float = 1.,
-                 tail: float = 1.):
+class ConditionalSplineTransformer(Transformer):
+    def __init__(self, params_net: torch.nn.Module, is_circular: bool):
         """
-            n_bins: number of spline knot points
-            width_net: computes x difference between knot points
-                       output must be `dim * n_bins`
-            height_net: computes y difference between knot points
-                        output must be `dim * n_bins`
-            slope_net: computes slope at knot points
-                       output must be `dim * (n_bins + 1)`
-            is_circular: True if target value is an angle
-            tail: defines value after which splines are linearly interpolated
-                  should be set to something like `max(data.abs())`
+        Spline transformer for variables defined in [0, 1].
+
+        Parameters:
+        -----------
+        params_net: torch.nn.Module
+            Computes the transformation parameters for `y` conditioned
+            on `x`. Input dimension must be `x.shape[-1]`. Output
+            dimension must be `y.shape[-1] * 3` if splines are circular
+            and `y.shape[-1] * 3 + 1` if splines are defined on [0, 1]
         """
         super().__init__()
-        self._n_bins = n_bins
-        self._width_net = width_net
-        self._height_net = height_net
-        self._slope_net = slope_net
+        self._params_net = params_net
         self._is_circular = is_circular
-        self._tail = tail
-        self._left = left
-        self._top = top
-        self._bottom = bottom
-        self._right = right
 
-    def _compute_params(self, x: torch.Tensor):
-        width = self._width_net(x).view(x.shape[0], -1, self._n_bins)
-        height = self._height_net(x).view(x.shape[0], -1, self._n_bins)
-        slope = self._slope_net(x).view(x.shape[0], -1, self._n_bins + 1)
+    def _compute_params(self, x, y_dim):
+        params = self._params_net(x)
+        params = params.view(x.shape[0], y_dim, -1)
         if self._is_circular:
-            slope[..., -1] = slope[..., 0]
-        return width, height, slope
-
-    def _forward(self, x: torch.Tensor, y: torch.Tensor, *args, **kwargs):
-        width, height, slope = self._compute_params(x)
-        if self._is_circular:
-            y, dlogp = rational_quadratic_spline(
-                y.clamp(self._left, self._right), width, height, slope,
-                left=self._left, right=self._right,
-                top=self._top, bottom=self._bottom
-            )
+            widths, heights, slopes = torch.chunk(params, 3, dim=-1)
+            slopes = torch.cat([slopes, slopes[..., [0]]], dim=-1)
         else:
-            y, dlogp = unconstrained_rational_quadratic_spline(
-                y, width, height, slope,
-                tail_bound=self._tail
-            )
-        return y.clamp(self._bottom, self._top), dlogp.sum(dim=-1, keepdim=True)
+            widths, heights = torch.chunk(params[..., : 2 * y_dim], 2, dim=-1)
+            slopes = params[..., 2 * y_dim :]
+        return widths, heights, slopes
 
-    def _inverse(self, x: torch.Tensor, y: torch.Tensor, *args, **kwargs):
-        width, height, slope = self._compute_params(x)
-        if self._is_circular:
-            y, dlogp = rational_quadratic_spline(
-                y.clamp(self._bottom, self._top), width, height, slope,
-                left=self._left, right=self._right,
-                top=self._top, bottom=self._bottom,
-                inverse=True
-            )
-        else:
-            y, dlogp = unconstrained_rational_quadratic_spline(
-                y, width, height, slope,
-                tail_bound=self._tail,
-                inverse=True
-            )
-        return y.clamp(self._left, self._right), dlogp.sum(dim=-1, keepdim=True)
+    def _forward(self, x, y, *args, **kwargs):
+        from nflows.transforms.splines import rational_quadratic_spline
 
+        widths, heights, slopes = self._compute_params(x, y.shape[-1])
+        z, dlogp = rational_quadratic_spline(y, widths, heights, slopes, inverse=True)
+        return z, dlogp.sum(dim=-1, keepdim=True)
 
-def unconstrained_rational_quadratic_spline(inputs,
-                                            unnormalized_widths,
-                                            unnormalized_heights,
-                                            unnormalized_derivatives,
-                                            inverse=False,
-                                            tails='linear',
-                                            tail_bound=1.,
-                                            min_bin_width=DEFAULT_MIN_BIN_WIDTH,
-                                            min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
-                                            min_derivative=DEFAULT_MIN_DERIVATIVE):
-    inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
-    outside_interval_mask = ~inside_interval_mask
+    def _inverse(self, x, y, *args, **kwargs):
+        from nflows.transforms.splines import rational_quadratic_spline
 
-    outputs = torch.zeros_like(inputs)
-    logabsdet = torch.zeros_like(inputs)
-
-    if tails == 'linear':
-        unnormalized_derivatives = F.pad(unnormalized_derivatives, pad=(1, 1))
-        constant = np.log(np.exp(1 - min_derivative) - 1)
-        unnormalized_derivatives[..., 0] = constant
-        unnormalized_derivatives[..., -1] = constant
-
-        outputs[outside_interval_mask] = inputs[outside_interval_mask]
-        logabsdet[outside_interval_mask] = 0
-    else:
-        raise RuntimeError('{} tails are not implemented.'.format(tails))
-
-    outputs[inside_interval_mask], logabsdet[inside_interval_mask] = rational_quadratic_spline(
-        inputs=inputs[inside_interval_mask],
-        unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
-        unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
-        unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
-        inverse=inverse,
-        left=-tail_bound, right=tail_bound, bottom=-tail_bound, top=tail_bound,
-        min_bin_width=min_bin_width,
-        min_bin_height=min_bin_height,
-        min_derivative=min_derivative
-    )
-
-    return outputs, logabsdet
-
-
-def rational_quadratic_spline(inputs,
-                              unnormalized_widths,
-                              unnormalized_heights,
-                              unnormalized_derivatives,
-                              inverse=False,
-                              left=0., right=1., bottom=0., top=1.,
-                              min_bin_width=DEFAULT_MIN_BIN_WIDTH,
-                              min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
-                              min_derivative=DEFAULT_MIN_DERIVATIVE):
-    if torch.min(inputs) < left or torch.max(inputs) > right:
-        raise ValueError("Input outside domain")
-
-    num_bins = unnormalized_widths.shape[-1]
-
-    if min_bin_width * num_bins > 1.0:
-        raise ValueError('Minimal bin width too large for the number of bins')
-    if min_bin_height * num_bins > 1.0:
-        raise ValueError('Minimal bin height too large for the number of bins')
-
-    widths = F.softmax(unnormalized_widths, dim=-1)
-    widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
-    cumwidths = torch.cumsum(widths, dim=-1)
-    cumwidths = F.pad(cumwidths, pad=(1, 0), mode='constant', value=0.0)
-    cumwidths = (right - left) * cumwidths + left
-    cumwidths[..., 0] = left
-    cumwidths[..., -1] = right
-    widths = cumwidths[..., 1:] - cumwidths[..., :-1]
-
-    derivatives = min_derivative + F.softplus(unnormalized_derivatives)
-
-    heights = F.softmax(unnormalized_heights, dim=-1)
-    heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
-    cumheights = torch.cumsum(heights, dim=-1)
-    cumheights = F.pad(cumheights, pad=(1, 0), mode='constant', value=0.0)
-    cumheights = (top - bottom) * cumheights + bottom
-    cumheights[..., 0] = bottom
-    cumheights[..., -1] = top
-    heights = cumheights[..., 1:] - cumheights[..., :-1]
-
-    if inverse:
-        bin_idx = searchsorted(cumheights, inputs)[..., None]
-    else:
-        bin_idx = searchsorted(cumwidths, inputs)[..., None]
-
-    input_cumwidths = cumwidths.gather(-1, bin_idx)[..., 0]
-    input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
-
-    input_cumheights = cumheights.gather(-1, bin_idx)[..., 0]
-    delta = heights / widths
-    input_delta = delta.gather(-1, bin_idx)[..., 0]
-
-    input_derivatives = derivatives.gather(-1, bin_idx)[..., 0]
-    input_derivatives_plus_one = derivatives[..., 1:].gather(-1, bin_idx)[..., 0]
-
-    input_heights = heights.gather(-1, bin_idx)[..., 0]
-
-    if inverse:
-        a = (((inputs - input_cumheights) * (input_derivatives
-                                             + input_derivatives_plus_one
-                                             - 2 * input_delta)
-              + input_heights * (input_delta - input_derivatives)))
-        b = (input_heights * input_derivatives
-             - (inputs - input_cumheights) * (input_derivatives
-                                              + input_derivatives_plus_one
-                                              - 2 * input_delta))
-        c = - input_delta * (inputs - input_cumheights)
-
-        discriminant = b.pow(2) - 4 * a * c
-        assert (discriminant >= 0).all()
-
-        root = (2 * c) / (-b - torch.sqrt(discriminant))
-        outputs = root * input_bin_widths + input_cumwidths
-
-        theta_one_minus_theta = root * (1 - root)
-        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
-                                     * theta_one_minus_theta)
-        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * root.pow(2)
-                                                     + 2 * input_delta * theta_one_minus_theta
-                                                     + input_derivatives * (1 - root).pow(2))
-        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-
-        return outputs, -logabsdet
-    else:
-        theta = (inputs - input_cumwidths) / input_bin_widths
-        theta_one_minus_theta = theta * (1 - theta)
-
-        numerator = input_heights * (input_delta * theta.pow(2)
-                                     + input_derivatives * theta_one_minus_theta)
-        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
-                                     * theta_one_minus_theta)
-        outputs = input_cumheights + numerator / denominator
-
-        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * theta.pow(2)
-                                                     + 2 * input_delta * theta_one_minus_theta
-                                                     + input_derivatives * (1 - theta).pow(2))
-        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-
-        return outputs, logabsdet
-
-
-def searchsorted(bin_locations, inputs, eps=1e-6):
-    bin_locations[..., -1] += eps
-    return torch.sum(
-        inputs[..., None] >= bin_locations,
-        dim=-1
-    ) - 1
-
-
-def select_item(items, index):
-    return items[..., index].diagonal(dim1=0, dim2=-1)
+        widths, heights, slopes = self._compute_params(x, y.shape[-1])
+        z, dlogp = rational_quadratic_spline(y, widths, heights, slopes, inverse=False)
+        return z, dlogp.sum(dim=-1, keepdim=True)
