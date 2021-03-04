@@ -121,10 +121,6 @@ class TruncatedNormalDistribution(Energy, Sampler):
         self.register_buffer("_lower_bound", lower_bound)
         self.assert_range = assert_range
 
-        # TODO: seems to be unused - remove?
-        #         self._phi_upper = self._standard_normal.cdf((upper_bound-mu)/sigma)
-        #         self._phi_lower = self._standard_normal.cdf((lower_bound-mu)/sigma)
-
         self._standard_normal = torch.distributions.normal.Normal(0.0, 1.0)
 
         if sampling_method == "rejection":
@@ -161,7 +157,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def _icdf_sampling(self, n_samples, temperature):
         sigma = self._sigma * np.sqrt(temperature)
-        u = torch.rand(n_samples, self.dim)
+        u = torch.rand(n_samples, self.dim).to(self._mu)
         r = (self._cdf_upper_bound - self._cdf_lower_bound) * u + self._cdf_lower_bound
         x = self._standard_normal.icdf(r) * sigma + self._mu
         return x
