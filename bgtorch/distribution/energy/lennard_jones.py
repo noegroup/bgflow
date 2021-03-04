@@ -14,7 +14,7 @@ def lennard_jones_energy_torch(r, eps=1.0, rm=1.0):
 class LennardJonesPotential(Energy):
     def __init__(
             self, dim, n_particles, eps=1.0, rm=1.0, oscillator=True, oscillator_scale=1.):
-        super().__init__(dim)
+        super().__init__([n_particles, dim//n_particles])
         self._n_particles = n_particles
         self._n_dims = self.dim // n_particles
 
