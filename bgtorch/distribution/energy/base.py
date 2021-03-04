@@ -89,7 +89,7 @@ class Energy(torch.nn.Module):
                 "Therefore there exists no coherent way to define the dimension of an event."
                 "Consider using Energy.event_shapes instead."
             )
-        elif len(self._event_shapes) > 0:
+        elif len(self._event_shapes[0]) > 1:
             warnings.warn(
                 "This Energy instance is defined on multidimensional events. "
                 "Therefore, its Energy.dim is distributed over multiple tensor dimensions. "
