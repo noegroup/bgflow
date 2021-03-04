@@ -96,7 +96,7 @@ class Energy(torch.nn.Module):
                 "Consider using Energy.event_shape instead.",
                 UserWarning,
             )
-        return torch.prod(torch.tensor(self.event_shape, dtype=int))
+        return int(torch.prod(torch.tensor(self.event_shape, dtype=int)))
 
     @property
     def event_shape(self):
