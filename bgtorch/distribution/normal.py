@@ -161,7 +161,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def _icdf_sampling(self, n_samples, temperature):
         sigma = self._sigma * np.sqrt(temperature)
-        u = torch.rand(n_samples, self.dim)
+        u = torch.rand(n_samples, self.dim).to(self._mu)
         r = (self._cdf_upper_bound - self._cdf_lower_bound) * u + self._cdf_lower_bound
         x = self._standard_normal.icdf(r) * sigma + self._mu
         return x
