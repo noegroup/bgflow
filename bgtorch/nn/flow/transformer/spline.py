@@ -31,14 +31,14 @@ class ConditionalSplineTransformer(Transformer):
             on `x`. Input dimension must be `x.shape[-1]`. Output
             dimension must be `y.shape[-1] * n_bins * 3` if splines are circular
             and `y.shape[-1] * (n_bins * 3 + 1)` if not.
-            The integer n_bins is inferred implicitly from the network output shape.
+            The integer `n_bins` is inferred implicitly from the network output shape.
         is_circular : bool
             If True, the boundaries are treated as periodic boundaries, i.e. the pdf is enforced to be continuous.
 
         Raises
         ------
         RuntimeError
-            If the params_net output does not have to correct shape.
+            If the `params_net` output does not have the correct shape.
 
         Notes
         -----
