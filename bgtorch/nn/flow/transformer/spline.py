@@ -24,13 +24,31 @@ class ConditionalSplineTransformer(Transformer):
 
         Uses bayesiains/nflows under the hood.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         params_net: torch.nn.Module
             Computes the transformation parameters for `y` conditioned
             on `x`. Input dimension must be `x.shape[-1]`. Output
             dimension must be `y.shape[-1] * n_bins * 3` if splines are circular
-            and `y.shape[-1] * n_bins * 3 + 1` if splines are defined on [0, 1]
+            and `y.shape[-1] * (n_bins * 3 + 1)` if not.
+            The integer n_bins is inferred implicitly from the network output shape.
+        is_circular : bool
+            If True, the boundaries are treated as periodic boundaries, i.e. the pdf is enforced to be continuous.
+
+        Raises
+        ------
+        RuntimeError
+            If the params_net output does not have to correct shape.
+
+        Notes
+        -----
+        This transform requires the nflows package to be installed.
+        It is available from PyPI and can be installed with `pip install nflows`.
+
+        References
+        ----------
+        C. Durkan, A. Bekasov, I. Murray, G. Papamakarios, Neural Spline Flows, NeurIPS 2019,
+        https://arxiv.org/abs/1906.04032.
         """
         super().__init__()
         self._params_net = params_net
@@ -43,12 +61,12 @@ class ConditionalSplineTransformer(Transformer):
     def _compute_params(self, x, y_dim):
         params = self._params_net(x)
         params = params.view(x.shape[0], y_dim, -1)
+        n_bins = params.shape[-1] // 3
         if self._is_circular:
-            widths, heights, slopes = torch.chunk(params, 3, dim=-1)
+            widths, heights, slopes = torch.split(params, [n_bins, n_bins, n_bins], dim=-1)
             slopes = torch.cat([slopes, slopes[..., [0]]], dim=-1)
         else:
-            widths, heights = torch.chunk(params[..., : 2 * y_dim], 2, dim=-1)
-            slopes = params[..., 2 * y_dim :]
+            widths, heights, slopes = torch.split(params, [n_bins, n_bins, n_bins+1], dim=-1)
         return widths, heights, slopes
 
     def _forward(self, x, y, *args, **kwargs):
