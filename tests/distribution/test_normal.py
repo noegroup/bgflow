@@ -31,7 +31,7 @@ def test_energy(device, dtype):
     mean = torch.ones(dim).to(cov)
 
     normal_distribution = NormalDistribution(dim, mean=mean, cov=cov)
-    energy = normal_distribution.energy(torch.tensor([1, 2]))
+    energy = normal_distribution.energy(torch.tensor([1, 2]).to(mean))
     assert energy.cpu().numpy() == pytest.approx(
         2 / 2 * np.log(2 * np.pi) + 0.5 * 1, abs=1e-3, rel=0
     )
@@ -50,8 +50,7 @@ def test_truncated_normal_distribution_tensors(device, dtype, assert_range, samp
     """Test with tensor parameters."""
     dim = 5
     tn = TruncatedNormalDistribution(
-        dim,
-        mu=1 + torch.rand(dim,),
+        mu=1 + torch.rand(dim, device=device, dtype=dtype),
         sigma=torch.rand(dim,),
         lower_bound=torch.rand(dim,),
         upper_bound=4 * torch.ones(dim,),

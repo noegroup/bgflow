@@ -96,41 +96,47 @@ class TruncatedNormalDistribution(Energy, Sampler):
         assert_range : bool
             Whether to raise an error when `energy` is called on input that falls out of bounds.
             Otherwise the energy is set to infinity.
+        sampling_method : str
+            If "icdf", sample by passing a uniform sample through the inverse cdf (only available when
+            the bounds are both finite). When one of the bounds is infinite, the sampling method
+            is automatically set to "rejection".
+            If "rejection", sample by rejecting normal distributed samples that fall out of bounds.
     """
 
     def __init__(
         self,
-        dim,
-        mu=torch.tensor(0.0),
+        mu,
         sigma=torch.tensor(1.0),
         lower_bound=torch.tensor(0.0),
         upper_bound=torch.tensor(np.infty),
         assert_range=True,
         sampling_method="icdf",
     ):
-        super(TruncatedNormalDistribution, self).__init__(dim=dim)
         for t in [mu, sigma, lower_bound, upper_bound]:
             assert type(t) is torch.Tensor
             if type(t) is torch.Tensor:
-                assert t.shape in (torch.Size([]), (1,), (dim,))
+                assert t.shape in (torch.Size([]), (1,), mu.shape)
 
-        self._dim = dim
+        super(TruncatedNormalDistribution, self).__init__(mu.shape)
+        if not (torch.isfinite(lower_bound).all() and torch.isfinite(upper_bound).all()):
+            sampling_method = "rejection"
+
         self.register_buffer("_mu", mu)
-        self.register_buffer("_sigma", sigma)
-        self.register_buffer("_upper_bound", upper_bound)
-        self.register_buffer("_lower_bound", lower_bound)
+        self.register_buffer("_sigma", sigma.to(mu))
+        self.register_buffer("_upper_bound", upper_bound.to(mu))
+        self.register_buffer("_lower_bound", lower_bound.to(mu))
         self.assert_range = assert_range
 
-        self._standard_normal = torch.distributions.normal.Normal(0.0, 1.0)
+        self._standard_normal = torch.distributions.normal.Normal(torch.tensor(0.0).to(mu), torch.tensor(1.0).to(mu))
 
         if sampling_method == "rejection":
             self._sample_impl = self._rejection_sampling
         elif sampling_method == "icdf":
             self._sample_impl = self._icdf_sampling
-            self._alpha = (lower_bound - self._mu) / self._sigma
-            self._beta = (upper_bound - self._mu) / self._sigma
-            self._cdf_lower_bound = self._standard_normal.cdf(self._alpha)
-            self._cdf_upper_bound = self._standard_normal.cdf(self._beta)
+            alpha = (self._lower_bound - self._mu) / self._sigma
+            beta = (self._upper_bound - self._mu) / self._sigma
+            self.register_buffer("_cdf_lower_bound", self._standard_normal.cdf(alpha))
+            self.register_buffer("_cdf_upper_bound", self._standard_normal.cdf(beta))
         else:
             raise ValueError(f'Unknown sampling method "{sampling_method}"')
 
@@ -140,14 +146,14 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def _rejection_sampling(self, n_samples, temperature):
         sigma = self._sigma * np.sqrt(temperature)
-        samples = self._standard_normal.sample((n_samples, self.dim)) * sigma + self._mu
+        samples = self._standard_normal.sample((n_samples, *self.event_shape)) * sigma + self._mu
         while True:
             out_of_bounds = (samples > self._upper_bound) | (
                 samples < self._lower_bound
             )
             if torch.any(out_of_bounds):
                 new_samples = (
-                    self._standard_normal.sample((n_samples, self.dim)) * sigma
+                    self._standard_normal.sample((n_samples, *self.event_shape)) * sigma
                     + self._mu
                 )
                 samples[out_of_bounds] = new_samples[out_of_bounds]
@@ -157,7 +163,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def _icdf_sampling(self, n_samples, temperature):
         sigma = self._sigma * np.sqrt(temperature)
-        u = torch.rand(n_samples, self.dim).to(self._mu)
+        u = torch.rand(n_samples, *self.event_shape).to(self._mu)
         r = (self._cdf_upper_bound - self._cdf_lower_bound) * u + self._cdf_lower_bound
         x = self._standard_normal.icdf(r) * sigma + self._mu
         return x
