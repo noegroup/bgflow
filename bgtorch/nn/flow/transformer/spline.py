@@ -18,7 +18,9 @@ class ConditionalSplineTransformer(Transformer):
         top: float = 1.0,
     ):
         """
-        Spline transformer for variables defined in [0, 1].
+        Spline transformer transforming variables in [left, right) into variables in [bottom, top).
+
+        Uses `n_bins` spline nodes to define a inverse CDF transform on the interval.
 
         Uses bayesiains/nflows under the hood.
 
@@ -27,8 +29,8 @@ class ConditionalSplineTransformer(Transformer):
         params_net: torch.nn.Module
             Computes the transformation parameters for `y` conditioned
             on `x`. Input dimension must be `x.shape[-1]`. Output
-            dimension must be `y.shape[-1] * 3` if splines are circular
-            and `y.shape[-1] * 3 + 1` if splines are defined on [0, 1]
+            dimension must be `y.shape[-1] * n_bins * 3` if splines are circular
+            and `y.shape[-1] * n_bins * 3 + 1` if splines are defined on [0, 1]
         """
         super().__init__()
         self._params_net = params_net
