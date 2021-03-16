@@ -4,6 +4,9 @@ import numpy as np
 from .base import Flow
 
 
+__all__ = ["AffineFlow"]
+
+
 class AffineFlow(Flow):
     def __init__(self, n_dims, use_scaling=True, use_translation=True):
         super().__init__()
@@ -28,7 +31,7 @@ class AffineFlow(Flow):
         if self._mu is not None:
             x = x + self._mu.to(x)
         return x, dlogp
-    
+
     def _inverse(self, x, **kwargs):
         assert x.shape[-1] == self._n_dims, "dimension `x` does not match `n_dims`"
         dlogp = torch.zeros(*x.shape[:-1], 1).to(x)

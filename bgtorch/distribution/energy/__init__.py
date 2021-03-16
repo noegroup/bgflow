@@ -1,3 +1,4 @@
-from .base import Energy
-from .double_well import DoubleWellEnergy
-from .lennard_jones import LennardJonesPotential
+from .base import *
+from .double_well import *
+from .particles import *
+from .lennard_jones import *

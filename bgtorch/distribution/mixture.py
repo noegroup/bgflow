@@ -6,6 +6,9 @@ from .sampling import Sampler
 from ..utils.types import assert_numpy
 
 
+__all__ = ["MixtureDistribution"]
+
+
 class MixtureDistribution(Energy, Sampler):
     def __init__(self, components, unnormed_log_weights=None, trainable_weights=False):
         assert all([c.dim == components[0].dim for c in components]),\

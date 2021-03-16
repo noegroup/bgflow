@@ -3,6 +3,7 @@ import torch
 from .base import Flow
 
 #TODO: write docstrings
+__all__ = ["InverseFlow"]
 
 
 class InverseFlow(Flow):

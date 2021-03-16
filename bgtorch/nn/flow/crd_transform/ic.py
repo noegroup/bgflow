@@ -49,8 +49,6 @@ def xyz2ic(x, Z_indices, torsion_cut=None):
         x[:, atom_indices[torsion_indices[:, 3]]],
     )
 
-    # print(xbonds, xangles, xtorsions)
-
     if torsion_cut is not None:
         xtorsions = torch.where(
             xtorsions < torsion_cut, xtorsions + 2 * np.pi, xtorsions
@@ -87,7 +85,7 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
 
     atom_indices = np.arange(3 * (Z_indices.max() + 1)).reshape((-1, 3))
 
-    log_det_jac = torch.zeros(batchsize, 1)
+    log_det_jac = torch.zeros(batchsize, 1).to(x)
 
     global_transform = Z_indices.min() < 0
     if global_transform:
@@ -109,7 +107,6 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
 
         # This is only 1-dimensional. Summing up directly:
         jac = batch_jacobian(bondlength, arg)
-        # print(jac)
         log_det_jac += jac[:, :, 0]
 
         # 2. bond/angle (input: x/z axes)
@@ -130,7 +127,6 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
 
         # now we have 2x2 matrices
         jac = batch_jacobian(out, arg) + eps * torch.eye(2).unsqueeze(0)
-        # print(jac)
         log_det_jac += torch.slogdet(jac)[-1].unsqueeze(-1)
     else:
         start_rest = 0  # remaining atoms start now
@@ -151,8 +147,7 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
     out = out.reshape(-1, 3)
 
     # 3x3 matrices
-    jac = batch_jacobian(out, arg) + eps * torch.eye(3).unsqueeze(0)
-    # print(jac)
+    jac = batch_jacobian(out, arg) + eps * torch.eye(3).unsqueeze(0).to(x)
     log_det_jac_ = torch.slogdet(jac)[-1]  # (batchsize * natoms, )
     log_det_jac_ = log_det_jac_.reshape(batchsize, -1)  # (batchsize, natoms)
     log_det_jac_ = log_det_jac_.sum(axis=1, keepdim=True)
@@ -304,7 +299,7 @@ def ics2xyz_local_log_det_jac_decomposed(
 
     """
     batchsize = all_ics.shape[0]
-    log_det_jac_tot = torch.zeros(batchsize, 1)
+    log_det_jac_tot = torch.zeros(batchsize, 1).to(all_ics)
     xyz = cartesian_xyz
     istart = 0
     for Z_indices in all_Z_indices:
@@ -330,7 +325,7 @@ def periodic_angle_loss(angles):
     and returns the sum over all angles.
 
     """
-    zero = torch.zeros(1, 1)
+    zero = torch.zeros(1, 1).to(angles)
     positive_loss = torch.sum(
         torch.where(angles > np.pi, angles - np.pi, zero) ** 2, dim=-1, keepdim=True
     )
@@ -397,20 +392,25 @@ class MixedCoordinateTransform(Flow):
         cart_X0mean, cart_Twhiten, cart_Tblacken, std = _pca(
             X0_np[:, self.cart_indices], keepdims=self.cart_indices.size - remove_dof
         )
-        self.cart_X0mean = torch.tensor(cart_X0mean)
-        self.cart_Twhiten = torch.tensor(cart_Twhiten)
-        self.cart_Tblacken = torch.tensor(cart_Tblacken)
-        self.std = torch.tensor(std)
+        self.register_buffer("cart_X0mean", torch.tensor(cart_X0mean))
+        self.register_buffer("cart_Twhiten", torch.tensor(cart_Twhiten))
+        self.register_buffer("cart_Tblacken", torch.tensor(cart_Tblacken))
+        self.register_buffer("std", torch.tensor(std))
 
         if torch.any(self.std <= 0):
             raise ValueError(
                 "Cannot construct whiten layer because trying to keep nonpositive eigenvalues."
             )
-        self.pca_log_det_xz = -torch.sum(torch.log(self.std), dim=0, keepdim=True)
+        self.register_buffer(
+            "pca_log_det_xz", -torch.sum(torch.log(self.std), dim=0, keepdim=True)
+        )
         # Compute IC moments for normalization
-        self.ic_means, self.ic_stds, self.torsion_cut = icmoments(
+        ic_means, ic_stds, torsion_cut = icmoments(
             self.Z_indices, X0=X0ic, torsion_cut=torsion_cut
         )
+        self.register_buffer("ic_means", ic_means)
+        self.register_buffer("ic_stds", ic_stds)
+        self.register_buffer("torsion_cut", torsion_cut)
 
     def _xyz2ic(self, xyz):
         # split off Cartesian coordinates and perform whitening on them
@@ -425,9 +425,11 @@ class MixedCoordinateTransform(Flow):
         z = torch.cat([z_cart_signal, z_ics_norm], dim=1)
 
         # jacobian
-        log_det_jac = xyz2ic_log_det_jac(
-            xyz, self.Z_indices, eps=self.jacobian_regularizer
-        )  # IC part
+        with torch.enable_grad():
+            xyz.requires_grad_(True)
+            log_det_jac = xyz2ic_log_det_jac(
+                xyz, self.Z_indices, eps=self.jacobian_regularizer
+            )  # IC part
         log_det_jac += self.pca_log_det_xz  # PCA part
 
         return z, log_det_jac
@@ -457,13 +459,16 @@ class MixedCoordinateTransform(Flow):
         )
 
         # reconstruct remaining atoms using ICs + compute Jacobian
-        xyz, log_det_jac = ics2xyz_local_log_det_jac_decomposed(
-            z_ics,
-            self.batchwise_Z_indices,
-            xyz,
-            self.index2order,
-            eps=self.jacobian_regularizer,
-        )
+        with torch.enable_grad():
+            # xyz.requires_grad_(True)
+            z_ics.requires_grad_(True)
+            xyz, log_det_jac = ics2xyz_local_log_det_jac_decomposed(
+                z_ics,
+                self.batchwise_Z_indices,
+                xyz,
+                self.index2order,
+                eps=self.jacobian_regularizer,
+            )
         # Add PCA part
         log_det_jac -= self.pca_log_det_xz
 
@@ -514,7 +519,6 @@ def ics2xyz_global(ics, Z_indices):
 
     # reorganize indexes
     xyz = [xyz[i] for i in index2zorder]
-    # print(xyz)
     return torch.cat(xyz, dim=1)
 
 
@@ -567,12 +571,8 @@ def ics2xyz_local_log_det_jac(ics, Z_indices, index2zorder, xyz):
                 args[:, 2:3],
             )
         )
-        J = batch_jacobian(xyz[-1], args)
-        # print("J3", J)
-        res = torch.slogdet(J)[-1].unsqueeze(-1)
-        # print(res)
+        log_det_jac += torch.slogdet(batch_jacobian(xyz[-1], args))[-1].unsqueeze(-1)
 
-        log_det_jac += res
     return log_det_jac
 
 
@@ -641,12 +641,8 @@ def ics2xyz_global_log_det_jac(ics, Z_indices, global_transform=True):
         xyz.append(torch.cat([torch.zeros(batchsize, 2), args], dim=-1))
         z = xyz[-1][:, -1:]
 
-        J = batch_jacobian(z, args)
-        # print("J1", J)
+        log_det_jac += torch.slogdet(batch_jacobian(z, args))[-1].unsqueeze(-1)
 
-        res = torch.slogdet(J)[-1].unsqueeze(-1)
-        # print(res)
-        log_det_jac += res
         # third atom at x,0,z
         args = torch.cat([ics[:, 1:2], ics[:, 2:3]], dim=-1)
         xyz.append(
@@ -658,15 +654,9 @@ def ics2xyz_global_log_det_jac(ics, Z_indices, global_transform=True):
             )
         )
         xz = torch.stack([xyz[-1][:, 0], xyz[-1][:, 2]], dim=-1)
-        # print(xyz)
-        # print("kokolores", xyz[-1], args)
         #  + 1e-6*tf.eye(2, num_columns=2, batch_shape=(1,)
+        log_det_jac += torch.slogdet(batch_jacobian(xz, args))[-1].unsqueeze(-1)
 
-        J = batch_jacobian(xz, args)
-        # print("J2", J)
-        res = torch.slogdet(J)[-1].unsqueeze(-1)
-        # print(res)
-        log_det_jac += res
     # other atoms
     log_det_jac += ics2xyz_local_log_det_jac(
         ics[:, 3:], Z_indices[3:], index2zorder, xyz
@@ -691,8 +681,7 @@ class InternalCoordinatesTransformation(Flow):
     def _xyz2ic(self, xyz):
         # compute and normalize internal coordinates
         ics = xyz2ic(xyz, self.Z_indices, torsion_cut=self.torsion_cut)
-        ics_norm = ics
-        # ics_norm = (ics - self.ic_means) / self.ic_stds
+        ics_norm = (ics - self.ic_means) / self.ic_stds
 
         # Jacobian
         log_det_jac = xyz2ic_log_det_jac(xyz, self.Z_indices)
@@ -701,8 +690,7 @@ class InternalCoordinatesTransformation(Flow):
 
     def _ic2xyz(self, ics):
         # unnormalize
-        # ics_unnorm = ics * self.ic_stds + self.ic_means
-        ics_unnorm = ics
+        ics_unnorm = ics * self.ic_stds + self.ic_means
         # reconstruct remaining atoms using ICs
         xyz = ics2xyz_global(ics_unnorm, self.Z_indices)
 
@@ -716,7 +704,7 @@ class InternalCoordinatesTransformation(Flow):
         )
 
         # Jacobian
-        log_det_jac = ics2xyz_global_log_det_jac(ics_unnorm, self.Z_indices)
+        log_det_jac = ics2xyz_global_log_det_jac(ics, self.Z_indices)
 
         # self.angle_loss = keras.layers.Lambda(lambda z: self.z2x(z)[1])(z)
         return xyz, log_det_jac

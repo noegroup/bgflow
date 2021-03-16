@@ -24,3 +24,10 @@ def device(request):
 def dtype(request, device):
     """Run a test case in single and double precision."""
     return request.param
+
+
+@pytest.yield_fixture(params=[torch.enable_grad, torch.no_grad])
+def with_grad_and_no_grad(request):
+    """Run a test with and without torch grad enabled"""
+    with request.param():
+        yield

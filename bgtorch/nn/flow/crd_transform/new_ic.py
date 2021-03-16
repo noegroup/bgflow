@@ -14,6 +14,13 @@ from .ic_helper import (
 from .pca import WhitenFlow
 
 
+__all__ = [
+    "RelativeInternalCoordinatesTransformation",
+    "GlobalInternalCoordinateTransformation",
+    "MixedCoordinateTransformation"
+]
+
+
 def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
     """ computes the xyz coordinates from internal coordinates
         relative to points `p1`, `p2`, `p3` together with its
@@ -117,14 +124,32 @@ def slice_initial_atoms(z_matrix):
     return z_matrix[:, 0][order], z_matrix[s == 0]
 
 
+def normalize_torsions(torsions):
+    period = 2 * np.pi
+    torsions = (torsions + period / 2) / period
+    dlogp = -np.log(period) * (torsions.shape[-1])
+    return torsions, dlogp
+
+
 def normalize_angles(angles):
-    dlogp = -np.log(2 * np.pi) * (angles.shape[-1])
-    return (angles + np.pi) / (2 * np.pi), dlogp
+    period = np.pi
+    angles = angles / period
+    dlogp = -np.log(period) * (angles.shape[-1])
+    return angles, dlogp
+
+
+def unnormalize_torsions(torsions):
+    period = 2 * np.pi
+    torsions = torsions * (period) - period / 2
+    dlogp = np.log(period) * (torsions.shape[-1])
+    return torsions, dlogp
 
 
 def unnormalize_angles(angles):
-    dlogp = np.log(2 * np.pi) * (angles.shape[-1])
-    return angles * (2 * np.pi) - np.pi, dlogp
+    period = np.pi
+    angles = angles * period
+    dlogp = np.log(period) * (angles.shape[-1])
+    return angles, dlogp
 
 
 class ReferenceSystemTranformation(Flow):
@@ -244,7 +269,7 @@ class RelativeInternalCoordinatesTransformation(Flow):
         # transforms angles from [-pi, pi] to [0, 1]
         if self._normalize_angles:
             angles, dlogp_a = normalize_angles(angles)
-            torsions, dlogp_t = normalize_angles(torsions)
+            torsions, dlogp_t = normalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
         # compute volume change
@@ -261,7 +286,7 @@ class RelativeInternalCoordinatesTransformation(Flow):
         # transforms angles from [0, 1] to [-pi, pi]
         if self._normalize_angles:
             angles, dlogp_a = unnormalize_angles(angles)
-            torsions, dlogp_t = unnormalize_angles(torsions)
+            torsions, dlogp_t = unnormalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
         n_batch = x_fixed.shape[0]
@@ -388,7 +413,7 @@ class MixedCoordinateTransformation(Flow):
         fixed = data[:, fixed_atoms].view(n_data, -1)
         return WhitenFlow(fixed, keepdims=keepdims, whiten_inverse=False)
 
-    def _forward(self, x):
+    def _forward(self, x, *args, **kwargs):
         n_batch = x.shape[0]
         bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x)
         x_fixed = x_fixed.view(n_batch, -1)
@@ -396,7 +421,7 @@ class MixedCoordinateTransformation(Flow):
         dlogp = dlogp_rel + dlogp_ref
         return bonds, angles, torsions, z_fixed, dlogp
 
-    def _inverse(self, bonds, angles, torsions, z_fixed):
+    def _inverse(self, bonds, angles, torsions, z_fixed, *args, **kwargs):
         n_batch = z_fixed.shape[0]
         x_fixed, dlogp_ref = self._whiten(z_fixed, inverse=True)
         x_fixed = x_fixed.view(n_batch, -1, 3)
