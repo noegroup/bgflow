@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from .energy import Energy
-from .sampling import Sampler
+from .energy.base import Energy
+from .sampling.base import Sampler
 
 
 __all__ = ["NormalDistribution", "TruncatedNormalDistribution"]
@@ -14,7 +14,7 @@ def _is_symmetric_matrix(m):
 
 class NormalDistribution(Energy, Sampler):
     def __init__(self, dim, mean=None, cov=None):
-        super().__init__(dim)
+        super().__init__(dim=dim)
         self._has_mean = mean is not None
         if self._has_mean:
             assert len(mean.shape) == 1, "`mean` must be a vector"
@@ -117,7 +117,8 @@ class TruncatedNormalDistribution(Energy, Sampler):
             if type(t) is torch.Tensor:
                 assert t.shape in (torch.Size([]), (1,), mu.shape)
 
-        super(TruncatedNormalDistribution, self).__init__(mu.shape)
+        super().__init__(dim=mu.shape)
+
         if not (torch.isfinite(lower_bound).all() and torch.isfinite(upper_bound).all()):
             sampling_method = "rejection"
 

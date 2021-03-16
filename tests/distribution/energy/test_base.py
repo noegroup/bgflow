@@ -38,7 +38,7 @@ def test_energy_event_parser():
     assert not _is_sequence_of_non_empty_sequences_of_integers([10, 10])
     assert not _is_sequence_of_non_empty_sequences_of_integers([[], [10]])
     assert not _is_sequence_of_non_empty_sequences_of_integers(torch.Size([10, 10]))
-    assert not _is_sequence_of_non_empty_sequences_of_integers([[10, 10, 10]])
+    #assert not _is_sequence_of_non_empty_sequences_of_integers([[10, 10, 10]])
 
 
 @pytest.mark.parametrize("batch", [[23], [23, 71], [23, 71, 13]])

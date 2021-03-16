@@ -2,7 +2,7 @@
 import pytest
 import torch
 from torch.distributions import MultivariateNormal, Normal, Independent
-from bgtorch.distribution import Distribution, NormalDistribution
+from bgtorch.distribution import TorchDistribution, NormalDistribution
 
 
 def _random_mean_cov(dim, device, dtype):
@@ -20,7 +20,7 @@ def test_distribution_energy(dim, device, dtype):
     n_samples = 7
     mean, cov = _random_mean_cov(dim, device, dtype)
     samples = torch.randn((n_samples, dim)).to(device, dtype)
-    normal_trch = Distribution(MultivariateNormal(loc=mean, covariance_matrix=cov))
+    normal_trch = TorchDistribution(MultivariateNormal(loc=mean, covariance_matrix=cov))
     normal_bgtrch = NormalDistribution(dim, mean, cov)
     assert torch.allclose(normal_trch.energy(samples), normal_bgtrch.energy(samples), rtol=2e-2, atol=1e-2)
 
@@ -30,7 +30,7 @@ def test_distribution_energy(dim, device, dtype):
 def test_distribution_samples(dim, sample_shape, device, dtype):
     """compare torch's normal distribution with bgtorch's normal distribution"""
     mean, cov = _random_mean_cov(dim, device, dtype)
-    normal_trch = Distribution(MultivariateNormal(loc=mean, covariance_matrix=cov))
+    normal_trch = TorchDistribution(MultivariateNormal(loc=mean, covariance_matrix=cov))
     normal_bgtrch = NormalDistribution(dim, mean, cov)
     samples_trch = normal_trch.sample(sample_shape)
     target_shape = torch.Size([sample_shape]) if isinstance(sample_shape, int) else sample_shape

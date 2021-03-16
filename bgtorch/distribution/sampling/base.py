@@ -6,8 +6,8 @@ __all__ = ["Sampler"]
 
 class Sampler(torch.nn.Module):
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     
     def _sample_with_temperature(self, n_samples, temperature):
         raise NotImplementedError()

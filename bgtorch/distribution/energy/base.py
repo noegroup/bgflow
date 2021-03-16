@@ -16,7 +16,7 @@ def _is_non_empty_sequence_of_integers(x):
 def _is_sequence_of_non_empty_sequences_of_integers(x):
     return (
         isinstance(x, _Sequence)
-        and len(x) > 1
+        and len(x) > 0
         and all(_is_non_empty_sequence_of_integers(y) for y in x)
     )
 
@@ -38,7 +38,7 @@ def _parse_dim(dim):
 
 
 class Energy(torch.nn.Module):
-    def __init__(self, dim: Union[int, Sequence[int], Sequence[Sequence[int]]]):
+    def __init__(self, dim: Union[int, Sequence[int], Sequence[Sequence[int]]], **kwargs):
         """
         Base class for all energy models.
 
@@ -78,7 +78,7 @@ class Energy(torch.nn.Module):
             The event shape of the states for which energies/forces ar computed.
 
         """
-        super().__init__()
+        super().__init__(**kwargs)
         self._event_shapes = _parse_dim(dim)
 
     @property
