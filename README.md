@@ -98,10 +98,10 @@ python setup.py install
 ```
 
 * Install all required [dependencies](#dependencies) <-- TODO requirements.txt
-* Validate your installation by running all tests
+* Validate your installation by running all tests in the repository
 
 ```
-pytest or python setup.py test <-- TODO
+pytest
 ```
 
 ***
