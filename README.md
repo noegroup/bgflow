@@ -22,6 +22,7 @@ This framework provides:
     * [Temperature-steerable flows](https://arxiv.org/abs/2012.00429)
     * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
     * [Augmented Normalizing Flows](https://arxiv.org/abs/2002.07101)
+    * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
 * Other sampling methods
     * Markov-Chain Monte Carlo
     * Molecular dynamics
@@ -32,10 +33,9 @@ This framework provides:
 ***
 ## [Minimal example](#minimal-example)
 Implementation of a BG with a single [Real NVP coupling block](https://arxiv.org/abs/1605.08803)
-as the invertible transformation.
-The target potential is given by a double well potential in one dimension and a standard Gaussian in the other. 
-The prior is a two-dimensional standard Gaussian distribution. 
-The training procedure is not included. 
+as the invertible transformation. The two-dimensional target potential is given by a double well potential in one
+dimension and a harmonic potential in the other. The prior distribution is a two-dimensional standard normal
+distribution. Note that the training procedure is not included in this example.
 
 ``` python
 import torch
@@ -76,44 +76,47 @@ samples = bg.sample(1000)
 plt.hist2d(samples[:, 0].detach().numpy(), samples[:, 1].detach().numpy(), bins=100);
 ```
 
-
 ***
+
 ## [Examples](#examples)
-* [Coupling flow example](https://github.com/noegroup/bgtorch/blob/master/notebooks/example.ipynb)
-* [neural ODE example](https://github.com/noegroup/bgtorch/blob/notebooks/example_black_box_nODE.ipynb) TODO
-* [equivariant neural ODE example](https://github.com/noegroup/bgtorch/blob/notebooks/example_equivariant_nODE.ipynb) TODO
-* TODO
 
-
-
+* [Basic Boltzmann Generator example](https://github.com/noegroup/bgtorch/blob/master/notebooks/example.ipynb)
+* [Training a Boltzmann Generator for Alanine Dipeptide](https://github.com/noegroup/bgtorch/blob/master/notebooks/alanine_dipeptide_basics.ipynb)
 
 ***
+
 ## [Installation](#installation)
+
+
 * Clone this repository from github
 * Navigate to the cloned repository
 * Run the installation scrip
-  
+
 ```
 python setup.py install
 ```
 
-* Install all required [dependencies](#dependencies) <-- TODO requirements.txt
-* Validate your installation by running all tests in the repository
+* Install all required [dependencies](#dependencies) 
+* Validate your installation by running all tests in the repository with the command
 
 ```
 pytest
 ```
 
+* Depending on the optional installations some tests might be skipped. 
+
 ***
 ## [Dependencies](#dependencies)
-
-* [pytorch](https://github.com/pytorch/pytorch)
-* [numpy](https://github.com/numpy/numpy)
-* [pytest](https://github.com/pytest-dev/pytest)
-* [matplotlib](https://github.com/matplotlib/matplotlib)
-* [openMM](https://github.com/openmm/openmm) (for)
-* [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
-* [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
+* Mandatory
+  * [pytorch](https://github.com/pytorch/pytorch)
+  * [numpy](https://github.com/numpy/numpy)
+  * [matplotlib](https://github.com/matplotlib/matplotlib)
+* Optional
+  * [pytest](https://github.com/pytest-dev/pytest) (for testing)
+  * [nflows](https://github.com/bayesiains/nflows) (for Neural Spline Flows)
+  * [openMM](https://github.com/openmm/openmm) (for)
+  * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
+  * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
 
 ***
 ## [License](#dependencies)
