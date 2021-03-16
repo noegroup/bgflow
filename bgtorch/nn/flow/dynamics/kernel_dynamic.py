@@ -3,9 +3,6 @@ import numpy as np
 from ....utils import distance_vectors, distances_from_vectors, rbf_kernels
 
 
-# TODO: write longer docstring, i.e. include math
-
-
 class KernelDynamics(torch.nn.Module):
     """
     Equivariant dynamics functions that allows an efficient and exact divergence computation [1].
@@ -88,6 +85,7 @@ class KernelDynamics(torch.nn.Module):
             Whether the divergence is computed
 
         Returns
+        -------
         forces, -divergence: PyTorch tensors
             The combined state update of shape `[n_batch, n_dimensions]`
             containing the state update of the system state `dx/dt`
