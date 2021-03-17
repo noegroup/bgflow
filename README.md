@@ -15,20 +15,22 @@ This framework provides:
 
 * A general API for Boltzmann Generators
 * Different invertible [normalizing flow](https://arxiv.org/abs/1912.02762) structures to build BGs
-    * [Coupling flows]()
+    * [Coupling flows](https://arxiv.org/abs/1410.8516)
     * [Neural Ordinary Differential Equations](https://arxiv.org/abs/1806.07366)
     * [Stochastic Normalizing Flows](https://arxiv.org/abs/2002.06707)
     * [Equivariant flows](https://arxiv.org/abs/2006.02425)
     * [Temperature-steerable flows](https://arxiv.org/abs/2012.00429)
+    * [P4Inv Linear Flows](https://arxiv.org/abs/2010.07033)
     * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
     * [Augmented Normalizing Flows](https://arxiv.org/abs/2002.07101)
     * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
 * Other sampling methods
     * Markov-Chain Monte Carlo
     * Molecular dynamics
-    * Replica exchange
+    * ... replica exchange and more to come
 * API to combine BGs with other sampling methods
 * [OpenMM](https://github.com/openmm/openmm) bridge 
+* Internal Coordinate Transformations to map between Z-matrices and Cartesian coordinates
 
 ***
 ## [Minimal example](#minimal-example)
@@ -40,40 +42,44 @@ distribution. Note that the training procedure is not included in this example.
 ``` python
 import torch
 import matplotlib.pyplot as plt
-from bgtorch import BoltzmannGenerator
-from bgtorch.distribution import NormalDistribution
-from bgtorch.distribution.energy import DoubleWellEnergy
-from bgtorch.nn import DenseNet
-from bgtorch.nn.flow import (SplitFlow, InverseFlow, SequentialFlow, CouplingFlow)
-from bgtorch.nn.flow.transformer import AffineTransformer 
+import bgtorch as bg
 
 # define prior and target
 dim = 2
-prior = NormalDistribution(dim)
-target = DoubleWellEnergy(dim)
+prior = bg.NormalDistribution(dim)
+target = bg.DoubleWellEnergy(dim)
 
 # here we aggregate all layers of the flow
 layers = []
-layers.append(SplitFlow(dim // 2))
-layers.append(CouplingFlow(
+layers.append(bg.SplitFlow(dim // 2))
+layers.append(bg.CouplingFlow(
         # we use a affine transformation to transform the RHS conditioned on the LHS
-        AffineTransformer(
+        bg.AffineTransformer(
             # use simple dense nets for the affine shift/scale
-            shift_transformation=DenseNet([dim // 2, 4, dim // 2], activation=torch.nn.ReLU()), 
-            scale_transformation=DenseNet([dim // 2, 4, dim // 2], activation=torch.nn.Tanh())
+            shift_transformation=bg.DenseNet(
+                [dim // 2, 4, dim // 2], 
+                activation=torch.nn.ReLU()
+            ), 
+            scale_transformation=bg.DenseNet(
+                [dim // 2, 4, dim // 2], 
+                activation=torch.nn.Tanh()
+            )
         )
 ))
-layers.append(InverseFlow(SplitFlow(dim // 2)))
+layers.append(bg.InverseFlow(bg.SplitFlow(dim // 2)))
     
 # now define the flow as a sequence of all operations stored in layers
-flow = SequentialFlow(layers)
+flow = bg.SequentialFlow(layers)
 
 # The BG is defined by a prior, target and a flow
-bg = BoltzmannGenerator(prior, flow, target)
+generator = bg.BoltzmannGenerator(prior, flow, target)
 
 # sample from the BG
-samples = bg.sample(1000)
-plt.hist2d(samples[:, 0].detach().numpy(), samples[:, 1].detach().numpy(), bins=100);
+samples = generator.sample(1000)
+plt.hist2d(
+    samples[:, 0].detach().numpy(), 
+    samples[:, 1].detach().numpy(), bins=100
+)
 ```
 
 ***
@@ -120,4 +126,4 @@ pytest
 
 ***
 ## [License](#dependencies)
-TODO
+[MIT License](LICENSE)
