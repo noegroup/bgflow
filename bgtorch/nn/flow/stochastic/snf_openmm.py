@@ -3,6 +3,7 @@ OpenMM Interface for Stochastic Normalizing Flows
 """
 
 import pickle
+import warnings
 
 from ..base import Flow
 from openmmtools.integrators import ThermostatedIntegrator
@@ -130,6 +131,12 @@ class BrownianPathProbabilityIntegrator(PathProbabilityIntegrator):
     """Overdamped Langevin Dynamics"""
     def __init__(self, temperature, friction_coeff, stepsize):
         super(BrownianPathProbabilityIntegrator, self).__init__(temperature, stepsize)
+        warnings.warn(
+            "The current implementation of the BrownianPathProbabilityIntegrator "
+            "does not support force derivatives. Therefore, the gradients of the log path probability ratio "
+            "will be inaccurate.",
+            UserWarning
+        )
 
         # variable definitions
         self.addGlobalVariable("gamma", friction_coeff)

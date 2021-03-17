@@ -201,16 +201,40 @@ class MultiContext:
 
     def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
         """Set up workers and queues."""
+        self._n_workers = n_workers
+        self._system = system
+        self._integrator = integrator
+        self._platform_name = platform_name
+        self._platform_properties = platform_properties
+        self._task_queue = mp.Queue()
+        self._result_queue = mp.Queue()
+        self._workers = []  # workers are initialized in first evaluate call
+        # using multiple workers
+        try:
+            get_ipython
+            warnings.warn(
+                "It looks like you are using an OpenMMBridge with multiple workers in an ipython environment. "
+                "This can behave a bit silly upon KeyboardInterrupt (e.g., kill the stdout stream). "
+                "If you experience any issues, consider initializing the bridge with n_workers=1 in ipython/jupyter.",
+                UserWarning
+            )
+        except NameError:
+            pass
+
+    def _reinitialize(self):
+        """Reinitialize the MultiContext"""
+        self.terminate()
+        # recreate objects
         self._task_queue = mp.Queue()
         self._result_queue = mp.Queue()
         self._workers = []
-        for i in range(n_workers):
+        for i in range(self._n_workers):
             worker = MultiContext.Worker(
                 self._task_queue,
                 self._result_queue,
-                system, integrator,
-                platform_name,
-                platform_properties,
+                self._system, self._integrator,
+                self._platform_name,
+                self._platform_properties,
             )
             self._workers.append(worker)
             worker.start()
@@ -261,13 +285,20 @@ class MultiContext:
         """
         assert box_vectors is None or len(box_vectors) == len(positions), \
             "box_vectors and positions have to be the same length"
+        if not self.is_alive():
+            self._reinitialize()
+
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
-        for i, (p, bv) in enumerate(zip(positions, box_vectors)):
-            self._task_queue.put([
-                i, p, bv, evaluate_energy, evaluate_force, evaluate_positions,
-                evaluate_path_probability_ratio, err_handling, n_simulation_steps
-            ])
-        results = [self._result_queue.get() for _ in positions]
+        try:
+            for i, (p, bv) in enumerate(zip(positions, box_vectors)):
+                self._task_queue.put([
+                    i, p, bv, evaluate_energy, evaluate_force, evaluate_positions,
+                    evaluate_path_probability_ratio, err_handling, n_simulation_steps
+                ])
+            results = [self._result_queue.get() for _ in positions]
+        except Exception as e:
+            self.terminate()
+            raise e
         results = sorted(results, key=lambda x: x[0])
         return (
             np.array([res[1] for res in results]) if evaluate_energy else None,
@@ -276,14 +307,21 @@ class MultiContext:
             np.array([res[4] for res in results]) if evaluate_path_probability_ratio else None
         )
 
-    def __del__(self):
+    def is_alive(self):
+        """Whether all workers are alive."""
+        return all(worker.is_alive() for worker in self._workers) and len(self._workers) > 0
+
+    def terminate(self):
         """Terminate the workers."""
         # soft termination
         for _ in self._workers:
             self._task_queue.put(None)
         # hard termination
-        for worker in self._workers:
-            worker.terminate()
+        #for worker in self._workers:
+        #    worker.terminate()
+
+    def __del__(self):
+        self.terminate()
 
     class Worker(mp.Process):
         """A worker process that computes energies in its own context.

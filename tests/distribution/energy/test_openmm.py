@@ -82,7 +82,8 @@ def test_openmm_bridge_evaluate_openmmtools_testsystem(
 
     if testsystem_name == "WaterBox" and n_workers == 1:
         pytest.skip()
-    # prevent openmm hanging
+    # prevent openmm hanging (this is possibly a bug in their PME code)
+    # see https://github.com/openmm/openmm/issues/2602
 
     try:
         with warnings.catch_warnings():
