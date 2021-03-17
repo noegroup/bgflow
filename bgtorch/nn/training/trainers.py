@@ -2,6 +2,7 @@ import torch
 import numpy as np
 
 from bgtorch.utils.types import assert_numpy
+from bgtorch.distribution.sampling import DataSetSampler
 
 
 __all__ = ["LossReporter", "KLTrainer"]
@@ -99,8 +100,10 @@ class KLTrainer(object):
         ----------
         n_iter : int
             Number of training iterations.
-        data : list
+        data : torch.Tensor or Sampler
             Training data
+        testdata : torch.Tensor or Sampler
+            Test data
         batchsize : int
             Batchsize
         w_likelihood : float or None
@@ -125,6 +128,11 @@ class KLTrainer(object):
         if w_energy is None:
             w_energy = self.w_energy
 
+        if isinstance(data, torch.Tensor):
+            data = DataSetSampler(data)
+        if isinstance(testdata, torch.Tensor):
+            testdata = DataSetSampler(testdata)
+
         for iter in range(n_iter):
             # invoke schedulers
             for interval, scheduler in schedulers:
@@ -146,11 +154,11 @@ class KLTrainer(object):
                     torch.nn.utils.clip_grad_value_(self.bg.parameters(), clip_forces)
 
             if self.train_likelihood:
-                N = data.shape[0]
-                idxs = np.random.choice(N, size=batchsize, replace=True)
-                batch = data[idxs]
+                batch = data.sample(batchsize)
+                if isinstance(batch, torch.Tensor):
+                    batch = (batch,)
                 # negative log-likelihood of the batch is equal to the energy of the BG
-                nll = self.bg.energy(batch, temperature=temperature).mean()
+                nll = self.bg.energy(*batch, temperature=temperature).mean()
                 reports.append(nll)
                 # aggregate weighted gradient
                 if w_likelihood > 0:
@@ -160,8 +168,10 @@ class KLTrainer(object):
             if self.test_likelihood:
                 testnll = torch.zeros_like(nll)
                 if testdata is not None:
-                    testbatch = testdata[idxs]
-                    testnll = self.bg.energy(testbatch, temperature=temperature).mean()
+                    testbatch = testdata.sample(batchsize)
+                    if isinstance(testbatch, torch.Tensor):
+                        testbatch = (testbatch,)
+                    testnll = self.bg.energy(*testbatch, temperature=temperature).mean()
                 reports.append(testnll)
 
             if w_custom is not None:

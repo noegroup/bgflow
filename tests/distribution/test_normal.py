@@ -15,7 +15,7 @@ def test_normal_distribution(device, dtype, dim, n_samples, temperature):
     normal_distribution = NormalDistribution(dim, mean=mean, cov=cov)
 
     samples = normal_distribution.sample(n_samples, temperature=temperature)
-    tol = 0.1 * np.sqrt(temperature)
+    tol = 0.2 * np.sqrt(temperature)
     assert samples.shape == torch.Size([n_samples, dim])
     assert samples.mean(dim=0).cpu().numpy() == pytest.approx(np.ones(dim), abs=tol, rel=0)
     assert np.cov(samples.cpu().numpy(), rowvar=False) == pytest.approx(
