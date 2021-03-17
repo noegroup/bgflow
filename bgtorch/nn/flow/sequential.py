@@ -69,3 +69,6 @@ class SequentialFlow(Flow):
 
     def __iter__(self):
         return iter(self._blocks)
+
+    def __getitem__(self, index):
+        return self._blocks[index]

@@ -100,9 +100,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
             Whether to raise an error when `energy` is called on input that falls out of bounds.
             Otherwise the energy is set to infinity.
         sampling_method : str
-            If "icdf", sample by passing a uniform sample through the inverse cdf (only available when
-            the bounds are both finite). When one of the bounds is infinite, the sampling method
-            is automatically set to "rejection".
+            If "icdf", sample by passing a uniform sample through the inverse cdf.
             If "rejection", sample by rejecting normal distributed samples that fall out of bounds.
     """
 
@@ -121,9 +119,6 @@ class TruncatedNormalDistribution(Energy, Sampler):
                 assert t.shape in (torch.Size([]), (1,), mu.shape)
 
         super().__init__(dim=mu.shape)
-
-        if not (torch.isfinite(lower_bound).all() and torch.isfinite(upper_bound).all()):
-            sampling_method = "rejection"
 
         self.register_buffer("_mu", mu)
         self.register_buffer("_sigma", sigma.to(mu))
@@ -193,6 +188,36 @@ class TruncatedNormalDistribution(Energy, Sampler):
             energies[x < self._lower_bound] = np.infty
             energies[x > self._upper_bound] = np.infty
         return 0.5 * energies.sum(dim=-1, keepdim=True)
+
+    def icdf(self, x):
+        r = self.Z * x + self._cdf_lower_bound
+        return self._standard_normal.icdf(r) * self._sigma + self._mu
+
+    def cdf(self, x):
+        return (self._standard_normal.cdf((x - self._mu)/self._sigma) - self._cdf_lower_bound)/self.Z
+
+    def log_prob(self, x):
+        return self._standard_normal.log_prob((x - self._mu)/self._sigma) - torch.log(self.Z * self._sigma)
+
+    @property
+    def Z(self):
+        return self._cdf_upper_bound - self._cdf_lower_bound
+
+    @property
+    def upper_bound(self):
+        return self._upper_bound
+
+    @property
+    def lower_bound(self):
+        return self._lower_bound
+
+    @property
+    def mu(self):
+        return self._mu
+
+    @property
+    def sigma(self):
+        return self._sigma
 
     @property
     def dim(self):
