@@ -19,3 +19,4 @@ from .orthogonal import *
 from .triangular import *
 from .pppp import *
 from .diffeq import DiffEqFlow
+from .cdf import *
