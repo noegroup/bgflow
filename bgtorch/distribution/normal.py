@@ -13,6 +13,7 @@ def _is_symmetric_matrix(m):
 
 
 class NormalDistribution(Energy, Sampler):
+
     def __init__(self, dim, mean=None, cov=None):
         super().__init__(dim=dim)
         self._has_mean = mean is not None
@@ -20,6 +21,8 @@ class NormalDistribution(Energy, Sampler):
             assert len(mean.shape) == 1, "`mean` must be a vector"
             assert mean.shape[-1] == self.dim, "`mean` must have dimension `dim`"
             self.register_buffer("_mean", mean.unsqueeze(0))
+        else:
+            self.register_buffer("_mean", torch.zeros(self.dim))
         self._has_cov = False
         if cov is not None:
             self.set_cov(cov)
@@ -58,7 +61,7 @@ class NormalDistribution(Energy, Sampler):
         self.register_buffer("_rot", rot)
 
     def _sample_with_temperature(self, n_samples, temperature=1.0):
-        samples = torch.Tensor(n_samples, self.dim).normal_()
+        samples = torch.randn(n_samples, self.dim, dtype=self._mean.dtype, device=self._mean.device)
         if self._has_cov:
             samples = samples.to(self._rot)
             inv_diag = torch.exp(0.5 * self._log_diag)
@@ -142,23 +145,22 @@ class TruncatedNormalDistribution(Energy, Sampler):
             raise ValueError(f'Unknown sampling method "{sampling_method}"')
 
     def _sample(self, n_samples):
-        """This is a naive implementation; resample when x falls out of bounds"""
         return self._sample_with_temperature(n_samples, temperature=1)
 
     def _rejection_sampling(self, n_samples, temperature):
         sigma = self._sigma * np.sqrt(temperature)
-        samples = self._standard_normal.sample((n_samples, *self.event_shape)) * sigma + self._mu
+        rejected = torch.ones(n_samples, device=self._mu.device, dtype=bool)
+        samples = torch.empty(n_samples, *self.event_shape, device=self._mu.device, dtype=self._mu.dtype)
         while True:
-            out_of_bounds = (samples > self._upper_bound) | (
-                samples < self._lower_bound
+            n_rejected = (rejected).long().sum()
+            samples[rejected] = torch.randn(
+                n_rejected, *self.event_shape, device=self._mu.device, dtype=self._mu.dtype
+            ) * sigma + self._mu
+            rejected = torch.any(
+                ((samples > self._upper_bound) | (samples < self._lower_bound)).view(n_samples, -1),
+                dim=-1
             )
-            if torch.any(out_of_bounds):
-                new_samples = (
-                    self._standard_normal.sample((n_samples, *self.event_shape)) * sigma
-                    + self._mu
-                )
-                samples[out_of_bounds] = new_samples[out_of_bounds]
-            else:
+            if not torch.any(rejected):
                 break
         return samples
 
