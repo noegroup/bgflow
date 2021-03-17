@@ -69,6 +69,7 @@ def test_dist_deriv(device, dtype, atol=1e-6, rtol=1e-5):
 
 
 def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
+    np.random.seed(123122)
     # check 45 deg angle
     x1 = torch.Tensor([0, 1, 0]).to(device, dtype)
     x2 = torch.Tensor([0, 0, 0]).to(device, dtype)
@@ -113,6 +114,7 @@ def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
 
 
 def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
+    np.random.seed(202422)
     for i in range(N_REPETITIONS):
 
         # random reference angle
@@ -147,6 +149,7 @@ def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
 
 
 def test_ic2xyz_deriv(device, dtype, atol=1e-5, rtol=1e-4):
+    np.random.seed(202982)
     for i in range(N_REPETITIONS):
 
         d12 = torch.tensor(np.random.uniform(0.5, 1.5), device=device, dtype=dtype)
@@ -179,13 +182,14 @@ def test_ic2xyz_deriv(device, dtype, atol=1e-5, rtol=1e-4):
 
 # TODO: floating point precision is terrible...
 def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
+    torch.manual_seed(1)
 
     if dtype == torch.float32:
         atol = 1e-3
         rtol = 1e-3
     elif dtype == torch.float64:
-        atol = 1e-6
-        rtol = 1e-5
+        atol = 1e-5
+        rtol = 1e-4
 
     N_SAMPLES = 1
     N_BONDS = 4
