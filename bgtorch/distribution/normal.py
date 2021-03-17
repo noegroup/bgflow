@@ -22,7 +22,7 @@ class NormalDistribution(Energy, Sampler):
             assert mean.shape[-1] == self.dim, "`mean` must have dimension `dim`"
             self.register_buffer("_mean", mean.unsqueeze(0))
         else:
-            self.register_buffer("_mean", torch.zeros(self.dim))
+            self.register_buffer("_mean", torch.zeros(1, self.dim))
         self._has_cov = False
         if cov is not None:
             self.set_cov(cov)
