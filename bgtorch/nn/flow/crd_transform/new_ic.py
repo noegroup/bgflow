@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import warnings
+from typing import Union, Optional
 
 from ..base import Flow
 from .ic_helper import (
