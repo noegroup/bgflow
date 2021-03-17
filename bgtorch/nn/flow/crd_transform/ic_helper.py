@@ -1,4 +1,5 @@
 import torch
+import warnings
 
 # TODO numpy-style docstrings for single functions
 
@@ -57,20 +58,27 @@ def orientation(p1, p2, p3):
     return torch.stack(tripod(p1, p2, p3), dim=-1)
 
 
-def dist_deriv(x1, x2):
+def dist_deriv(x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
     """
         computes distance between input points together with
         the Jacobian wrt to `x1`
     """
     r = x2 - x1
     rnorm = torch.norm(r, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(rnorm < eps):
+            warnings.warn("singular division in distance computation")
+    if enforce_boundaries:
+        rnorm = rnorm.clamp_min(eps)
+
     dist = rnorm[..., 0]
     J = -r / rnorm
     # J = _safe_div(-r, rnorm)
     return dist, J
 
 
-def angle_deriv(x1, x2, x3):
+def angle_deriv(x1, x2, x3, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
     """
         computes angle between input points together with
         the Jacobian wrt to `x1`
@@ -93,6 +101,12 @@ def angle_deriv(x1, x2, x3):
     cos_angle = torch.sum(rn12 * rn32, dim=-1)
     J = rn32[..., None, :] @ J
 
+    if raise_warnings:
+        if torch.any((cos_angle < -1. + eps) & (cos_angle > 1. - eps)):
+            warnings.warn("singular radians in angle computation")
+    if enforce_boundaries:
+        cos_angle = cos_angle.clamp(-1. + eps, 1. - eps)
+
     a = torch.acos(cos_angle)
 
     # TODO replaced for safe division - remove in factoring
@@ -102,7 +116,7 @@ def angle_deriv(x1, x2, x3):
     return a, J[..., 0, :]
 
 
-def torsion_deriv(x1, x2, x3, x4):
+def torsion_deriv(x1, x2, x3, x4, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
     """
         computes torsion angle between input points together with
         the Jacobian wrt to `x1`.
@@ -162,6 +176,13 @@ def torsion_deriv(x1, x2, x3, x4):
     # da_dx = Jacobian of a wrt xysq
     a = torch.atan2(y, x)
     xysq = x.pow(2) + y.pow(2)
+
+    if raise_warnings:
+        if torch.any(xysq < eps):
+            warnings.warn("singular division in torsion computation")
+    if enforce_boundaries:
+        xysq = xysq.clamp_min(eps)
+
     da_dx = -y / xysq
     da_dy = x / xysq
 
