@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import warnings
 
 from ..base import Flow
 from .ic_helper import (
@@ -21,7 +22,11 @@ __all__ = [
 ]
 
 
-def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
+# noqa: C901
+def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234,
+                 eps=1e-7,
+                 enforce_boundaries=True,
+                 raise_warnings=True):
     """ computes the xyz coordinates from internal coordinates
         relative to points `p1`, `p2`, `p3` together with its
         jacobian with respect to `p1`.
@@ -33,18 +38,41 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
     n = torch.cross(v1, v2, dim=-1)
     nn = torch.cross(v1, n, dim=-1)
 
-    n_normalized = n / torch.norm(n, dim=-1, keepdim=True)
-    nn_normalized = nn / torch.norm(nn, dim=-1, keepdim=True)
+    n_norm = torch.norm(n, dim=-1, keepdim=True)
+    if raise_warnings:
+        if torch.any(n_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        n_norm = n_norm.clamp_min(eps)
+    n_normalized = n / n_norm
+
+    nn_norm = torch.norm(nn, dim=-1, keepdim=True)
+    if raise_warnings:
+        if torch.any(nn_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        nn_norm = nn_norm.clamp_min(eps)
+    nn_normalized = nn / nn_norm
 
     n_scaled = n_normalized * -torch.sin(t1234)
     nn_scaled = nn_normalized * torch.cos(t1234)
 
     v3 = n_scaled + nn_scaled
     v3_norm = torch.norm(v3, dim=-1, keepdim=True)
+    if raise_warnings:
+        if torch.any(v3_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        v3_norm = v3_norm.clamp_min(eps)
     v3_normalized = v3 / v3_norm
     v3_scaled = v3_normalized * d14 * torch.sin(a124)
 
     v1_norm = torch.norm(v1, dim=-1, keepdim=True)
+    if raise_warnings:
+        if torch.any(v1_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        v1_norm = v1_norm.clamp_min(eps)
     v1_normalized = v1 / v1_norm
     v1_scaled = v1_normalized * d14 * torch.cos(a124)
 
@@ -71,7 +99,7 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234):
     return position, J
 
 
-def ic2xy0_deriv(p1, p2, d14, a124):
+def ic2xy0_deriv(p1, p2, d14, a124, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
     """ computes the xy coordinates (z set to 0) for the given
         internal coordinates together with the Jacobian
         with respect to `p1`.
@@ -79,7 +107,7 @@ def ic2xy0_deriv(p1, p2, d14, a124):
 
     t1234 = torch.Tensor([[0.5 * np.pi]]).to(p1)
     p3 = torch.Tensor([[0, -1, 0]]).to(p1)
-    xyz, J = ic2xyz_deriv(p1, p2, p3, d14, a124, t1234)
+    xyz, J = ic2xyz_deriv(p1, p2, p3, d14, a124, t1234, eps=eps, enforce_boundaries=enforce_boundaries, raise_warnings=raise_warnings)
     J = J[..., [0, 1, 2], :][..., [0, 1]]
     return xyz, J
 
@@ -153,16 +181,39 @@ def unnormalize_angles(angles):
 
 
 class ReferenceSystemTranformation(Flow):
-    def __init__(self, normalize_angles=True):
+
+    def __init__(self, normalize_angles=True, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
         super().__init__()
         self._normalize_angles = normalize_angles
+        self._eps = eps
+        self._enforce_boundaries = enforce_boundaries
+        self._raise_warnings = raise_warnings
 
     def _forward(self, x0, x1, x2):
 
         R = orientation(x0, x1, x2)
-        d01, _ = dist_deriv(x0, x1)
-        d12, _ = dist_deriv(x1, x2)
-        a012, _ = angle_deriv(x0, x1, x2)
+        d01, _ = dist_deriv(
+            x0,
+            x1,
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
+        d12, _ = dist_deriv(
+            x1,
+            x2,
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
+        a012, _ = angle_deriv(
+            x0,
+            x1,
+            x2,
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
 
         dlogp = 0
 
@@ -188,7 +239,15 @@ class ReferenceSystemTranformation(Flow):
         p1[..., 2] = d01
 
         # third point placed wrt to p0 and p1
-        p2, J = ic2xy0_deriv(p1, p0, d12[:, None], a012[:, None])
+        p2, J = ic2xy0_deriv(
+            p1,
+            p0,
+            d12[:, None],
+            a012[:, None],
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
         dlogp += det2x2(J[..., [0, 2], :]).abs().log()
 
         # bring back to original reference frame
@@ -214,7 +273,7 @@ class RelativeInternalCoordinatesTransformation(Flow):
         transforms a system from xyz to ic coordinates and back.
     """
 
-    def __init__(self, z_matrix, fixed_atoms, normalize_angles=True):
+    def __init__(self, z_matrix, fixed_atoms, normalize_angles=True, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
         super().__init__()
 
         self._z_matrix = z_matrix
@@ -234,6 +293,10 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
         self._normalize_angles = normalize_angles
 
+        self._eps = eps
+        self._enforce_boundaries = enforce_boundaries
+        self._raise_warnings = raise_warnings
+
     def _forward(self, x, with_pose=True, *args, **kwargs):
         """ Computes xyz -> ic
 
@@ -246,18 +309,27 @@ class RelativeInternalCoordinatesTransformation(Flow):
         # compute bonds, angles, torsions
         # together with jacobians (wrt. to diagonal atom)
         bonds, jbonds = dist_deriv(
-            x[:, self._z_matrix[:, 0]], x[:, self._z_matrix[:, 1]]
+            x[:, self._z_matrix[:, 0]], x[:, self._z_matrix[:, 1]],
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
         )
         angles, jangles = angle_deriv(
             x[:, self._z_matrix[:, 0]],
             x[:, self._z_matrix[:, 1]],
             x[:, self._z_matrix[:, 2]],
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
         )
         torsions, jtorsions = torsion_deriv(
             x[:, self._z_matrix[:, 0]],
             x[:, self._z_matrix[:, 1]],
             x[:, self._z_matrix[:, 2]],
             x[:, self._z_matrix[:, 3]],
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
         )
 
         # slice fixed coordinates needed to reconstruct the system
@@ -321,7 +393,17 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
             # now we have three context points
             # and correct ic values to reconstruct the current point
-            p, J = ic2xyz_deriv(p0, p1, p2, b, a, t)
+            p, J = ic2xyz_deriv(
+                p0,
+                p1,
+                p2,
+                b,
+                a,
+                t,
+                eps=self._eps,
+                enforce_boundaries=self._enforce_boundaries,
+                raise_warnings=self._raise_warnings
+            )
 
             # compute jacobian
             dlogp += det3x3(J).abs().log().sum(-1)[:, None]
@@ -337,6 +419,7 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
 
 class GlobalInternalCoordinateTransformation(Flow):
+
     def __init__(self, z_matrix, normalize_angles=True):
         super().__init__()
 
@@ -398,6 +481,7 @@ class GlobalInternalCoordinateTransformation(Flow):
 
 
 class MixedCoordinateTransformation(Flow):
+
     def __init__(
         self, data, z_matrix, fixed_atoms, keepdims=None, normalize_angles=True
     ):
