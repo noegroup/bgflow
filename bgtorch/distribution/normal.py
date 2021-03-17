@@ -97,9 +97,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
             Whether to raise an error when `energy` is called on input that falls out of bounds.
             Otherwise the energy is set to infinity.
         sampling_method : str
-            If "icdf", sample by passing a uniform sample through the inverse cdf (only available when
-            the bounds are both finite). When one of the bounds is infinite, the sampling method
-            is automatically set to "rejection".
+            If "icdf", sample by passing a uniform sample through the inverse cdf.
             If "rejection", sample by rejecting normal distributed samples that fall out of bounds.
     """
 
@@ -118,9 +116,6 @@ class TruncatedNormalDistribution(Energy, Sampler):
                 assert t.shape in (torch.Size([]), (1,), mu.shape)
 
         super().__init__(dim=mu.shape)
-
-        #if not (torch.isfinite(lower_bound).all() and torch.isfinite(upper_bound).all()):
-        #    sampling_method = "rejection"
 
         self.register_buffer("_mu", mu)
         self.register_buffer("_sigma", sigma.to(mu))
