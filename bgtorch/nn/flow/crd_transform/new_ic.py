@@ -40,19 +40,23 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234,
     nn = torch.cross(v1, n, dim=-1)
 
     n_norm = torch.norm(n, dim=-1, keepdim=True)
+
     if raise_warnings:
         if torch.any(n_norm < eps):
             warnings.warn("singular norm in xyz reconstruction")
     if enforce_boundaries:
         n_norm = n_norm.clamp_min(eps)
+
     n_normalized = n / n_norm
 
     nn_norm = torch.norm(nn, dim=-1, keepdim=True)
+
     if raise_warnings:
         if torch.any(nn_norm < eps):
             warnings.warn("singular norm in xyz reconstruction")
     if enforce_boundaries:
         nn_norm = nn_norm.clamp_min(eps)
+
     nn_normalized = nn / nn_norm
 
     n_scaled = n_normalized * -torch.sin(t1234)
@@ -60,20 +64,24 @@ def ic2xyz_deriv(p1, p2, p3, d14, a124, t1234,
 
     v3 = n_scaled + nn_scaled
     v3_norm = torch.norm(v3, dim=-1, keepdim=True)
+
     if raise_warnings:
         if torch.any(v3_norm < eps):
             warnings.warn("singular norm in xyz reconstruction")
     if enforce_boundaries:
         v3_norm = v3_norm.clamp_min(eps)
+
     v3_normalized = v3 / v3_norm
     v3_scaled = v3_normalized * d14 * torch.sin(a124)
 
     v1_norm = torch.norm(v1, dim=-1, keepdim=True)
+
     if raise_warnings:
         if torch.any(v1_norm < eps):
             warnings.warn("singular norm in xyz reconstruction")
     if enforce_boundaries:
         v1_norm = v1_norm.clamp_min(eps)
+
     v1_normalized = v1 / v1_norm
     v1_scaled = v1_normalized * d14 * torch.cos(a124)
 
@@ -209,7 +217,14 @@ class ReferenceSystemTranformation(Flow):
 
     def _forward(self, x0, x1, x2):
 
-        R = orientation(x0, x1, x2)
+        R = orientation(
+            x0,
+            x1,
+            x2,
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
         d01, _ = dist_deriv(
             x0,
             x1,

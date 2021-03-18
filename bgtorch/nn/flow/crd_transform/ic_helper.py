@@ -42,20 +42,36 @@ def det3x3(a):
     return (torch.cross(a[..., 0, :], a[..., 1, :], dim=-1) * a[..., 2, :]).sum(dim=-1)
 
 
-def tripod(p1, p2, p3):
+def tripod(p1, p2, p3, eps=1e-7, raise_warnings=True, enforce_boundaries=True):
     """ computes a unique orthogonal basis for input points """
     e1 = p2 - p1
-    e1 = e1 / torch.norm(e1, dim=-1, keepdim=True)
+    e1_norm = torch.norm(e1, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(e1_norm < eps):
+            warnings.warn("singular division in computing orthogonal basis")
+    if enforce_boundaries:
+        e1_norm = e1_norm.clamp_min(eps)
+
+    e1 = e1 / e1_norm
     u = p3 - p1
     e2 = torch.cross(u, e1)
-    e2 = e2 / torch.norm(e2, dim=-1, keepdim=True)
+    e2_norm = torch.norm(e2, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(e2_norm < eps):
+            warnings.warn("singular division in computing orthogonal basis")
+    if enforce_boundaries:
+        e2_norm = e2_norm.clamp_min(eps)
+
+    e2 = e2 / e2_norm
     e3 = torch.cross(e2, e1)
     return -e3, -e2, e1
 
 
-def orientation(p1, p2, p3):
+def orientation(p1, p2, p3, eps=1e-7, raise_warnings=True, enforce_boundaries=True):
     """ computes unique orthogonal basis transform for input points """
-    return torch.stack(tripod(p1, p2, p3), dim=-1)
+    return torch.stack(tripod(p1, p2, p3, eps, raise_warnings, enforce_boundaries), dim=-1)
 
 
 def dist_deriv(x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
@@ -85,18 +101,27 @@ def angle_deriv(x1, x2, x3, eps=1e-7, enforce_boundaries=True, raise_warnings=Tr
     """
     r12 = x1 - x2
     r12_norm = torch.norm(r12, dim=-1, keepdim=True)
-    rn12 = r12 / r12_norm
-    # rn12 = _safe_div(r12, r12_norm)
 
-    # TODO replaced for safe division - remove in factoring
+    if raise_warnings:
+        if torch.any(r12_norm < eps):
+            warnings.warn("singular division in angle computation")
+    if enforce_boundaries:
+        r12_norm = r12_norm.clamp_min(eps)
+
+    rn12 = r12 / r12_norm
+
     J = (torch.eye(3).to(x1) - outer(rn12, rn12)) / r12_norm[..., None]
-    # J = _safe_div((torch.eye(3).to(x1) - outer(rn12, rn12)), r12_norm[..., None])
 
     r32 = x3 - x2
     r32_norm = torch.norm(r32, dim=-1, keepdim=True)
-    # TODO replaced for safe division - remove in factoring
+
+    if raise_warnings:
+        if torch.any(r32_norm < eps):
+            warnings.warn("singular division in angle computation")
+    if enforce_boundaries:
+        r32_norm = r32_norm.clamp_min(eps)
+
     rn32 = r32 / r32_norm
-    # rn32 = _safe_div(r32, r32_norm)
 
     cos_angle = torch.sum(rn12 * rn32, dim=-1)
     J = rn32[..., None, :] @ J
@@ -109,9 +134,7 @@ def angle_deriv(x1, x2, x3, eps=1e-7, enforce_boundaries=True, raise_warnings=Tr
 
     a = torch.acos(cos_angle)
 
-    # TODO replaced for safe division - remove in factoring
     J = -J / torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None])
-    # J = _safe_div(-J, torch.sqrt(1.0 - cos_angle.pow(2)[..., None, None]))
 
     return a, J[..., 0, :]
 
@@ -131,9 +154,14 @@ def torsion_deriv(x1, x2, x3, x4, eps=1e-7, enforce_boundaries=True, raise_warni
     # normalize b1 so that it does not influence magnitude of vector
     # rejections that come next
     b1norm = torch.norm(b1, dim=-1, keepdim=True)
-    # TODO replaced for safe division - remove in factoring
+
+    if raise_warnings:
+        if torch.any(b1norm < eps):
+            warnings.warn("singular division in distance computation")
+    if enforce_boundaries:
+        b1norm = b1norm.clamp_min(eps)
+
     b1_normalized = b1 / b1norm
-    # b1_normalized = _safe_div(b1, b1norm)
 
     # vector rejections
     # v = projection of b0 onto plane perpendicular to b1
