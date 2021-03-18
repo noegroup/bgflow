@@ -4,7 +4,7 @@ from .energy import Energy
 from .sampling import Sampler
 
 
-__all__ = ["TorchDistribution", "CustomDistribution"]
+__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution"]
 
 
 class CustomDistribution(Energy, Sampler):
@@ -65,3 +65,11 @@ class TorchDistribution(Energy, Sampler):
             msg = str(e)
             msg = msg.replace(self._delegate.__class__.__name__, "Distribution")
             raise AttributeError(msg)
+
+
+class UniformDistribution(TorchDistribution):
+    """Shortcut"""
+    def __init__(self, low, high, validate_args=None, n_event_dims=1):
+        uniform = torch.distributions.Uniform(low, high, validate_args)
+        independent = torch.distributions.Independent(uniform, n_event_dims)
+        super().__init__(independent)
