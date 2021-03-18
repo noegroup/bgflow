@@ -20,6 +20,7 @@ def test_distribution_transfer(ctx):
 
 def test_constrain_positivity(ctx):
     """Make sure that the bonds are obeyed."""
+    torch.manual_seed(1)
     constrain_flow = ConstrainGaussianFlow(mu=torch.ones(10, **ctx), lower_bound=1e-10)
     samples = (1.0+torch.randn((10,10), **ctx)) * 1000.
     y, dlogp = constrain_flow.forward(samples)
@@ -31,15 +32,16 @@ def test_constrain_positivity(ctx):
 
 def test_constrain_slightly_pertubed(ctx):
     """Check that samples are not changed much when the bounds are generous."""
+    torch.manual_seed(1)
     constrain_flow = ConstrainGaussianFlow(mu=torch.ones(10, **ctx), sigma=torch.ones(10, **ctx), lower_bound=-1000., upper_bound=1000.)
     samples = (1.0+torch.randn((10,10), **ctx))
     y, dlogp = constrain_flow.forward(samples)
-    assert torch.allclose(samples, y)
-    assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-5)
+    assert torch.allclose(samples, y, atol=1e-4, rtol=0.0)
+    assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-4, rtol=0.0)
 
     x2, dlogp = constrain_flow.forward(y, inverse=True)
-    assert torch.allclose(x2, y)
-    assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-5)
+    assert torch.allclose(x2, y, atol=1e-4, rtol=0.0)
+    assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-4, rtol=0.0)
 
 
 

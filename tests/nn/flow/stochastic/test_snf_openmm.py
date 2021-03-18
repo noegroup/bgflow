@@ -3,13 +3,22 @@
 from bgtorch.nn.flow.stochastic.snf_openmm import BrownianPathProbabilityIntegrator, OpenMMStochasticFlow
 
 import copy
+import pickle
 
 import pytest
 import numpy as np
 import torch
 
-from simtk import openmm as mm
-from simtk import unit
+try:
+    from simtk import openmm as mm
+    from simtk import unit
+except ImportError:
+    pytestmark = pytest.mark.skip
+
+
+def _copy_integrator(integrator):
+    """Get an identical integrator that is not bound to a Context."""
+    return pickle.loads(pickle.dumps(integrator))
 
 
 def make_harmonic_system(n_particles, force_constant):
@@ -25,8 +34,8 @@ def make_harmonic_system(n_particles, force_constant):
     return system
 
 
-@pytest.mark.parametrize("integrator", [BrownianPathProbabilityIntegrator(300*unit.kelvin, 1, 0.0001)])
-def test_path_probability(integrator):
+@pytest.mark.parametrize("IntegratorClass", [BrownianPathProbabilityIntegrator])
+def test_path_probability(IntegratorClass):
     """
     We check the SNF as follows: Setup a harmonic oscillator. Initialize particles according to a
     Gaussian that is broader or narrower than the oscillator and make sure that the sign of the
@@ -38,6 +47,7 @@ def test_path_probability(integrator):
 
     system = make_harmonic_system(n_particles, force_constant)
 
+    integrator = IntegratorClass(300*unit.kelvin, 1, 0.0001)
     kT = integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
     base_sigma = np.sqrt((kT/force_constant))
     # the standard deviation that corresponds to the force constant and temperature
@@ -45,7 +55,7 @@ def test_path_probability(integrator):
     ratios = {}
     for sigma, name in [(base_sigma, "base"), (2*base_sigma, "broad"), (0.5*base_sigma, "narrow")]:
         positions = 0.5*unit.nanometer + sigma*np.random.randn(n_particles, 3)
-        integ = copy.deepcopy(integrator)
+        integ = _copy_integrator(integrator)
         context = mm.Context(system, integ, mm.Platform.getPlatformByName("Reference"))
         context.setPositions(positions)
         ratios[name] = integ.step(n_steps) / n_particles
@@ -54,7 +64,7 @@ def test_path_probability(integrator):
     assert ratios["narrow"] > 0  # narrow distribution should broaden
     assert ratios["base"] > ratios["broad"]
     assert ratios["base"] < ratios["narrow"]
-    assert abs(ratios["base"]) < 1e-1  # correct distribution should have a log path density ratio of approximately 0
+    assert abs(ratios["base"]) < 0.5  # correct distribution should have a log path density ratio of approximately 0
 
     # check if we can bind the reverse integrator to a context and use it
     mm.Context(system, integ.get_reverse_integrator(), mm.Platform.getPlatformByName("Reference"))
@@ -94,6 +104,10 @@ def test_temperature(integrator, reference_integrator):
     n_steps = 1000
     force_constant = 1000.0 * unit.kilojoules_per_mole/unit.nanometer**2
     system = make_harmonic_system(n_particles, force_constant)
+   
+    # copy integrators to enable test repeats
+    integrator = _copy_integrator(integrator)
+    reference_integrator = _copy_integrator(reference_integrator)
 
     kT = integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
     base_sigma = np.sqrt((kT/force_constant))

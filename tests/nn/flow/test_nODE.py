@@ -20,18 +20,22 @@ class SimpleDynamics(torch.nn.Module):
         return dxs
 
 
-black_box_dynamics = BlackBoxDynamics(
-    dynamics_function=TimeIndependentDynamics(SimpleDynamics()),
-    divergence_estimator=BruteForceEstimator()
-)
+def make_black_box_flow():
+    black_box_dynamics = BlackBoxDynamics(
+        dynamics_function=TimeIndependentDynamics(SimpleDynamics()),
+        divergence_estimator=BruteForceEstimator()
+    )
 
-flow = DiffEqFlow(
-    dynamics=black_box_dynamics
-)
+    flow = DiffEqFlow(
+        dynamics=black_box_dynamics
+    )
+    return flow
 
 
 def test_nODE_flow_OTD():
     # Test forward pass of simple nODE with the OTD solver
+    flow = make_black_box_flow()
+
     try:
         samples, dlogp = flow(latent)
     except ImportError:
@@ -52,6 +56,8 @@ def test_nODE_flow_OTD():
 
 def test_nODE_flow_DTO():
     # Test forward pass of simple nODE with the DTO solver
+    flow = make_black_box_flow()
+
     flow._use_checkpoints = True
     options = {
         "Nt": 20,
