@@ -8,7 +8,7 @@ from bgtorch.nn.flow.crd_transform.ic_helper import (
     angle_deriv,
     torsion_deriv,
 )
-from bgtorch.nn.flow.crd_transform.new_ic import (
+from bgtorch.nn.flow.crd_transform.ic import (
     ic2xy0_deriv,
     ic2xyz_deriv,
     GlobalInternalCoordinateTransformation,
