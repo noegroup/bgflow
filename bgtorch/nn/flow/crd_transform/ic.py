@@ -190,25 +190,25 @@ def unnormalize_angles(angles):
 
 
 class ReferenceSystemTranformation(Flow):
+    """
+    Internal coordinate transformation of the reference frame set by the first three atoms.
+
+    Please not that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
+
+    By default output angles and torsions are normalized and fit into a (0, 1) interval.
+
+
+    Parameters:
+    ----------
+    normalize_angles : bool
+        bring angles and torsions into (0, 1) interval
+    eps : float
+        numerical epsilon used to enforce manifold boundaries
+    raise_warnings : bool
+        raise warnings if manifold boundaries are violated
+    """
 
     def __init__(self, normalize_angles=True, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
-        """
-        Internal coordinate transformation of the reference frame set by the first three atoms.
-
-        Please not that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
-
-        By default output angles and torsions are normalized and fit into a (0, 1) interval.
-
-
-        Parameters:
-        ----------
-        normalize_angles : bool
-            bring angles and torsions into (0, 1) interval
-        eps : float
-            numerical epsilon used to enforce manifold boundaries
-        raise_warnings : bool
-            raise warnings if manifold boundaries are violated
-        """
         super().__init__()
         self._normalize_angles = normalize_angles
         self._eps = eps
