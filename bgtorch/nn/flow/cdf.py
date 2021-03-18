@@ -107,7 +107,7 @@ class ConstrainGaussianFlow(Flow):
             upper_bound=upper_bound*torch.ones_like(mu),
             assert_range=assert_range
         )
-        self._trafo = DistributionTransferFlow(source, target)
+        self._trafo = DistributionTransferFlow(source, target, eps)
         self._lower_bound = lower_bound
         self._upper_bound = upper_bound
 
