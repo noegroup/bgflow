@@ -302,6 +302,64 @@ class ReferenceSystemTranformation(Flow):
 
 
 class RelativeInternalCoordinatesTransformation(Flow):
+    """
+    Internal coordinate transformation relative to a set of fixed atoms.
+
+    Please not that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
+
+    By default output angles and torsions are normalized and fit into a (0, 1) interval.
+
+    Parameters:
+    ----------
+    z_matrix : Union[np.ndarray, torch.LongTensor]
+        z matrix used for ic transformation
+    fixed_atoms : torch.Tensor
+        atoms not affected by transformation
+    normalize_angles : bool
+        bring angles and torsions into (0, 1) interval
+    eps : float
+        numerical epsilon used to enforce manifold boundaries
+    raise_warnings : bool
+        raise warnings if manifold boundaries are violated
+
+    Attributes
+    ----------
+    z_matrix : np.ndarray
+        z matrix used for ic transformation
+    fixed_atoms : np.ndarray
+        atom indices that are kept as Cartesian coordinates
+    dim_bonds : int
+        number of bonds
+    dim_angles : int
+        number of angles
+    dim_torsions : int
+        number of torsions
+    dim_fixed : int
+        number of degrees of freedom for fixed atoms
+    """
+    @property
+    def z_matrix(self):
+        return self._z_matrix
+
+    @property
+    def fixed_atoms(self):
+        return self._fixed_atoms
+
+    @property
+    def dim_bonds(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_angles(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_torsions(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_fixed(self):
+        return 3*len(self._fixed_atoms)
 
     def __init__(
         self,
@@ -312,27 +370,6 @@ class RelativeInternalCoordinatesTransformation(Flow):
         enforce_boundaries: bool=True,
         raise_warnings: bool=True
     ):
-        """
-        Internal coordinate transformation relative to a set of fixed atoms.
-
-        Please not that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
-
-        By default output angles and torsions are normalized and fit into a (0, 1) interval.
-
-
-        Parameters:
-        ----------
-        z_matrix : Union[np.ndarray, torch.LongTensor]
-            z matrix used for ic transformation
-        fixed_atoms : torch.Tensor
-            atoms not affected by transformation
-        normalize_angles : bool
-            bring angles and torsions into (0, 1) interval
-        eps : float
-            numerical epsilon used to enforce manifold boundaries
-        raise_warnings : bool
-            raise warnings if manifold boundaries are violated
-        """
         super().__init__()
 
         self._z_matrix = z_matrix
@@ -474,6 +511,52 @@ class RelativeInternalCoordinatesTransformation(Flow):
 
 
 class GlobalInternalCoordinateTransformation(Flow):
+    """
+    Global internal coordinate transformation.
+
+    Please note that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
+
+    By default output angles and torsions are normalized and fit into a (0, 1) interval.
+
+
+    Parameters
+    ----------
+    z_matrix : Union[np.ndarray, torch.LongTensor]
+        z matrix used for ic transformation
+    normalize_angles : bool
+        bring angles and torsions into (0, 1) interval
+    eps : float
+        numerical epsilon used to enforce manifold boundaries
+    raise_warnings : bool
+        raise warnings if manifold boundaries are violated
+
+    Attributes
+    ----------
+    z_matrix : np.ndarray
+        z matrix used by the underlying relative ic transformation
+    dim_bonds : int
+        number of bonds
+    dim_angles : int
+        number of angles
+    dim_torsions : int
+        number of torsions
+    """
+
+    @property
+    def z_matrix(self):
+        return self._rel_ic.z_matrix
+
+    @property
+    def dim_bonds(self):
+        return len(self.z_matrix) + 2
+
+    @property
+    def dim_angles(self):
+        return len(self.z_matrix) + 1
+
+    @property
+    def dim_torsions(self):
+        return len(self.z_matrix)
 
     def __init__(
         self,
@@ -483,25 +566,6 @@ class GlobalInternalCoordinateTransformation(Flow):
         enforce_boundaries: bool=True,
         raise_warnings: bool=True
     ):
-        """
-        Global internal coordinate transformation.
-
-        Please note that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
-
-        By default output angles and torsions are normalized and fit into a (0, 1) interval.
-
-
-        Parameters:
-        ----------
-        z_matrix : Union[np.ndarray, torch.LongTensor]
-            z matrix used for ic transformation
-        normalize_angles : bool
-            bring angles and torsions into (0, 1) interval
-        eps : float
-            numerical epsilon used to enforce manifold boundaries
-        raise_warnings : bool
-            raise warnings if manifold boundaries are violated
-        """
         super().__init__()
 
         # find initial atoms
@@ -539,7 +603,7 @@ class GlobalInternalCoordinateTransformation(Flow):
             has shape [batch, 1, 3]
         R: torch.Tensor
             the 3x3 matrix spanning the global rotation of the system
-            spanend by the first three atoms. has shape [batch, 1, 3, 3]
+            spanned by the first three atoms. has shape [batch, 1, 3, 3]
         dlogp: torch.Tensor
             log det jacobian of the transformation
         """
@@ -609,6 +673,65 @@ class GlobalInternalCoordinateTransformation(Flow):
 
 
 class MixedCoordinateTransformation(Flow):
+    """
+    Mixed coordinate transformation.
+
+    This combines an relative coordinate transformation with a whitening transformation on the fixed atoms.
+
+    Please note that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
+
+    By default output angles and torsions are normalized and fit into a (0, 1) interval.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        data used to compute the whitening transformation of the fixed atoms
+    z_matrix : Union[np.ndarray, torch.LongTensor]
+        z matrix used for ic transformation
+    fixed_atoms : torch.Tensor
+        atoms not affected by transformation
+    keepdims : Optional[int]
+        number of dimensions kept in whitening transformation
+    normalize_angles : bool
+        bring angles and torsions into (0, 1) interval
+    eps : float
+        numerical epsilon used to enforce manifold boundaries
+    raise_warnings : bool
+        raise warnings if manifold boundaries are violated
+
+    Attributes
+    ----------
+    z_matrix : np.ndarray
+        z matrix used for ic transformation
+    dim_bonds : int
+        number of bonds
+    dim_angles : int
+        number of angles
+    dim_torsions : int
+        number of torsions
+    dim_fixed : int
+        number of learnable degrees of freedom for fixed atoms
+    """
+
+    @property
+    def z_matrix(self):
+        return self._rel_ic.z_matrix
+
+    @property
+    def dim_bonds(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_angles(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_torsions(self):
+        return len(self.z_matrix)
+
+    @property
+    def dim_fixed(self):
+        return self._whiten.keepdims
 
     def __init__(
         self,
@@ -621,32 +744,6 @@ class MixedCoordinateTransformation(Flow):
         enforce_boundaries: bool=True,
         raise_warnings: bool=True
     ):
-        """
-        Mixed coordinate transformation.
-
-        This combines an relative coordinate transformation with a whitening transformation on the fixed atoms.
-
-        Please note that the forward transformation transforms *from* xyz coordinates *into* internal coordinates.
-
-        By default output angles and torsions are normalized and fit into a (0, 1) interval.
-
-        Parameters:
-        ----------
-        data : torch.Tensor
-            data used to compute the whitening transformation of the fixed atoms
-        z_matrix : Union[np.ndarray, torch.LongTensor]
-            z matrix used for ic transformation
-        fixed_atoms : torch.Tensor
-            atoms not affected by transformation
-        keepdims : Optional[int]
-            number of dimensions kept in whitening transformation
-        normalize_angles : bool
-            bring angles and torsions into (0, 1) interval
-        eps : float
-            numerical epsilon used to enforce manifold boundaries
-        raise_warnings : bool
-            raise warnings if manifold boundaries are violated
-        """
         super().__init__()
         self._whiten = self._setup_whitening_layer(data, fixed_atoms, keepdims=keepdims)
         self._rel_ic = RelativeInternalCoordinatesTransformation(

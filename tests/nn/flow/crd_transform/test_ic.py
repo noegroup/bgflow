@@ -1,5 +1,7 @@
+
 import torch
 import numpy as np
+import pytest
 
 from bgtorch.nn.flow.crd_transform.ic_helper import (
     det2x2,
@@ -12,6 +14,8 @@ from bgtorch.nn.flow.crd_transform.ic import (
     ic2xy0_deriv,
     ic2xyz_deriv,
     GlobalInternalCoordinateTransformation,
+    RelativeInternalCoordinatesTransformation,
+    MixedCoordinateTransformation
 )
 
 # TODO Floating point precision is brittle!
@@ -295,3 +299,56 @@ def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
                         assert torch.allclose(
                             orig[j], noisy_ics_recon[j], atol=atol, rtol=rtol
                         ), (failure_message + f"{names[j]} != {name_recon}_recon")
+
+
+def test_global_ic_properties(ctx):
+    zmat = np.array(
+        [[0, -1, -1, -1], [1, 0, -1, -1], [2, 1, 0, -1], [3, 2, 1, 0], [4, 3, 2, 1]]
+    )
+    dim = 15
+    batch_dim = 10
+
+    ic = GlobalInternalCoordinateTransformation(zmat).to(**ctx)
+    ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
+    assert np.allclose(zmat[3:], ic.z_matrix)
+    assert ics[0].shape == (batch_dim, ic.dim_bonds)
+    assert ics[1].shape == (batch_dim, ic.dim_angles)
+    assert ics[2].shape == (batch_dim, ic.dim_torsions)
+    assert ics[3].shape == (batch_dim, 1, 3)
+    assert ics[4].shape == (batch_dim, 1, 3, 3)
+
+
+def test_relative_ic_properties(ctx):
+    zmat = np.array(
+        [[3, 2, 1, 0], [4, 3, 2, 1]]
+    )
+    fixed_atoms = np.array([0,1,2])
+    dim = 15
+    batch_dim = 10
+
+    ic = RelativeInternalCoordinatesTransformation(zmat, fixed_atoms).to(**ctx)
+    ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
+    assert np.allclose(zmat, ic.z_matrix)
+    assert np.allclose(fixed_atoms, ic.fixed_atoms)
+    assert ics[0].shape == (batch_dim, ic.dim_bonds)
+    assert ics[1].shape == (batch_dim, ic.dim_angles)
+    assert ics[2].shape == (batch_dim, ic.dim_torsions)
+    assert ics[3].shape == (batch_dim, ic.dim_fixed)
+
+
+def test_mixed_ic_properties(ctx):
+    zmat = np.array(
+        [[3, 2, 1, 0], [4, 3, 2, 1]]
+    )
+    fixed_atoms = np.array([0,1,2])
+    dim = 15
+    batch_dim = 10
+    data = torch.randn(1000, dim, **ctx)
+
+    ic = MixedCoordinateTransformation(data, zmat, fixed_atoms, keepdims=6).to(**ctx)
+    ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
+    assert np.allclose(zmat, ic.z_matrix)
+    assert ics[0].shape == (batch_dim, ic.dim_bonds)
+    assert ics[1].shape == (batch_dim, ic.dim_angles)
+    assert ics[2].shape == (batch_dim, ic.dim_torsions)
+    assert ics[3].shape == (batch_dim, ic.dim_fixed)
