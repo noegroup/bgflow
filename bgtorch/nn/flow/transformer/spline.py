@@ -32,8 +32,10 @@ class ConditionalSplineTransformer(Transformer):
             dimension must be `y.shape[-1] * n_bins * 3` if splines are circular
             and `y.shape[-1] * (n_bins * 3 + 1)` if not.
             The integer `n_bins` is inferred implicitly from the network output shape.
-        is_circular : bool
+        is_circular : bool or torch.Tensor
             If True, the boundaries are treated as periodic boundaries, i.e. the pdf is enforced to be continuous.
+            If this is a boolean tensor, only the indices where the tensor is True are treated as periodic
+            (tensor shape has to be (y.shape[-1], ) ).
 
         Raises
         ------
@@ -52,21 +54,67 @@ class ConditionalSplineTransformer(Transformer):
         """
         super().__init__()
         self._params_net = params_net
-        self._is_circular = is_circular
+        self._is_circular = torch.tensor(is_circular, dtype=torch.bool)
         self._left = left
         self._right = right
         self._bottom = bottom
         self._top = top
 
-    def _compute_params(self, x, y_dim):
-        params = self._params_net(x)
-        params = params.view(x.shape[0], y_dim, -1)
-        n_bins = params.shape[-1] // 3
-        if self._is_circular:
-            widths, heights, slopes = torch.split(params, [n_bins, n_bins, n_bins], dim=-1)
-            slopes = torch.cat([slopes, slopes[..., [0]]], dim=-1)
+    def _n_noncircular(self, y_dim):
+        if self._is_circular.all():
+            return 0
+        elif not self._is_circular.any():
+            return y_dim
         else:
-            widths, heights, slopes = torch.split(params, [n_bins, n_bins, n_bins+1], dim=-1)
+            return self._is_circular.sum()
+
+    def _noncircular_indices(self, y_dim):
+        if self._is_circular.all():
+            return slice(0)
+        elif not self._is_circular.any():
+            return slice(None)
+        else:
+            return self._is_circular
+
+    def _compute_params(self, x, y_dim):
+        """Compute widths, heights, and slopes from x through the params_net.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Conditioner input.
+        y_dim : int
+            Number of transformed degrees of freedom.
+
+        Returns
+        -------
+        widths : torch.Tensor
+            unnormalized bin widths for the monotonic spline interpolation
+            shape ( ... , y_dim, n_bins), where ... represents batch dims
+        heights : torch.Tensor
+            unnormalized bin heights for the monotonic spline interpolation
+            shape ( ... , y_dim, n_bins)
+        slopes : torch.Tensor
+            unnormalized slopes for the monotonic spline interpolation
+            shape (... , y_dim, n_bins + 1)
+        """
+        params = self._params_net(x)
+        # assume that all but the last dim of the params tensor are batch dims
+        batch_shape = params.shape[:-1]
+        n_bins = params.shape[-1] // (y_dim * 3)
+        widths, heights, slopes, noncircular_slopes = torch.split(
+            params,
+            [n_bins * y_dim, n_bins * y_dim, n_bins * y_dim, self._n_noncircular(y_dim)],
+            dim=-1
+        )
+        widths = widths.reshape(*batch_shape, y_dim, n_bins)
+        heights = heights.reshape(*batch_shape, y_dim, n_bins)
+        slopes = slopes.reshape(*batch_shape, y_dim, n_bins)
+        noncircular_slopes = noncircular_slopes.reshape(*batch_shape, y_dim, -1)
+        # make periodic
+        slopes = torch.cat([slopes, slopes[..., [0]]], dim=-1)
+        # make noncircular indices non-periodic
+        slopes[..., self._noncircular_indices(y_dim)] = noncircular_slopes
         return widths, heights, slopes
 
     def _forward(self, x, y, *args, **kwargs):
