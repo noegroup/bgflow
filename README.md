@@ -42,7 +42,7 @@ please feel free to open a
 [pull request](https://github.com/noegroup/bgtorch/pulls)
 or report an [issue](https://github.com/noegroup/bgtorch/issues).
 
-When using bgtorch in you research, please cite our preprint (coming soon).
+When using bgtorch in your research, please cite our preprint (coming soon).
 ***
 ## [Minimal example](#minimal-example)
 Implementation of a BG with a single [Real NVP coupling block](https://arxiv.org/abs/1605.08803)
