@@ -310,12 +310,17 @@ def test_global_ic_properties(ctx):
 
     ic = GlobalInternalCoordinateTransformation(zmat).to(**ctx)
     ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
-    assert np.allclose(zmat[3:], ic.z_matrix)
+    assert (zmat[3:] == ic.z_matrix).all()
+    assert len(ic.fixed_atoms) == 0
     assert ics[0].shape == (batch_dim, ic.dim_bonds)
     assert ics[1].shape == (batch_dim, ic.dim_angles)
     assert ics[2].shape == (batch_dim, ic.dim_torsions)
     assert ics[3].shape == (batch_dim, 1, 3)
     assert ics[4].shape == (batch_dim, 1, 3, 3)
+    assert ic.normalize_angles
+    assert (ic.bond_indices == zmat[1:,:2]).all()
+    assert (ic.angle_indices == zmat[2:,:3]).all()
+    assert (ic.torsion_indices == zmat[3:,:]).all()
 
 
 def test_relative_ic_properties(ctx):
@@ -334,6 +339,10 @@ def test_relative_ic_properties(ctx):
     assert ics[1].shape == (batch_dim, ic.dim_angles)
     assert ics[2].shape == (batch_dim, ic.dim_torsions)
     assert ics[3].shape == (batch_dim, ic.dim_fixed)
+    assert ic.normalize_angles
+    assert (ic.bond_indices == zmat[:,:2]).all()
+    assert (ic.angle_indices == zmat[:,:3]).all()
+    assert (ic.torsion_indices == zmat[:,:]).all()
 
 
 def test_mixed_ic_properties(ctx):
@@ -348,7 +357,12 @@ def test_mixed_ic_properties(ctx):
     ic = MixedCoordinateTransformation(data, zmat, fixed_atoms, keepdims=6).to(**ctx)
     ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
     assert np.allclose(zmat, ic.z_matrix)
+    assert np.allclose(fixed_atoms, ic.fixed_atoms)
     assert ics[0].shape == (batch_dim, ic.dim_bonds)
     assert ics[1].shape == (batch_dim, ic.dim_angles)
     assert ics[2].shape == (batch_dim, ic.dim_torsions)
     assert ics[3].shape == (batch_dim, ic.dim_fixed)
+    assert ic.normalize_angles
+    assert (ic.bond_indices == zmat[:,:2]).all()
+    assert (ic.angle_indices == zmat[:,:3]).all()
+    assert (ic.torsion_indices == zmat[:,:]).all()

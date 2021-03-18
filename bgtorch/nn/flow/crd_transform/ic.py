@@ -189,7 +189,7 @@ def unnormalize_angles(angles):
     return angles, dlogp
 
 
-class ReferenceSystemTranformation(Flow):
+class ReferenceSystemTransformation(Flow):
     """
     Internal coordinate transformation of the reference frame set by the first three atoms.
 
@@ -336,6 +336,15 @@ class RelativeInternalCoordinatesTransformation(Flow):
         number of torsions
     dim_fixed : int
         number of degrees of freedom for fixed atoms
+    bond_indices : np.array of int
+        atom ids that are connected by a bond (shape: (dim_bonds, 2))
+    angle_indices : np.array of int
+        atoms ids that are connected by an angle (shape: (dim_angles, 3))
+    torsion_indices : np.array of int
+        atoms ids that are connected by a torsion (shape: (dim_torsions, 4))
+    normalize_angles : bool
+        whether this transform normalizes angles and torsions to [0,1]
+
     """
     @property
     def z_matrix(self):
@@ -360,6 +369,22 @@ class RelativeInternalCoordinatesTransformation(Flow):
     @property
     def dim_fixed(self):
         return 3*len(self._fixed_atoms)
+
+    @property
+    def bond_indices(self):
+        return self._bond_indices
+
+    @property
+    def angle_indices(self):
+        return self._angle_indices
+
+    @property
+    def torsion_indices(self):
+        return self._torsion_indices
+
+    @property
+    def normalize_angles(self):
+        return self._normalize_angles
 
     def __init__(
         self,
@@ -534,17 +559,31 @@ class GlobalInternalCoordinateTransformation(Flow):
     ----------
     z_matrix : np.ndarray
         z matrix used by the underlying relative ic transformation
+    fixed_atoms : np.ndarray
+        empty array, just to satisfy the interface
     dim_bonds : int
         number of bonds
     dim_angles : int
         number of angles
     dim_torsions : int
         number of torsions
+    bond_indices : np.array of int
+        atom ids that are connected by a bond (shape: (dim_bonds, 2))
+    angle_indices : np.array of int
+        atoms ids that are connected by an angle (shape: (dim_angles, 3))
+    torsion_indices : np.array of int
+        atoms ids that are connected by a torsion (shape: (dim_torsions, 4))
+    normalize_angles : bool
+        whether this transform normalizes angles and torsions to [0,1]
     """
 
     @property
     def z_matrix(self):
         return self._rel_ic.z_matrix
+
+    @property
+    def fixed_atoms(self):
+        return np.array([], dtype=np.int64)
 
     @property
     def dim_bonds(self):
@@ -557,6 +596,35 @@ class GlobalInternalCoordinateTransformation(Flow):
     @property
     def dim_torsions(self):
         return len(self.z_matrix)
+
+    @property
+    def bond_indices(self):
+        fix = self._rel_ic.fixed_atoms
+        return np.row_stack([
+            np.array([
+                [fix[1], fix[0]],
+                [fix[2], fix[1]]
+            ]),
+            self._rel_ic.bond_indices,
+        ])
+
+    @property
+    def angle_indices(self):
+        fix = self._rel_ic.fixed_atoms
+        return np.row_stack([
+            np.array([
+                [fix[2], fix[1], fix[0]]
+            ]),
+            self._rel_ic.angle_indices,
+        ])
+
+    @property
+    def torsion_indices(self):
+        return self._rel_ic.torsion_indices
+
+    @property
+    def normalize_angles(self):
+        return self._rel_ic.normalize_angles
 
     def __init__(
         self,
@@ -579,7 +647,7 @@ class GlobalInternalCoordinateTransformation(Flow):
             enforce_boundaries=enforce_boundaries,
             raise_warnings=raise_warnings
         )
-        self._ref_ic = ReferenceSystemTranformation(
+        self._ref_ic = ReferenceSystemTransformation(
             normalize_angles=normalize_angles,
             eps=eps,
             enforce_boundaries=enforce_boundaries,
@@ -703,6 +771,8 @@ class MixedCoordinateTransformation(Flow):
     ----------
     z_matrix : np.ndarray
         z matrix used for ic transformation
+    fixed_atoms : np.ndarray
+        atom indices that are kept as Cartesian coordinates
     dim_bonds : int
         number of bonds
     dim_angles : int
@@ -711,11 +781,23 @@ class MixedCoordinateTransformation(Flow):
         number of torsions
     dim_fixed : int
         number of learnable degrees of freedom for fixed atoms
+    bond_indices : np.array of int
+        atom ids that are connected by a bond (shape: (dim_bonds, 2))
+    angle_indices : np.array of int
+        atoms ids that are connected by an angle (shape: (dim_angles, 3))
+    torsion_indices : np.array of int
+        atoms ids that are connected by a torsion (shape: (dim_torsions, 4))
+    normalize_angles : bool
+        whether this transform normalizes angles and torsions to [0,1]
     """
 
     @property
     def z_matrix(self):
         return self._rel_ic.z_matrix
+
+    @property
+    def fixed_atoms(self):
+        return self._rel_ic.fixed_atoms
 
     @property
     def dim_bonds(self):
@@ -732,6 +814,22 @@ class MixedCoordinateTransformation(Flow):
     @property
     def dim_fixed(self):
         return self._whiten.keepdims
+
+    @property
+    def bond_indices(self):
+        return self._rel_ic.bond_indices
+
+    @property
+    def angle_indices(self):
+        return self._rel_ic.angle_indices
+
+    @property
+    def torsion_indices(self):
+        return self._rel_ic.torsion_indices
+
+    @property
+    def normalize_angles(self):
+        return self._rel_ic.normalize_angles
 
     def __init__(
         self,
