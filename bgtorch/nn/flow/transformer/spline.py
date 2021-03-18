@@ -29,12 +29,14 @@ class ConditionalSplineTransformer(Transformer):
         params_net: torch.nn.Module
             Computes the transformation parameters for `y` conditioned
             on `x`. Input dimension must be `x.shape[-1]`. Output
-            dimension must be `y.shape[-1] * n_bins * 3` if splines are circular
-            and `y.shape[-1] * (n_bins * 3 + 1)` if not.
+            dimension must be
+                - `y.shape[-1] * n_bins * 3` if splines are circular,
+                - `y.shape[-1] * (n_bins * 3 + 1)` if not
+                - `y.shape[-1] * n_bins * 3 + n_circular if some transformed variables are circular
             The integer `n_bins` is inferred implicitly from the network output shape.
         is_circular : bool or torch.Tensor
             If True, the boundaries are treated as periodic boundaries, i.e. the pdf is enforced to be continuous.
-            If this is a boolean tensor, only the indices where the tensor is True are treated as periodic
+            If is_circular is a boolean tensor, only the indices at which the tensor is True are treated as periodic
             (tensor shape has to be (y.shape[-1], ) ).
 
         Raises
@@ -59,22 +61,6 @@ class ConditionalSplineTransformer(Transformer):
         self._right = right
         self._bottom = bottom
         self._top = top
-
-    def _n_noncircular(self, y_dim):
-        if self._is_circular.all():
-            return 0
-        elif not self._is_circular.any():
-            return y_dim
-        else:
-            return self._is_circular.sum()
-
-    def _noncircular_indices(self, y_dim):
-        if self._is_circular.all():
-            return slice(0)
-        elif not self._is_circular.any():
-            return slice(None)
-        else:
-            return self._is_circular
 
     def _compute_params(self, x, y_dim):
         """Compute widths, heights, and slopes from x through the params_net.
@@ -110,11 +96,11 @@ class ConditionalSplineTransformer(Transformer):
         widths = widths.reshape(*batch_shape, y_dim, n_bins)
         heights = heights.reshape(*batch_shape, y_dim, n_bins)
         slopes = slopes.reshape(*batch_shape, y_dim, n_bins)
-        noncircular_slopes = noncircular_slopes.reshape(*batch_shape, y_dim, -1)
+        noncircular_slopes = noncircular_slopes.reshape(*batch_shape, -1)
         # make periodic
         slopes = torch.cat([slopes, slopes[..., [0]]], dim=-1)
         # make noncircular indices non-periodic
-        slopes[..., self._noncircular_indices(y_dim)] = noncircular_slopes
+        slopes[..., self._noncircular_indices(y_dim), -1] = noncircular_slopes
         return widths, heights, slopes
 
     def _forward(self, x, y, *args, **kwargs):
@@ -150,3 +136,19 @@ class ConditionalSplineTransformer(Transformer):
             bottom=self._bottom,
         )
         return z, dlogp.sum(dim=-1, keepdim=True)
+
+    def _n_noncircular(self, y_dim):
+        if self._is_circular.all():
+            return 0
+        elif not self._is_circular.any():
+            return y_dim
+        else:
+            return self._is_circular.sum()
+
+    def _noncircular_indices(self, y_dim):
+        if self._is_circular.all():
+            return slice(0)
+        elif not self._is_circular.any():
+            return slice(None)
+        else:
+            return torch.logical_not(self._is_circular)
