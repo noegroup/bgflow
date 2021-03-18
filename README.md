@@ -27,11 +27,22 @@ This framework provides:
 * Other sampling methods
     * Markov-Chain Monte Carlo
     * Molecular dynamics
-    * ... replica exchange and more to come
+    * ... replica exchange and more coming soon ...
 * API to combine BGs with other sampling methods
 * [OpenMM](https://github.com/openmm/openmm) bridge 
 * Internal Coordinate Transformations to map between Z-matrices and Cartesian coordinates
+***
+## [Disclaimer](#disclaimer)
+This library is alpha software under active development.
+Certain elements of its API are going to change in the 
+future and some current implementations may not be tested.
 
+If you are interested in contributing to the library,
+please feel free to open a 
+[pull request](https://github.com/noegroup/bgtorch/pulls)
+or report an [issue](https://github.com/noegroup/bgtorch/issues).
+
+When using bgtorch in your research, please cite our preprint (coming soon).
 ***
 ## [Minimal example](#minimal-example)
 Implementation of a BG with a single [Real NVP coupling block](https://arxiv.org/abs/1605.08803)
@@ -53,7 +64,8 @@ target = bg.DoubleWellEnergy(dim)
 layers = []
 layers.append(bg.SplitFlow(dim // 2))
 layers.append(bg.CouplingFlow(
-        # we use a affine transformation to transform the RHS conditioned on the LHS
+        # we use a affine transformation to transform 
+        # the RHS conditioned on the LHS
         bg.AffineTransformer(
             # use simple dense nets for the affine shift/scale
             shift_transformation=bg.DenseNet(
@@ -120,7 +132,7 @@ pytest
 * Optional
   * [pytest](https://github.com/pytest-dev/pytest) (for testing)
   * [nflows](https://github.com/bayesiains/nflows) (for Neural Spline Flows)
-  * [openMM](https://github.com/openmm/openmm) (for)
+  * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)
   * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
   * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
 
