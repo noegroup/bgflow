@@ -317,6 +317,7 @@ def test_global_ic_properties(ctx):
     assert ics[2].shape == (batch_dim, ic.dim_torsions)
     assert ics[3].shape == (batch_dim, 1, 3)
     assert ics[4].shape == (batch_dim, 1, 3, 3)
+    assert ic.dim_fixed == 0
     assert ic.normalize_angles
     assert (ic.bond_indices == zmat[1:,:2]).all()
     assert (ic.angle_indices == zmat[2:,:3]).all()
