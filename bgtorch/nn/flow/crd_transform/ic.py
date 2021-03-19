@@ -567,6 +567,8 @@ class GlobalInternalCoordinateTransformation(Flow):
         number of angles
     dim_torsions : int
         number of torsions
+    dim_fixed : int
+        is zero for this transform
     bond_indices : np.array of int
         atom ids that are connected by a bond (shape: (dim_bonds, 2))
     angle_indices : np.array of int
@@ -596,6 +598,10 @@ class GlobalInternalCoordinateTransformation(Flow):
     @property
     def dim_torsions(self):
         return len(self.z_matrix)
+
+    @property
+    def dim_fixed(self):
+        return 0
 
     @property
     def bond_indices(self):
