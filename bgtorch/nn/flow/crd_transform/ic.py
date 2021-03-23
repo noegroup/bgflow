@@ -215,7 +215,7 @@ class ReferenceSystemTransformation(Flow):
         self._enforce_boundaries = enforce_boundaries
         self._raise_warnings = raise_warnings
 
-    def _forward(self, x0, x1, x2):
+    def _forward(self, x0, x1, x2, *args, **kwargs):
 
         R = orientation(
             x0,
@@ -289,7 +289,7 @@ class ReferenceSystemTransformation(Flow):
 
         return x0, x1, x2, dlogp
 
-    def _inverse(self, x0, R, d01, d12, a012):
+    def _inverse(self, x0, R, d01, d12, a012, *args, **kwargs):
         dlogp = 0
 
         if self._normalize_angles:
@@ -660,7 +660,7 @@ class GlobalInternalCoordinateTransformation(Flow):
             raise_warnings=raise_warnings
         )
 
-    def _forward(self, x):
+    def _forward(self, x, *args, **kwargs):
         """
         Parameters:
         ----------
@@ -686,7 +686,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         x = x.view(n_batch, -1, 3)
 
         # transform relative system wrt reference system
-        bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x)
+        bonds, angles, torsions, x_fixed, dlogp_rel = self._rel_ic(x, *args, **kwargs)
 
         x_fixed = x_fixed.view(n_batch, -1, 3)
 
@@ -705,7 +705,7 @@ class GlobalInternalCoordinateTransformation(Flow):
 
         return bonds, angles, torsions, x0, R, dlogp
 
-    def _inverse(self, bonds, angles, torsions, x0, R):
+    def _inverse(self, bonds, angles, torsions, x0, R, *args, **kwargs):
         """
         Parameters:
         -----------
