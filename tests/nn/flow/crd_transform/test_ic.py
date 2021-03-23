@@ -14,7 +14,7 @@ from bgtorch.nn.flow.crd_transform.ic import (
     ic2xy0_deriv,
     ic2xyz_deriv,
     GlobalInternalCoordinateTransformation,
-    RelativeInternalCoordinatesTransformation,
+    RelativeInternalCoordinateTransformation,
     MixedCoordinateTransformation
 )
 
@@ -332,7 +332,7 @@ def test_relative_ic_properties(ctx):
     dim = 15
     batch_dim = 10
 
-    ic = RelativeInternalCoordinatesTransformation(zmat, fixed_atoms).to(**ctx)
+    ic = RelativeInternalCoordinateTransformation(zmat, fixed_atoms).to(**ctx)
     ics = ic.forward(torch.randn(batch_dim, dim, **ctx))
     assert np.allclose(zmat, ic.z_matrix)
     assert np.allclose(fixed_atoms, ic.fixed_atoms)

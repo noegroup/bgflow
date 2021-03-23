@@ -17,7 +17,7 @@ from .pca import WhitenFlow
 
 
 __all__ = [
-    "RelativeInternalCoordinatesTransformation",
+    "RelativeInternalCoordinateTransformation",
     "GlobalInternalCoordinateTransformation",
     "MixedCoordinateTransformation"
 ]
@@ -301,7 +301,7 @@ class ReferenceSystemTransformation(Flow):
         return (*res, dlogp)
 
 
-class RelativeInternalCoordinatesTransformation(Flow):
+class RelativeInternalCoordinateTransformation(Flow):
     """
     Internal coordinate transformation relative to a set of fixed atoms.
 
@@ -645,7 +645,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         # find initial atoms
         initial_atoms, z_matrix = slice_initial_atoms(z_matrix)
 
-        self._rel_ic = RelativeInternalCoordinatesTransformation(
+        self._rel_ic = RelativeInternalCoordinateTransformation(
             z_matrix=z_matrix,
             fixed_atoms=initial_atoms,
             normalize_angles=normalize_angles,
@@ -850,7 +850,7 @@ class MixedCoordinateTransformation(Flow):
     ):
         super().__init__()
         self._whiten = self._setup_whitening_layer(data, fixed_atoms, keepdims=keepdims)
-        self._rel_ic = RelativeInternalCoordinatesTransformation(
+        self._rel_ic = RelativeInternalCoordinateTransformation(
             z_matrix=z_matrix,
             fixed_atoms=fixed_atoms,
             normalize_angles=normalize_angles,
