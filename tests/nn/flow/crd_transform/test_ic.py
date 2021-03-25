@@ -487,7 +487,7 @@ def test_relative_ic_inversion(ctx, alanine_ics):
 def test_mixed_ic_inversion(ctx, alanine_ics):
     z_matrix, _, rigid_block, positions = alanine_ics
     positions = torch.tensor(positions, **ctx)
-    data = positions.repeat(100,1) + torch.randn(100, len(positions))
+    data = positions.repeat(100,1) + torch.randn(100, len(positions), **ctx)
     ic = MixedCoordinateTransformation(data, z_matrix, rigid_block, keepdims=5).to(**ctx)
     *out, dlogp = ic.forward(positions)
     positions2, dlogp2 = ic.forward(*out, inverse=True)
