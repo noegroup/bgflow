@@ -59,9 +59,9 @@ class SplitFlow(Flow):
 
 
 class MergeFlow(InverseFlow):
-    def __init__(self, *sizes):
+    def __init__(self, *sizes, dim=-1):
         """ Shortcut to InverseFlow(SplitFlow()) """
-        super().__init__(SplitFlow(*sizes))
+        super().__init__(SplitFlow(*sizes, dim=dim))
 
 
 class SwapFlow(Flow):
