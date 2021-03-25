@@ -15,7 +15,8 @@ from bgtorch.nn.flow.crd_transform.ic import (
     ic2xyz_deriv,
     GlobalInternalCoordinateTransformation,
     RelativeInternalCoordinateTransformation,
-    MixedCoordinateTransformation
+    MixedCoordinateTransformation,
+    decompose_z_matrix
 )
 
 # TODO Floating point precision is brittle!
@@ -25,6 +26,84 @@ from bgtorch.nn.flow.crd_transform.ic import (
 torch.set_default_tensor_type = torch.DoubleTensor
 
 N_REPETITIONS = 50
+
+
+@pytest.fixture()
+def alanine_ics():
+    """Examplary z-matrix, fixed atoms, and positions for capped alanine."""
+    rigid_block = np.array([6, 8, 9, 10, 14])
+
+    relative_z_matrix = np.array([
+        [0, 1, 4, 6],
+        [1, 4, 6, 8],
+        [2, 1, 4, 0],
+        [3, 1, 4, 0],
+        [4, 6, 8, 14],
+        [5, 4, 6, 8],
+        [7, 6, 8, 4],
+        [11, 10, 8, 6],
+        [12, 10, 8, 11],
+        [13, 10, 8, 11],
+        [15, 14, 8, 16],
+        [16, 14, 8, 6],
+        [17, 16, 14, 15],
+        [18, 16, 14, 8],
+        [19, 18, 16, 14],
+        [20, 18, 16, 19],
+        [21, 18, 16, 19]
+    ])
+
+    global_z_matrix = np.array([
+        [ 0, -1, -1, -1],
+        [ 1,  0, -1, -1],
+        [ 2,  1,  0, -1],
+        [ 3,  1,  0,  2],
+        [ 4,  1,  0,  2],
+        [ 5,  4,  1,  0],
+        [ 6,  4,  1,  5],
+        [ 7,  6,  4,  1],
+        [ 8,  6,  4,  7],
+        [ 9,  8,  6,  4],
+        [10,  8,  6,  9],
+        [14,  8,  6,  9],
+        [11, 10,  8,  6],
+        [12, 10,  8, 11],
+        [13, 10,  8, 11],
+        [15, 14,  8,  6],
+        [16, 14,  8, 15],
+        [17, 16, 14, 15],
+        [18, 16, 17, 14],
+        [19, 18, 16, 14],
+        [20, 18, 19, 16],
+        [21, 18, 20, 16],
+    ])
+
+    xyz = np.array([
+        [1.375, 1.25, 1.573],
+        [1.312, 1.255, 1.662],
+        [1.327, 1.306, 1.493],
+        [1.377, 1.143, 1.549],
+        [1.511, 1.31, 1.618],
+        [1.606, 1.236, 1.63],
+        [1.523, 1.441, 1.633],
+        [1.445, 1.5, 1.607],
+        [1.645, 1.515, 1.667],
+        [1.703, 1.459, 1.74],
+        [1.73, 1.53, 1.54],
+        [1.792, 1.619, 1.554],
+        [1.78, 1.439, 1.508],
+        [1.663, 1.555, 1.457],
+        [1.618, 1.646, 1.734],
+        [1.509, 1.703, 1.709],
+        [1.715, 1.705, 1.809],
+        [1.798, 1.653, 1.831],
+        [1.703, 1.847, 1.852],
+        [1.801, 1.871, 1.892],
+        [1.674, 1.911, 1.768],
+        [1.631, 1.858, 1.933]
+    ])
+
+    return relative_z_matrix, global_z_matrix, rigid_block, xyz.reshape(1,-1)
 
 
 def rad2deg(x):
@@ -367,3 +446,50 @@ def test_mixed_ic_properties(ctx):
     assert (ic.bond_indices == zmat[:,:2]).all()
     assert (ic.angle_indices == zmat[:,:3]).all()
     assert (ic.torsion_indices == zmat[:,:]).all()
+
+
+def test_decompose_z_matrix(alanine_ics):
+    z_matrix, _, rigid_block, _ = alanine_ics
+    blocks, index2atom, atom2index, index2order = decompose_z_matrix(z_matrix, rigid_block)
+    blocks_cat = np.concatenate(blocks, axis=0)
+    row_order = np.argsort(blocks_cat[:,0])
+    assert (blocks_cat[row_order] == z_matrix).all()
+    assert (z_matrix[index2order[np.arange(len(z_matrix))]] == blocks_cat).all()
+    assert (index2atom[atom2index[np.arange(len(z_matrix))]] == np.arange(len(z_matrix))).all()
+    # makes sure all atoms can be reconstructed in this order
+    placed = rigid_block
+    for block in blocks:
+        required_atoms = block[:, 2:].flatten()
+        assert np.all(np.isin(required_atoms, placed))
+        placed = np.concatenate([placed, block.flatten()])
+
+
+def test_global_ic_inversion(ctx, alanine_ics):
+    _, z_matrix, _, positions = alanine_ics
+    ic = GlobalInternalCoordinateTransformation(z_matrix).to(**ctx)
+    positions = torch.tensor(positions, **ctx)
+    *out, dlogp = ic.forward(positions)
+    positions2, dlogp2 = ic.forward(*out, inverse=True)
+    assert torch.allclose(positions, positions2)
+    assert torch.allclose(dlogp, -dlogp2)
+
+
+def test_relative_ic_inversion(ctx, alanine_ics):
+    z_matrix, _, rigid_block, positions = alanine_ics
+    ic = RelativeInternalCoordinateTransformation(z_matrix, rigid_block).to(**ctx)
+    positions = torch.tensor(positions, **ctx)
+    *out, dlogp = ic.forward(positions)
+    positions2, dlogp2 = ic.forward(*out, inverse=True)
+    assert torch.allclose(positions, positions2)
+    assert torch.allclose(dlogp, -dlogp2)
+
+
+def test_mixed_ic_inversion(ctx, alanine_ics):
+    z_matrix, _, rigid_block, positions = alanine_ics
+    positions = torch.tensor(positions, **ctx)
+    data = positions.repeat(100,1) + torch.randn(100, len(positions))
+    ic = MixedCoordinateTransformation(data, z_matrix, rigid_block, keepdims=5).to(**ctx)
+    *out, dlogp = ic.forward(positions)
+    positions2, dlogp2 = ic.forward(*out, inverse=True)
+    assert torch.allclose(positions, positions2)
+    assert torch.allclose(dlogp, -dlogp2)

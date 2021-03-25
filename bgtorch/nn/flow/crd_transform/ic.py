@@ -122,32 +122,65 @@ def ic2xy0_deriv(p1, p2, d14, a124, eps=1e-7, enforce_boundaries=True, raise_war
 
 
 def decompose_z_matrix(z_matrix, fixed):
+    """Decompose the z-matrix into blocks to allow parallel (batched) reconstruction
+    of cartesian coordinates starting from the fixed atoms.
+
+    Parameters
+    ----------
+    z_matrix : np.ndarray
+        Z-matrix definition for the internal coordinate transform.
+        Each row in the z-matrix defines a (proper or improper) torsion by specifying the atom indices
+        forming this torsion. Atom indices are integers >= 0.
+        The shape of the z-matrix is (n_conditioned_atoms, 4).
+    fixed : np.ndarray
+        Fixed atoms that are used to seed the reconstruction of Cartesian from internal coordinates.
+
+    Returns
+    -------
+    blocks : list of np.ndarray
+        Z-matrix for each stage of the reconstruction. The shape for each block is
+        (n_conditioned_atoms_in_block, 4).
+    index2atom : np.ndarray
+        index2atom[i] specifies the atom index of the atom that is placed by the i-th row in the original Z-matrix.
+        The shape is (n_conditioned_atoms, ).
+    atom2index : np.ndarray
+        atom2index[i] specifies the row in the original z-matrix that is responsible for placing the i-th atom.
+        The shape is (n_conditioned_atoms, ).
+    index2order : np.ndarray
+        order in which the reconstruction is applied, where i denotes a row in the Z-matrix.
+        The shape is (n_conditioned_atoms, ).
+    """
     atoms = [fixed]
 
-    blocks = []
-    given = np.sort(fixed)
+    blocks = []  # blocks of Z-matrices. Each block corresponds to one stage of Cartesian reconstruction.
+    given = np.sort(fixed)  # atoms that were already visited
 
     # filter out conditioned variables
     non_given = ~np.isin(z_matrix[:, 0], given)
     z_matrix = z_matrix[non_given]
+    # prepend the torsion index to each torsion in the z matrix
     z_matrix = np.concatenate([np.arange(len(z_matrix))[:, None], z_matrix], axis=1)
 
-    order = []
+    order = []  # torsion indices
     while len(z_matrix) > 0:
 
-        is_satisfied = np.all(np.isin(z_matrix[:, 2:], given), axis=-1)
-        if (not np.any(is_satisfied)) and len(z_matrix) > 0:
-            raise ValueError("Not satisfiable")
+        can_be_placed_in_this_stage = np.all(np.isin(z_matrix[:, 2:], given), axis=-1)
+        # torsions, where atoms 2-4 were already visited
+        if (not np.any(can_be_placed_in_this_stage)) and len(z_matrix) > 0:
+            raise ValueError(
+                f"Z-matrix decomposition failed. "
+                f"The following atoms were not reachable from the fixed atoms: \n{z_matrix[:,1]}"
+            )
 
-        pos = z_matrix[is_satisfied, 0]
-        atom = z_matrix[is_satisfied, 1]
+        pos = z_matrix[can_be_placed_in_this_stage, 0]
+        atom = z_matrix[can_be_placed_in_this_stage, 1]
 
         atoms.append(atom)
         order.append(pos)
 
-        blocks.append(z_matrix[is_satisfied][:, 1:])
+        blocks.append(z_matrix[can_be_placed_in_this_stage][:, 1:])
         given = np.union1d(given, atom)
-        z_matrix = z_matrix[~is_satisfied]
+        z_matrix = z_matrix[~can_be_placed_in_this_stage]
 
     index2atom = np.concatenate(atoms)
     atom2index = np.argsort(index2atom)
@@ -313,7 +346,7 @@ class RelativeInternalCoordinateTransformation(Flow):
     ----------
     z_matrix : Union[np.ndarray, torch.LongTensor]
         z matrix used for ic transformation
-    fixed_atoms : torch.Tensor
+    fixed_atoms : np.ndarray
         atoms not affected by transformation
     normalize_angles : bool
         bring angles and torsions into (0, 1) interval
@@ -389,7 +422,7 @@ class RelativeInternalCoordinateTransformation(Flow):
     def __init__(
         self,
         z_matrix: Union[np.ndarray, torch.LongTensor],
-        fixed_atoms: torch.Tensor,
+        fixed_atoms: np.ndarray,
         normalize_angles: bool=True,
         eps: float=1e-7,
         enforce_boundaries: bool=True,
@@ -478,12 +511,20 @@ class RelativeInternalCoordinateTransformation(Flow):
             torsions, dlogp_t = unnormalize_torsions(torsions)
             dlogp += dlogp_a + dlogp_t
 
+        # infer dimensions from input
         n_batch = x_fixed.shape[0]
+        x_fixed = x_fixed.view(n_batch, -1, 3)
+        n_fixed = x_fixed.shape[-2]
+        n_conditioned = bonds.shape[-1]
+        assert angles.shape[-1] == n_conditioned
+        assert torsions.shape[-1] == n_conditioned
 
-        # initial points are the fixed points
-        ps = x_fixed.view(n_batch, -1, 3).clone()
+        # reconstruct points; initial points are the fixed points
+        points = torch.empty((n_batch, n_fixed + n_conditioned, 3), dtype=x_fixed.dtype, device=x_fixed.device)
+        points[:, :n_fixed, :] = x_fixed.view(n_batch, -1, 3)
 
         # blockwise reconstruction of points left
+        current_index = n_fixed
         for block in self._z_blocks:
 
             # map atoms from z matrix
@@ -493,7 +534,7 @@ class RelativeInternalCoordinateTransformation(Flow):
             # slice three context points
             # from the already reconstructed
             # points using the indices
-            context = ps[:, ref[:, 1:]]
+            context = points[:, ref[:, 1:]]
             p0 = context[:, :, 0]
             p1 = context[:, :, 1]
             p2 = context[:, :, 2]
@@ -526,13 +567,14 @@ class RelativeInternalCoordinateTransformation(Flow):
             dlogp += det3x3(J).abs().log().sum(-1)[:, None]
 
             # update list of reconstructed points
-            ps = torch.cat([ps, p], dim=1)
+            points[:, current_index:current_index + p.shape[1], :] = p
+            current_index += p.shape[1]
 
         # finally make sure that atoms are sorted
         # from reconstruction order to original order
-        ps = ps[:, self._atom2index]
+        points = points[:, self._atom2index]
 
-        return ps.view(n_batch, -1), dlogp
+        return points.view(n_batch, -1), dlogp
 
 
 class GlobalInternalCoordinateTransformation(Flow):
@@ -841,7 +883,7 @@ class MixedCoordinateTransformation(Flow):
         self,
         data: torch.Tensor,
         z_matrix: Union[np.ndarray, torch.Tensor],
-        fixed_atoms: torch.Tensor,
+        fixed_atoms: np.ndarray,
         keepdims: Optional[int]=None,
         normalize_angles=True,
         eps: float=1e-7,
