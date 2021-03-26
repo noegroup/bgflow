@@ -1,12 +1,17 @@
-import torch
 
 from .base import Flow
 
-#TODO: write docstrings
 __all__ = ["InverseFlow"]
 
 
 class InverseFlow(Flow):
+    """The inverse of a given transform.
+
+    Parameters
+    ----------
+    delegate : Flow
+        The flow to invert.
+    """
     def __init__(self, delegate):
         super().__init__()
         self._delegate = delegate
