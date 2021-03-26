@@ -1,10 +1,11 @@
+import pytest
 
 import torch
 from bgtorch import Flow, SplitFlow, Transformer, CouplingFlow, WrapFlow
 
 
-def test_split_flow(device, dtype):
-    tensor = torch.arange(0, 12., device=device, dtype=dtype).reshape(3,4)
+def test_split_flow(ctx):
+    tensor = torch.arange(0, 12., **ctx).reshape(3,4)
     # pass or infer last size
     for sizes in ((2,), (2,2)):
         split = SplitFlow(*sizes, dim=-1)
@@ -18,6 +19,40 @@ def test_split_flow(device, dtype):
     assert torch.allclose(result[0], tensor[:2,...])
     assert torch.allclose(result[1], tensor[2:,...])
     assert dlogp.shape == (1,4)  #  <- this does not make sense yet until we allow event shapes
+
+
+def test_split_with_indices(ctx):
+    tensor = torch.arange(0, 12., **ctx).reshape(1,3,4)
+    indices = [[0,2],[1]]
+    split = SplitFlow(*indices, dim=-2)
+    *result, dlogp = split.forward(tensor)
+    expected = (
+        torch.tensor([[0, 1, 2, 3], [8, 9, 10, 11]], **ctx),
+        torch.tensor([[4, 5, 6, 7]], **ctx),
+    )
+    for r, e in zip(result, expected):
+        assert torch.allclose(r, e)
+    assert dlogp.shape == (1,1,4)  #  <- this does not make sense yet until we allow event shapes
+    x, dlogp2 = split.forward(*result, inverse=True)
+    assert dlogp2.shape == (1, 1, 4)
+    assert torch.allclose(x, tensor)
+
+
+@pytest.mark.parametrize("indices", (
+    [[0], [2]],  # missing indices
+    [[0,1], [1,2]],  # doubly defined
+))
+def test_split_with_indices_failure(ctx, indices):
+    split = SplitFlow(*indices, dim=-2)
+    with pytest.raises(ValueError):
+        tensor = torch.arange(0, 12., **ctx).reshape(1,3,4)
+        split.forward(tensor)
+    with pytest.raises(Exception):
+        tensors = (
+            torch.arange(0, 8., **ctx).reshape(1,2,4),
+            torch.arange(8, 16., **ctx).reshape(1,2,4)
+        )
+        split.forward(*tensors, inverse=True)
 
 
 class DummyTransformer(Transformer):
