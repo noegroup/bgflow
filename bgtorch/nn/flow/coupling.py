@@ -1,4 +1,5 @@
 import warnings
+from typing import Sequence
 
 import numpy as np
 import torch
@@ -14,8 +15,10 @@ class SplitFlow(Flow):
 
     Parameters
     ----------
-    *sizes : int
-        Lengths of the output tensors in dimension `dim`.
+    *sizes_or_indices : int or sequence of ints
+        If int: lengths of the output tensors in dimension `dim`.
+        Otherwise: indices of the input tensor that are mapped each output tensor.
+
     dim : int
         Dimension along which to split.
 
@@ -26,16 +29,39 @@ class SplitFlow(Flow):
 
     Notes
     -----
-    Specifying the length of the last tensor is optional. If the tensor is longer
+    Specifying the size or indices of the last tensor is optional. If the tensor is longer
     than the sum of all sizes, the last size will be inferred from the input
     dimensions.
     """
-    def __init__(self, *sizes, dim=-1):
+    def __init__(self, *sizes_or_indices, dim=-1):
         super().__init__()
-        self._sizes = sizes
+        if isinstance(sizes_or_indices[0], Sequence):
+            self._sizes = None
+            self._indices = sizes_or_indices
+        else:
+            self._sizes = sizes_or_indices
+            self._indices = None
         self._split_dim = dim
-    
+
     def _forward(self, x, **kwargs):
+        if self._indices is None:
+            return (*self._split_with_sizes(x), self._dlogp(x))
+        else:
+            return (*self._split_with_indices(x), self._dlogp(x))
+
+    def _inverse(self, *xs, **kwargs):
+        if self._indices is None:
+            y = torch.cat(xs, dim=self._split_dim)
+        else:
+            y = self._cat_with_indices(*xs)
+        return y, self._dlogp(xs[0])
+
+    def _dlogp(self, x):
+        index = [slice(None)] * len(x.shape)
+        index[self._split_dim] = slice(1)
+        return torch.zeros_like(x[index])
+
+    def _split_with_sizes(self, x):
         last_size = x.shape[self._split_dim] - sum(self._sizes)
         if last_size == 0:
             sizes = self._sizes
@@ -43,19 +69,39 @@ class SplitFlow(Flow):
             sizes = [*self._sizes, last_size]
         else:
             raise ValueError(f"can't split x [{x.shape}] into sizes {self._sizes} along {self._split_dim}")
-        *y, = torch.split(x, sizes, dim=self._split_dim)
-        return (*y, self._dlogp(x))
-    
-    def _inverse(self, *xs, **kwargs):
-        y = torch.cat(xs, dim=self._split_dim)
-        shape = list(xs[0].shape)
-        shape[self._split_dim] = 1
-        return y, self._dlogp(xs[0])
+        return torch.split(x, sizes, dim=self._split_dim)
 
-    def _dlogp(self, x):
-        index = [slice(None)] * len(x.shape)
-        index[self._split_dim] = slice(1)
-        return torch.zeros_like(x[index])
+    def _split_with_indices(self, x):
+        is_done = torch.zeros(x.shape[self._split_dim], dtype=torch.bool)
+        result = []
+        for indices in self._indices:
+            if is_done[indices].any():
+                raise ValueError("Cannot split tensor. Indices are overlapping.")
+            result.append(x[self._range(indices, len(x.shape))])
+            is_done[indices] = True
+        if not is_done.all():
+            raise ValueError(f"Split with indices missed indices {torch.arange(len(is_done))[is_done]}")
+        return result
+
+    def _range(self, indices, n_dimensions):
+        dims = [slice(None) for _ in range(n_dimensions)]
+        dims[self._split_dim] = list(indices)
+        return dims
+
+    def _cat_with_indices(self, *xs):
+        length = sum(len(indices) for indices in self._indices)
+        output_shape = list(xs[0].shape)
+        output_shape[self._split_dim] = length
+        y = torch.empty(*output_shape, device=xs[0].device, dtype=xs[0].dtype)
+        is_done = torch.zeros(length, dtype=torch.bool)
+        for x, indices in zip(xs, self._indices):
+            if is_done[indices].any():
+                raise ValueError("Cannot merge tensor. Indices are overlapping.")
+            y[self._range(indices, len(x.shape))] = x
+            is_done[indices] = True
+        if not is_done.all():
+            raise ValueError(f"Merge with indices missed indices {torch.arange(len(is_done))[is_done]}")
+        return y
 
 
 class MergeFlow(InverseFlow):
