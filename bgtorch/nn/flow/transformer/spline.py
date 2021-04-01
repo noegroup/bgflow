@@ -130,13 +130,16 @@ class ConditionalSplineTransformer(Transformer):
             "unnormalized_heights": heights,
             "unnormalized_derivatives": slopes,
             "inverse": inverse,
-            "left": self._left,
-            "right": self._right,
-            "top": self._top,
-            "bottom": self._bottom,
         }
 
         if self._domain_extension is None:
+            kwargs = {
+                **kwargs,
+                "left": self._left,
+                "right": self._right,
+                "top": self._top,
+                "bottom": self._bottom,
+            }
             z, dlogp = rational_quadratic_spline(y, **kwargs)
         else:
             kwargs = {
