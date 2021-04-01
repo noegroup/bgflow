@@ -5,6 +5,7 @@ from .base import Transformer
 
 __all__ = [
     "ConditionalSplineTransformer",
+    "DomainExtension",
 ]
 
 
