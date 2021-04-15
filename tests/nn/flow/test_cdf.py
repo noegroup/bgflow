@@ -1,6 +1,6 @@
 
 import torch
-from bgtorch import DistributionTransferFlow, ConstrainGaussianFlow
+from bgflow import DistributionTransferFlow, ConstrainGaussianFlow
 from torch.distributions import Normal, Independent
 
 

@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from bgtorch.utils.types import assert_numpy
-from bgtorch.distribution.sampling import DataSetSampler
+from bgflow.utils.types import assert_numpy
+from bgflow.distribution.sampling import DataSetSampler
 
 
 __all__ = ["LossReporter", "KLTrainer"]

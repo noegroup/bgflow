@@ -1,9 +1,9 @@
 import pytest
 import torch
-from bgtorch.distribution import NormalDistribution
-from bgtorch.nn.flow import DiffEqFlow
-from bgtorch.nn.flow.dynamics import KernelDynamics
-from bgtorch.utils import brute_force_jacobian_trace
+from bgflow.distribution import NormalDistribution
+from bgflow.nn.flow import DiffEqFlow
+from bgflow.nn.flow.dynamics import KernelDynamics
+from bgflow.utils import brute_force_jacobian_trace
 
 
 @pytest.mark.parametrize("n_particles", [2, 3])

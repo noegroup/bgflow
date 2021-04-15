@@ -3,8 +3,8 @@ Property-preserving parameter perturbations
 """
 
 import torch
-from bgtorch.nn.flow.base import Flow
-from bgtorch.nn.flow.inverted import InverseFlow
+from bgflow.nn.flow.base import Flow
+from bgflow.nn.flow.inverted import InverseFlow
 from collections import defaultdict
 from collections.abc import Iterable
 import warnings

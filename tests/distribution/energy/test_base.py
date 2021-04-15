@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from bgtorch.distribution import Energy
+from bgflow.distribution import Energy
 
 
 class DummyEnergy(Energy):
@@ -15,7 +15,7 @@ class DummyEnergy(Energy):
 
 
 def test_energy_event_parser():
-    from bgtorch.distribution.energy.base import (
+    from bgflow.distribution.energy.base import (
         _is_non_empty_sequence_of_integers,
         _is_sequence_of_non_empty_sequences_of_integers,
     )

@@ -1,5 +1,5 @@
 import torch
-from bgtorch.nn.flow.base import Flow
+from bgflow.nn.flow.base import Flow
 
 class MetropolisMCFlow(Flow):
     def __init__(self, energy_model, nsteps=1, stepsize=0.01):

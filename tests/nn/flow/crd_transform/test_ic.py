@@ -3,14 +3,14 @@ import torch
 import numpy as np
 import pytest
 
-from bgtorch.nn.flow.crd_transform.ic_helper import (
+from bgflow.nn.flow.crd_transform.ic_helper import (
     det2x2,
     det3x3,
     dist_deriv,
     angle_deriv,
     torsion_deriv,
 )
-from bgtorch.nn.flow.crd_transform.ic import (
+from bgflow.nn.flow.crd_transform.ic import (
     ic2xy0_deriv,
     ic2xyz_deriv,
     GlobalInternalCoordinateTransformation,

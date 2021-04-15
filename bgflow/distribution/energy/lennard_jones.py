@@ -1,5 +1,5 @@
 from .base import Energy
-from bgtorch.utils import distance_vectors, distances_from_vectors
+from bgflow.utils import distance_vectors, distances_from_vectors
 import torch
 
 
