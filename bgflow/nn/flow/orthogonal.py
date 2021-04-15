@@ -3,7 +3,7 @@
 """
 
 import torch
-from bgtorch.nn.flow.base import Flow
+from bgflow.nn.flow.base import Flow
 
 __all__ = ["PseudoOrthogonalFlow"]
 

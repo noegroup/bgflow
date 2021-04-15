@@ -7,7 +7,7 @@ import torch
 def test_bg_basic(device, dtype):
     dim = 4
     mean = torch.zeros(dim, dtype=dtype, device=device)
-    import bgtorch as bg
+    import bgflow as bg
     prior = bg.NormalDistribution(4, mean)
     # RealNVP
     flow = bg.SequentialFlow([
@@ -73,7 +73,7 @@ def test_bg_basic(device, dtype):
 def test_bg_basic_multiple(device, dtype):
     dim = 4
     mean = torch.zeros(dim//2, dtype=dtype, device=device)
-    import bgtorch as bg
+    import bgflow as bg
     prior = bg.ProductDistribution([
         bg.NormalDistribution(dim//2, mean),
         bg.NormalDistribution(dim//2, mean)

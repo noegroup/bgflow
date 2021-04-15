@@ -1,7 +1,7 @@
 
 import torch
 import pytest
-from bgtorch.nn.flow.triangular import TriuFlow
+from bgflow.nn.flow.triangular import TriuFlow
 
 
 @pytest.mark.parametrize(

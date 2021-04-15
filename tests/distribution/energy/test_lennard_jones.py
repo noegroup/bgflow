@@ -1,8 +1,8 @@
 import pytest
 import torch
 import numpy as np
-from bgtorch.distribution.energy import LennardJonesPotential
-from bgtorch.distribution.energy.lennard_jones import lennard_jones_energy_torch
+from bgflow.distribution.energy import LennardJonesPotential
+from bgflow.distribution.energy.lennard_jones import lennard_jones_energy_torch
 
 
 def test_lennard_jones_energy_torch():

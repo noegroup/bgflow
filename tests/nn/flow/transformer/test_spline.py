@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from bgtorch import ConditionalSplineTransformer, CouplingFlow, SplitFlow, NormalDistribution, DenseNet
+from bgflow import ConditionalSplineTransformer, CouplingFlow, SplitFlow, NormalDistribution, DenseNet
 
 
 @pytest.mark.parametrize("is_circular", [True, False])

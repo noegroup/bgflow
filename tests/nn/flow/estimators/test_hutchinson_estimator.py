@@ -1,10 +1,10 @@
 import pytest
 import torch
-from bgtorch.distribution import NormalDistribution
-from bgtorch.nn.flow.dynamics import TimeIndependentDynamics
-from bgtorch.nn.flow.estimator import HutchinsonEstimator
-from bgtorch.nn import DenseNet
-from bgtorch.utils import brute_force_jacobian_trace
+from bgflow.distribution import NormalDistribution
+from bgflow.nn.flow.dynamics import TimeIndependentDynamics
+from bgflow.nn.flow.estimator import HutchinsonEstimator
+from bgflow.nn import DenseNet
+from bgflow.utils import brute_force_jacobian_trace
 
 
 @pytest.mark.parametrize("dim", [1, 2])

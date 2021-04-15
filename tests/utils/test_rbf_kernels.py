@@ -1,6 +1,6 @@
 import pytest
 import torch
-from bgtorch.utils import kernelize_with_rbf, rbf_kernels
+from bgflow.utils import kernelize_with_rbf, rbf_kernels
 
 
 def test_kernelize_with_rbf():

@@ -1,7 +1,7 @@
 
 
-from bgtorch.nn.flow.sequential import SequentialFlow
-from bgtorch.nn.flow.orthogonal import PseudoOrthogonalFlow
+from bgflow.nn.flow.sequential import SequentialFlow
+from bgflow.nn.flow.orthogonal import PseudoOrthogonalFlow
 
 
 def test_trigger_penalty():

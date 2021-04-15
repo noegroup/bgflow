@@ -4,7 +4,7 @@ Test inverse and its derivative
 
 import torch
 import pytest
-from bgtorch.nn import flow
+from bgflow.nn import flow
 
 
 @pytest.fixture(params=[

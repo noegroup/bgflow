@@ -1,7 +1,7 @@
 import torch
 import pytest
 import numpy as np
-from bgtorch.distribution import NormalDistribution, TruncatedNormalDistribution
+from bgflow.distribution import NormalDistribution, TruncatedNormalDistribution
 
 
 @pytest.mark.parametrize("dim", [2])

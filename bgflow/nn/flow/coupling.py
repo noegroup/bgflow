@@ -187,7 +187,7 @@ class WrapFlow(Flow):
 
     Parameters
     ----------
-    flow : bgtorch.Flow
+    flow : bgflow.Flow
         The flow that is applied to a subset of inputs.
     indices : Iterable of int
         Indices of the inputs that are passed to the `flow`.

@@ -1,8 +1,8 @@
 
 import pytest
 import torch
-from bgtorch.nn.flow.pppp import InvertiblePPPP, PPPPScheduler, _iterative_solve
-from bgtorch.nn.flow.sequential import SequentialFlow
+from bgflow.nn.flow.pppp import InvertiblePPPP, PPPPScheduler, _iterative_solve
+from bgflow.nn.flow.sequential import SequentialFlow
 
 
 def test_invertible_pppp():

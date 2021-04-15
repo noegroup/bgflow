@@ -4,7 +4,7 @@ import torch
 import warnings
 import numpy as np
 
-from bgtorch.distribution.energy.openmm import OpenMMBridge, OpenMMEnergy
+from bgflow.distribution.energy.openmm import OpenMMBridge, OpenMMEnergy
 
 
 class OneParticleTestBridge(OpenMMBridge):
