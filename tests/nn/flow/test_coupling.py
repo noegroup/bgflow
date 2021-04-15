@@ -1,7 +1,7 @@
 import pytest
 
 import torch
-from bgtorch import Flow, SplitFlow, Transformer, CouplingFlow, WrapFlow
+from bgflow import Flow, SplitFlow, Transformer, CouplingFlow, WrapFlow
 
 
 def test_split_flow(ctx):

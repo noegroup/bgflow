@@ -1,9 +1,9 @@
 import pytest
 import torch
-from bgtorch.distribution import NormalDistribution
-from bgtorch.nn.flow import DiffEqFlow
-from bgtorch.nn.flow.dynamics import BlackBoxDynamics, TimeIndependentDynamics
-from bgtorch.nn.flow.estimator import BruteForceEstimator
+from bgflow.distribution import NormalDistribution
+from bgflow.nn.flow import DiffEqFlow
+from bgflow.nn.flow.dynamics import BlackBoxDynamics, TimeIndependentDynamics
+from bgflow.nn.flow.estimator import BruteForceEstimator
 
 dim = 1
 n_samples = 100

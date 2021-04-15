@@ -2,7 +2,7 @@
 import pytest
 import torch
 from torch.distributions import MultivariateNormal, Normal, Independent
-from bgtorch.distribution import TorchDistribution, NormalDistribution
+from bgflow.distribution import TorchDistribution, NormalDistribution
 
 
 def _random_mean_cov(dim, device, dtype):
@@ -16,7 +16,7 @@ def _random_mean_cov(dim, device, dtype):
 
 @pytest.mark.parametrize("dim", (2, 10))
 def test_distribution_energy(dim, device, dtype):
-    """compare torch's normal distribution with bgtorch's normal distribution"""
+    """compare torch's normal distribution with bgflow's normal distribution"""
     n_samples = 7
     mean, cov = _random_mean_cov(dim, device, dtype)
     samples = torch.randn((n_samples, dim)).to(device, dtype)
@@ -28,7 +28,7 @@ def test_distribution_energy(dim, device, dtype):
 @pytest.mark.parametrize("dim", (2, 10))
 @pytest.mark.parametrize("sample_shape", (50000, torch.Size([10,1])))
 def test_distribution_samples(dim, sample_shape, device, dtype):
-    """compare torch's normal distribution with bgtorch's normal distribution"""
+    """compare torch's normal distribution with bgflow's normal distribution"""
     mean, cov = _random_mean_cov(dim, device, dtype)
     normal_trch = TorchDistribution(MultivariateNormal(loc=mean, covariance_matrix=cov))
     normal_bgtrch = NormalDistribution(dim, mean, cov)

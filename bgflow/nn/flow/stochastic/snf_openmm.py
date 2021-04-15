@@ -29,17 +29,17 @@ class OpenMMStochasticFlow(Flow):
 
     Parameters
     ----------
-    openmm_bridge : bgtorch.distribution.energy.openmm.OpenMMBridge
+    openmm_bridge : bgflow.distribution.energy.openmm.OpenMMBridge
         The openmm energy bridge instance that propagates the SNF.
 
-    inverse_openmm_bridge : None or bgtorch.distribution.energy.openmm.OpenMMBridge
+    inverse_openmm_bridge : None or bgflow.distribution.energy.openmm.OpenMMBridge
         The bridge instance that propagates the inverse transform. If None, use the forward transform.
 
     Examples
     --------
     The class should be used with one of the integrators defined in this module.
     For example
-    >>>     from bgtorch.distribution.energy.openmm import OpenMMBridge
+    >>>     from bgflow.distribution.energy.openmm import OpenMMBridge
     >>>     from openmmtools.testsystems import AlanineDipeptideImplicit
     >>>     integrator = BrownianPathProbabilityIntegrator(1, 100, 0.001)
     >>>     ala2 = AlanineDipeptideImplicit()

@@ -1,7 +1,7 @@
 
 import torch
 
-from bgtorch import DataSetSampler
+from bgflow import DataSetSampler
 
 
 def test_dataset_sampler(device, dtype):

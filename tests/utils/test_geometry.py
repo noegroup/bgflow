@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from bgtorch.utils import distance_vectors, distances_from_vectors
+from bgflow.utils import distance_vectors, distances_from_vectors
 
 
 @pytest.mark.parametrize("remove_diagonal", [True, False])

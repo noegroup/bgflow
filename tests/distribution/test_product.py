@@ -1,7 +1,7 @@
 
 import pytest
 import torch
-from bgtorch import NormalDistribution, ProductDistribution
+from bgflow import NormalDistribution, ProductDistribution
 
 
 def test_multi_distribution():

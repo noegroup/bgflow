@@ -4,7 +4,7 @@
 def test_readme():
     import torch
     import matplotlib.pyplot as plt
-    import bgtorch as bg
+    import bgflow as bg
 
     # define prior and target
     dim = 2
