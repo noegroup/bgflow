@@ -1,11 +1,7 @@
 import torch
 
 from .base import Flow
-from .dynamics import (
-    DensityDynamics,
-    InversedDynamics,
-    AnodeDynamics
-)
+from .dynamics import DensityDynamics, InversedDynamics, AnodeDynamics
 
 
 class DiffEqFlow(Flow):
@@ -21,15 +17,15 @@ class DiffEqFlow(Flow):
     """
 
     def __init__(
-            self,
-            dynamics,
-            integrator="dopri5",
-            atol=1e-10,
-            rtol=1e-5,
-            n_time_steps=2,
-            t_max=1.,
-            use_checkpoints=False,
-            **kwargs
+        self,
+        dynamics,
+        integrator="dopri5",
+        atol=1e-10,
+        rtol=1e-5,
+        n_time_steps=2,
+        t_max=1.0,
+        use_checkpoints=False,
+        **kwargs
     ):
         super().__init__()
         self._dynamics = DensityDynamics(dynamics)
@@ -67,14 +63,15 @@ class DiffEqFlow(Flow):
             The change in log density due to the dynamics.
         """
 
-        assert (all(x.shape[0] == xs[0].shape[0] for x in xs[1:]))
+        assert all(x.shape[0] == xs[0].shape[0] for x in xs[1:])
         n_batch = xs[0].shape[0]
         logp_init = torch.zeros(n_batch, 1).to(xs[0])
-        state = [*xs, logp_init]
+        state = (*xs, logp_init)
         ts = torch.linspace(0.0, self._t_max, self._n_time_steps).to(xs[0])
         kwargs = {**self._kwargs, **kwargs}
         if not self._use_checkpoints:
             from torchdiffeq import odeint_adjoint
+
             *ys, dlogp = odeint_adjoint(
                 dynamics,
                 state,
@@ -82,11 +79,12 @@ class DiffEqFlow(Flow):
                 method=self._integrator_method,
                 rtol=self._integrator_rtol,
                 atol=self._integrator_atol,
-                options=kwargs
+                options=kwargs,
             )
             ys = [y[-1] for y in ys]
         else:
             from anode.adjoint import odesolver_adjoint
+
             state = torch.cat(state, dim=-1)
             anode_dynamics = AnodeDynamics(dynamics)
             state = odesolver_adjoint(anode_dynamics, state, options=kwargs)
