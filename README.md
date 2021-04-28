@@ -1,6 +1,6 @@
-# bgtorch
+# bgflow
 
-Bgtorch is a [pytorch](https://github.com/pytorch/pytorch) framework for
+Bgflow is a [pytorch](https://github.com/pytorch/pytorch) framework for
 [Boltzmann Generators](https://science.sciencemag.org/content/365/6457/eaaw1147) (BG) and other sampling methods.
 
 > Boltzmann Generators use neural networks to learn a coordinate transformation
@@ -39,10 +39,10 @@ future and some current implementations may not be tested.
 
 If you are interested in contributing to the library,
 please feel free to open a 
-[pull request](https://github.com/noegroup/bgtorch/pulls)
-or report an [issue](https://github.com/noegroup/bgtorch/issues).
+[pull request](https://github.com/noegroup/bgflow/pulls)
+or report an [issue](https://github.com/noegroup/bgflow/issues).
 
-When using bgtorch in your research, please cite our preprint (coming soon).
+When using bgflow in your research, please cite our preprint (coming soon).
 ***
 ## [Minimal example](#minimal-example)
 Implementation of a BG with a single [Real NVP coupling block](https://arxiv.org/abs/1605.08803)
@@ -53,7 +53,7 @@ distribution. Note that the training procedure is not included in this example.
 ``` python
 import torch
 import matplotlib.pyplot as plt
-import bgtorch as bg
+import bgflow as bg
 
 # define prior and target
 dim = 2
@@ -98,8 +98,8 @@ plt.hist2d(
 
 ## [Examples](#examples)
 
-* [Basic Boltzmann Generator example](https://github.com/noegroup/bgtorch/blob/master/notebooks/example.ipynb)
-* [Training a Boltzmann Generator for Alanine Dipeptide](https://github.com/noegroup/bgtorch/blob/master/notebooks/alanine_dipeptide_basics.ipynb)
+* [Basic Boltzmann Generator example](https://github.com/noegroup/bgflow/blob/master/notebooks/example.ipynb)
+* [Training a Boltzmann Generator for Alanine Dipeptide](https://github.com/noegroup/bgflow/blob/master/notebooks/alanine_dipeptide_basics.ipynb)
 
 ***
 

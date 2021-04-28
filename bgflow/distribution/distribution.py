@@ -39,7 +39,7 @@ class CustomDistribution(Energy, Sampler):
 class TorchDistribution(Energy, Sampler):
     """Wrapper for torch.components.Distribution objects. Instances
     of this class provide all methods and attributes of torch components,
-    while also implementing the `Energy` and `Sampler` interfaces in bgtorch.
+    while also implementing the `Energy` and `Sampler` interfaces in bgflow.
     """
     def __init__(self, distribution: torch.distributions.Distribution):
         self._delegate = distribution

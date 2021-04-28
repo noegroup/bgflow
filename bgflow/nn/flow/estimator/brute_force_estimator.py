@@ -1,4 +1,4 @@
-from bgtorch.utils.autograd import brute_force_jacobian_trace
+from bgflow.utils.autograd import brute_force_jacobian_trace
 import torch
 
 

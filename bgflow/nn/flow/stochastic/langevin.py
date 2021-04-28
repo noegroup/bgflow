@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from bgtorch.nn.flow.base import Flow
+from bgflow.nn.flow.base import Flow
 
 
 class BrownianFlow(Flow):

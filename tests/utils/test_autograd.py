@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from bgtorch.utils import brute_force_jacobian, brute_force_jacobian_trace
+from bgflow.utils import brute_force_jacobian, brute_force_jacobian_trace
 
 x = torch.tensor([[1., 2, 3]], requires_grad=True)
 y = x.pow(2) + x[:, 1]

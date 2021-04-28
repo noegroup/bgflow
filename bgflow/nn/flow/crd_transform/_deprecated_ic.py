@@ -2,8 +2,8 @@ import warnings
 import numpy as np
 import torch
 
-from bgtorch.utils.autograd import batch_jacobian
-from bgtorch.nn.flow.base import Flow
+from bgflow.utils.autograd import batch_jacobian
+from bgflow.nn.flow.base import Flow
 
 
 def xyz2ic(x, Z_indices, torsion_cut=None):
@@ -22,7 +22,7 @@ def xyz2ic(x, Z_indices, torsion_cut=None):
         If given, defines at which angle to cut the torsions.
 
     """
-    from bgtorch.utils.internal_coordinates import dist, angle, torsion
+    from bgflow.utils.internal_coordinates import dist, angle, torsion
 
     global_ic = Z_indices.min() < 0
     if global_ic:
@@ -80,7 +80,7 @@ def xyz2ic(x, Z_indices, torsion_cut=None):
 
 def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
     import numpy as np
-    from bgtorch.utils.internal_coordinates import dist, angle, torsion
+    from bgflow.utils.internal_coordinates import dist, angle, torsion
 
     batchsize = x.shape[0]
 
@@ -175,7 +175,7 @@ def icmoments(Z_indices, X0=None, torsion_cut=None):
         else:
             torsions = ics[:, 2::3]
         if torsion_cut is None:
-            from bgtorch.utils.internal_coordinates import torsioncut_mindensity
+            from bgflow.utils.internal_coordinates import torsioncut_mindensity
 
             torsions_np = torsions.detach().numpy()
             torsion_cut = torch.tensor(
@@ -367,7 +367,7 @@ class MixedCoordinateTransform(Flow):
         """
         warnings.warn(
             "This implementation of the internal coordinate transform is deprecated and will be removed soon. "
-            "Please use bgtorch.MixedCoordinateTransformation instead. "
+            "Please use bgflow.MixedCoordinateTransformation instead. "
             "Note that the new implementation has a different API and is defined in reverse order, "
             "i.e., crd_transform.forward: Cartesian -> ICs.",
             DeprecationWarning
@@ -394,7 +394,7 @@ class MixedCoordinateTransform(Flow):
             X0ic = X0
 
         # Compute PCA transformation on initial data
-        from bgtorch.nn.flow.crd_transform.pca import _pca
+        from bgflow.nn.flow.crd_transform.pca import _pca
 
         X0_np = X0.detach().numpy()
         cart_X0mean, cart_Twhiten, cart_Tblacken, std = _pca(
@@ -679,7 +679,7 @@ class InternalCoordinatesTransformation(Flow):
     def __init__(self, Z_indices, Xnorm=None, torsion_cut=None):
         warnings.warn(
             "This implementation of the internal coordinate transform is deprecated and will be removed soon. "
-            "Please use the classes from bgtorch.nn.flow.crd_transform.ic instead. "
+            "Please use the classes from bgflow.nn.flow.crd_transform.ic instead. "
             "Note that the new implementations have different APIs and are defined in reverse order, "
             "i.e., crd_transform.forward: Cartesian -> ICs.",
             DeprecationWarning

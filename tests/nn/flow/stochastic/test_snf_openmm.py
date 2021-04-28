@@ -1,6 +1,6 @@
 
 
-from bgtorch.nn.flow.stochastic.snf_openmm import BrownianPathProbabilityIntegrator, OpenMMStochasticFlow
+from bgflow.nn.flow.stochastic.snf_openmm import BrownianPathProbabilityIntegrator, OpenMMStochasticFlow
 
 import copy
 import pickle
@@ -75,7 +75,7 @@ def test_path_probability(IntegratorClass):
 @pytest.mark.parametrize("n_workers", (1, 2))
 def test_flow_bridge(temperature, n_workers):
     """Test the API of the flow interface"""
-    from bgtorch.distribution.energy.openmm import OpenMMBridge
+    from bgflow.distribution.energy.openmm import OpenMMBridge
     from openmmtools.testsystems import AlanineDipeptideImplicit
     integrator = BrownianPathProbabilityIntegrator(temperature, 100, 0.001)
     ala2 = AlanineDipeptideImplicit()

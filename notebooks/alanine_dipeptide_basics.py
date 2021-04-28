@@ -3,7 +3,7 @@
 
 # # Training a Boltzmann Generator for Alanine Dipeptide
 # 
-# This notebook introduces basic concepts behind `bgtorch`. 
+# This notebook introduces basic concepts behind `bgflow`. 
 # 
 # It shows how to build an train a Boltzmann generator for a small peptide. The most important aspects it will cover are
 # 
@@ -66,7 +66,7 @@ temperature = dataset.temperature
 dim = dataset.dim
 
 
-# The energy model is a `bgtorch.Energy` that wraps around OpenMM. The `n_workers` argument determines the number of openmm contexts that are used for energy evaluations. In notebooks, we set `n_workers=1` to avoid hickups. In production, we can omit this argument so that `n_workers` is automatically set to the number of CPU cores.
+# The energy model is a `bgflow.Energy` that wraps around OpenMM. The `n_workers` argument determines the number of openmm contexts that are used for energy evaluations. In notebooks, we set `n_workers=1` to avoid hickups. In production, we can omit this argument so that `n_workers` is automatically set to the number of CPU cores.
 
 # In[5]:
 
@@ -131,7 +131,7 @@ test_data = torch.tensor(all_data[permutation + n_train]).to(ctx)
 # In[9]:
 
 
-import bgtorch as bg
+import bgflow as bg
 
 
 # In[10]:
@@ -438,7 +438,7 @@ widget
 
 # ## Conclusions
 # 
-# This tutorial has introduced the most basic concepts and implementations underlying Boltzmann generators and `bgtorch`. That said, the trained networks did not do a particularly good job in reproducing the molecular Boltzmann distribution. Specifically, they only modeled the major modes of the $\phi$ angle and still produced many samples with unreasonably large energies. Let's look at a few shortcomings of the present architecture:
+# This tutorial has introduced the most basic concepts and implementations underlying Boltzmann generators and `bgflow`. That said, the trained networks did not do a particularly good job in reproducing the molecular Boltzmann distribution. Specifically, they only modeled the major modes of the $\phi$ angle and still produced many samples with unreasonably large energies. Let's look at a few shortcomings of the present architecture:
 # 
 # ### 1) Unconstrained Internal Coordinates
 # Bonds, angles, and torsions must not take arbitrary values in principle. Bond lengths need to be positive, angles live in $[0,\pi],$ and torsions are periodic in $[-\pi, \pi].$ Neither those bounds nor the periodicity of torsions distributions have been taken into account by the present Boltzmann generator. The layers of the normalizing flow should be build in a way that preserves these constraints on the ICs.
