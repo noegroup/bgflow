@@ -126,5 +126,9 @@ class BoltzmannGenerator(Energy, Sampler):
             x, z, dlogp, self._prior, self._flow, self._target, temperature=temperature
         )
 
+    def sampling_efficiency(self, log_weights):
+        ESS=torch.exp(2*torch.logsumexp(log_weights,dim=-1)-torch.logsumexp(2*log_weights,dim=-1))
+        return ESS/log_weights.shape[0]
+
     def trigger(self, function_name):
         return self.flow.trigger(function_name)
