@@ -137,10 +137,10 @@ class TransformerToFlowAdapter(Flow):
         self._x = x
     
     def _forward(self, y, *args, **kwargs):
-        return self._transformer(self._x.expand_as(y), y, *args, **kwargs)
+        return self._transformer(self._x, y, *args, **kwargs)
     
     def _inverse(self, y, *args, **kwargs):
-        return self._transformer(self._x.expand_as(y), y, inverse=True, *args, **kwargs)
+        return self._transformer(self._x, y, inverse=True, *args, **kwargs)
     
     
 class WrapTransformerWithInverse(Transformer):
