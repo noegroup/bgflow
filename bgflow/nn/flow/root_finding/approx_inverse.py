@@ -153,7 +153,8 @@ class WrapTransformerWithInverse(Transformer):
         self._root_finder = root_finder
         
     def _forward(self, x, y, *args, **kwargs):
-        return self._transformer(x, y, *args, **kwargs)
+        y, dlogp = self._transformer(x, y, *args, **kwargs)
+        return y, dlogp.sum(-1, keepdim=True)
     
     def _inverse(self, x, y, *args, **kwargs):
         flow = TransformerToFlowAdapter(self._transformer, x)
