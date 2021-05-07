@@ -12,16 +12,42 @@ __all__ = [
 
 
 class DifferentiableApproximateInverse(torch.autograd.Function):
+    """First-order-differentiation of an elementwise bijection under black-box inversion.
+    """
     
     @staticmethod
     def forward(ctx, root_finder, bijection, y, *params):
+        """
+        Inverse pass
+
+        Parameters
+        ----------
+        ctx : object
+            context object to stash information for the backward call
+        root_finder : Callable
+            Root finding method, which takes two parameters (residue, x0)
+        bijection : Flow
+            a flow object, whose forward function returns (y, dlogp)
+        y : torch.Tensor
+            the input to the inverse
+        params : tuple
+            further arguments for the ctx.save_for_backward call
+
+        Returns
+        -------
+        x : torch.Tensor
+            the root of the bijection, bijection^-1(y)
+        log_dx_dy : torch.Tensor
+            the log derivative
+
+        """
         
-        def callback(x):
+        def residue(x):
             y_, log_dy_dx = bijection(x)
             return y_ - y, log_dy_dx
         
         with torch.no_grad():
-            x, log_dx_dy = root_finder(callback, x0=y)
+            x, log_dx_dy = root_finder(residue, x0=y)
             
         ctx.save_for_backward(x, *params)
         ctx.bijection = bijection
@@ -29,7 +55,26 @@ class DifferentiableApproximateInverse(torch.autograd.Function):
         return x, log_dx_dy
     
     @staticmethod
-    def backward(ctx, grad_out_x, grad_out_dlogp):        
+    def backward(ctx, grad_out_x, grad_out_dlogp):
+        """
+        Backpropagation through the inverse
+
+        Parameters
+        ----------
+        ctx : object
+            context object to stash information for the backward call
+        grad_out_x
+        grad_out_dlogp
+
+        Returns
+        -------
+        A tuple:
+            - None
+            - None
+            - grad_in_y : torch.Tensor
+            -
+
+        """
         x, *params = ctx.saved_tensors        
  
         with torch.enable_grad():
@@ -58,10 +103,12 @@ class DifferentiableApproximateInverse(torch.autograd.Function):
                 create_graph=True
             )
         
-        return None, None, grad_in_y, *grad_in_params
+        return (None, None, grad_in_y, *grad_in_params)
     
 
 class WrapFlowWithInverse(Flow):
+    """A flow, where the inverse is computed in approximate fashion by a root finder.
+    """
     
     def __init__(self, flow, root_finder):
         super().__init__()
@@ -81,6 +128,8 @@ class WrapFlowWithInverse(Flow):
 
     
 class TransformerToFlowAdapter(Flow):
+    """Transformer with constant conditioner.
+    """
     
     def __init__(self, transformer, x):
         super().__init__()
@@ -95,6 +144,8 @@ class TransformerToFlowAdapter(Flow):
     
     
 class WrapTransformerWithInverse(Transformer):
+    """Transformer with approximate black-box inversion (and variable conditioning).
+    """
     
     def __init__(self, transformer, root_finder):
         super().__init__()
