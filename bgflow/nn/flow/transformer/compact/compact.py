@@ -255,12 +255,12 @@ class MixtureCDFTransformer(Transformer):
         self._compute_components = compute_components
         self._compute_weights = compute_weights
     
-    def _forward(self, x, y, return_log_density=True):
+    def _forward(self, x, y, return_log_density=True, *args, **kwargs):
         cdfs, log_pdfs = self._compute_components(x, y)
         log_weights = self._compute_weights(x).view(*y.shape, -1).log_softmax(dim=-1)
         return mixture_cdf_transform(cdfs, log_pdfs, log_weights)
     
-    def _inverse(self, x, y):
+    def _inverse(self, x, y, *args, **kwargs):
         raise NotImplementedError("No analytic inverse")
         
         
@@ -285,7 +285,7 @@ class ConstrainedSigmoidTransformer(Transformer):
         log_sigma = torch.nn.functional.softplus(log_sigma)
         return mu, log_sigma, log_pdf_constraint 
         
-    def _forward(self, x, y):
+    def _forward(self, x, y, *args, **kwargs):
         mu, log_sigma, log_pdf_constraint = self._compute_params(x)
         alpha = (
             log_pdf_constraint.exp() /  (torch.tensor(2.).to(x).pow(self._k + 1) * self._k * log_sigma.exp())
@@ -355,5 +355,5 @@ class ConstrainedBoundaryCDFTransformer(Transformer):
     def _compute_weights(self, x):
         return torch.zeros(*x.shape, self._n_constraints + 1, device=x.device, dtype=x.dtype)
     
-    def _forward(self, x, y):
+    def _forward(self, x, y, *args, **kwargs):
         return self._mixture(x, y)
