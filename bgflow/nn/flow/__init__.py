@@ -4,6 +4,7 @@ from .dynamics import *
 from .estimator import *
 from .stochastic import *
 from .transformer import *
+from .root_finding import *
 
 from .affine import *
 from .coupling import *
