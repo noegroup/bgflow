@@ -157,9 +157,10 @@ class WrapTransformerWithInverse(Transformer):
     
     def _inverse(self, x, y, *args, **kwargs):
         flow = TransformerToFlowAdapter(self._transformer, x)
-        return DifferentiableApproximateInverse.apply(
+        y, dlogp = DifferentiableApproximateInverse.apply(
             self._root_finder,
             flow,
             y,
             *flow.parameters()
         )
+        return y, dlogp.sum(-1, keepdim=True)
