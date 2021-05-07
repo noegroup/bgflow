@@ -258,7 +258,7 @@ class MixtureCDFTransformer(Transformer):
     def _forward(self, x, y, return_log_density=True):
         cdfs, log_pdfs = self._compute_components(x, y)
         log_weights = self._compute_weights(x).view(*y.shape, -1).log_softmax(dim=-1)
-        return mixture_cdf_transform(cdfs, log_pdfs, log_weights)
+        return mixture_cdf_transform(cdfs, log_pdfs, log_weights.sum(-1, keepdim=True))
     
     def _inverse(self, x, y):
         raise NotImplementedError("No analytic inverse")
