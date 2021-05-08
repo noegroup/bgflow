@@ -28,6 +28,7 @@ def ksection_inverse(
     if right is None:
         right = torch.ones_like(x0)
 
+    raise NotImplementedError
     bins = torch.arange(n_bins)
     for i in range(max_iters):
         xs = left + (bins-1)*(right-left) #(bins - left)/(right - left) * n_bins
