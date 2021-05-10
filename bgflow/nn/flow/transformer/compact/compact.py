@@ -247,7 +247,7 @@ class MixtureCDFTransformer(Transformer):
         self._compute_components = compute_components
         self._compute_weights = compute_weights
 
-    def _forward(self, cond, out, log_weights=None):
+    def _forward(self, cond, out, log_weights=None, *args, **kwargs):
         cdfs, log_pdfs = self._compute_components(cond, out)
         if log_weights is None and self._compute_weights is not None:
             log_weights = self._compute_weights(cond).view(*cdfs.shape).log_softmax(dim=-1)
