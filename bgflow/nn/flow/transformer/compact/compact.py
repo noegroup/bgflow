@@ -10,10 +10,8 @@ from bgflow.nn.flow.transformer.base import Transformer
 __all__ =[
     "SmoothRamp",
     "PowerRamp",
-    "AffineSigmoidTransformer",
+    "AffineSigmoidComponents",
     "MixtureCDFTransformer",
-    "ConstrainedSigmoidTransformer",
-    "ConstantConstrainedSigmoidTransformer",
     "ConstrainedBoundaryCDFTransformer"
 ]
 
@@ -163,15 +161,13 @@ class SmoothRamp(ConditionalRamp):
         self.register_buffer("_eps", eps)
         self._alpha_constraint = alpha_constraint
 
-    def forward(self, y, cond):
-        alpha = self._alpha_constraint(self._compute_alpha(cond)).view(-1, *y.shape[-2:])
-        return self._ramp_fn(y, alpha, unimodal=self._unimodal, eps=self._eps)
+    def forward(self, out, cond):
+        alpha = self._alpha_constraint(self._compute_alpha(cond)).view(1, 1, *out.shape[2:])
+        return self._ramp_fn(out, alpha, unimodal=self._unimodal, eps=self._eps)
 
 
-class AffineSigmoidTransformer(Transformer):
-    """Elementwise transformer, whose PDF is a sum of bump functions.
-    """
-    
+class AffineSigmoidComponents(torch.nn.Module):
+
     def __init__(
         self,
         conditional_ramp: ConditionalRamp,
@@ -189,28 +185,28 @@ class AffineSigmoidTransformer(Transformer):
         self._periodic = periodic
         self._zero_boundary_left = zero_boundary_left
         self._zero_boundary_right = zero_boundary_right
-        
-    def _compute_params(self, cond, y_shape):
+
+    def _compute_params(self, cond, out):
         params = self._param_net(cond)
         mu, log_sigma, min_density = params.chunk(3, dim=-1)  
         
         if self._zero_boundary_right:
             # avoid that any mu is placed on 1
-            mu = mu.view(*y_shape, -1)
+            mu = mu = mu.view(*out.shape, -1)
             mu = torch.cat([
                 mu,
                 mu[..., [-1]]
             ], dim=-1)
-            mu = mu.view(*y_shape, -1).softmax(dim=-1).cumsum(dim=-1)
+            mu = mu.view(*out.shape, -1).softmax(dim=-1).cumsum(dim=-1)
             mu = mu[..., :-1]
         else:
-            mu = mu.view(*y_shape, -1).softmax(dim=-1).cumsum(dim=-1)
+            mu = mu.view(*out.shape, -1).softmax(dim=-1).cumsum(dim=-1)
 
-        log_sigma = log_sigma.view(*y_shape, -1)
+        log_sigma = log_sigma.view(*out.shape, -1)
         if self._periodic or self._zero_boundary_right or self._zero_boundary_left:
             # if boundary constraint exist assert that sigma in [1, \infty]
             log_sigma = torch.nn.functional.softplus(log_sigma)
-            min_value = torch.tensor(1.).to(cond)
+            min_value = torch.tensor(1.).to(out)
             if self._zero_boundary_left:
                 min_value = torch.minimum(mu, min_value)
             if self._zero_boundary_right:
@@ -221,26 +217,22 @@ class AffineSigmoidTransformer(Transformer):
         lower_bound = self._min_density_lower_bound.expand_as(min_density)
         if not (self._zero_boundary_right or self._zero_boundary_left):
             lower_bound = lower_bound + min_density.sigmoid() * (1. - self._min_density_lower_bound)
-     
-        lower_bound = lower_bound.view(*y_shape, -1)
-        
+
+        lower_bound = lower_bound.view(*out.shape, -1)
         return mu, log_sigma, lower_bound
     
-    def _forward(self, x, y, *args, **kwargs):
-        
-        mu, log_sigma, min_density = self._compute_params(cond=x, y_shape=y.shape)
-        
+    def forward(self, cond, out, *args, **kwargs):
+
+        mu, log_sigma, min_density = self._compute_params(cond=cond, out=out)
+
         # condition ramp with inputs (necessary for smooth ramps with trainable alpha)
-        ramp = partial(self._conditional_ramp, cond=x)
+        ramp = partial(self._conditional_ramp, cond=cond)
         
-        y = y.unsqueeze(-1)
+        out = out.unsqueeze(-1)
         
         return affine_sigmoid_transform(
-            y, ramp, mu, log_sigma, min_density, periodic=self._periodic
+            out, ramp, mu, log_sigma, min_density, periodic=self._periodic
         )
-    
-    def _inverse(self, x, y, *args, **kwargs):
-        raise NotImplementedError("No analytic inverse")
 
     
 class MixtureCDFTransformer(Transformer):
@@ -249,23 +241,26 @@ class MixtureCDFTransformer(Transformer):
     def __init__(
         self,
         compute_components: Callable,
-        compute_weights: Callable,
+        compute_weights: Callable=None,
     ):
         super().__init__()
         self._compute_components = compute_components
         self._compute_weights = compute_weights
-    
-    def _forward(self, x, y, return_log_density=True, *args, **kwargs):
-        cdfs, log_pdfs = self._compute_components(x, y)
-        log_weights = self._compute_weights(x).view(*y.shape, -1).log_softmax(dim=-1)
-        return mixture_cdf_transform(cdfs, log_pdfs, log_weights)
+
+    def _forward(self, cond, out, log_weights=None):
+        cdfs, log_pdfs = self._compute_components(cond, out)
+        if log_weights is None and self._compute_weights is not None:
+            log_weights = self._compute_weights(cond).view(*cdfs.shape).log_softmax(dim=-1)
+        else:
+            log_weights = torch.zeros(*cdfs.shape).log_softmax(dim=-1)
+        out, dlogp = mixture_cdf_transform(cdfs, log_pdfs, log_weights)
+        return out, dlogp.sum(dim=-1, keepdim=True)
     
     def _inverse(self, x, y, *args, **kwargs):
         raise NotImplementedError("No analytic inverse")
         
-        
-class ConstrainedSigmoidTransformer(Transformer):
-    """SigmoidTransformer in a bounded interval."""
+
+class ConstrainedSigmoidComponents(torch.nn.Module):
     def __init__(self, compute_params: Callable, smoothness_type: str="type1"):
         super().__init__()
         assert smoothness_type in ["type1", "type2"]
@@ -279,39 +274,60 @@ class ConstrainedSigmoidTransformer(Transformer):
             self._ramp_fn = smooth_ramp_pow2
         self._param_net = compute_params
             
-    def _compute_params(self, x):
-        params = self._param_net(x)
-        mu, log_sigma, log_pdf_constraint = params.view(*x.shape, -1).chunk(3, dim=-1)
+    def _compute_params(self, cond, out):
+        params = self._param_net(cond)
+        mu, log_sigma, log_pdf_constraint = params.view(*out.shape, -1).chunk(3, dim=-1)
         log_sigma = torch.nn.functional.softplus(log_sigma)
         return mu, log_sigma, log_pdf_constraint 
-        
-    def _forward(self, x, y, *args, **kwargs):
-        mu, log_sigma, log_pdf_constraint = self._compute_params(x)
+
+    def forward(self, cond, out):
+        mu, log_sigma, log_pdf_constraint = self._compute_params(cond, out)
         alpha = (
-            log_pdf_constraint.exp() /  (torch.tensor(2.).to(x).pow(self._k + 1) * self._k * log_sigma.exp())
+            log_pdf_constraint.exp() /  (torch.tensor(2.).to(out).pow(self._k + 1) * self._k * log_sigma.exp())
         ) - self._alpha_offset
         ramp = partial(self._ramp_fn , alpha=alpha, unimodal=True)
         
-        min_density = torch.zeros_like(y).unsqueeze(-1)
+        min_density = torch.zeros_like(out).unsqueeze(-1)
         return affine_sigmoid_transform(
-            y.unsqueeze(-1), ramp, mu, log_sigma, min_density, periodic=False
+            out.unsqueeze(-1), ramp, mu, log_sigma, min_density, periodic=False
         )
-    
-    def _inverse(self, x, y, *args, **kwargs):
-        raise NotImplementedError("No analytic inverse")
      
-    
-class ConstantConstrainedSigmoidTransformer(ConstrainedSigmoidTransformer):
+
+class ConstantConstrainedSigmoidComponents(ConstrainedSigmoidComponents):
+
     def __init__(self, mu=torch.tensor([0.]), log_pdf_constraint=torch.tensor([np.log(4.)]), smoothness_type: str="type1"):
         super().__init__(compute_params=None, smoothness_type=smoothness_type)
         self._mu = mu
         self._log_sigma = torch.nn.Parameter(torch.zeros_like(mu))
         self._log_pdf_constraint = log_pdf_constraint
             
-    def _compute_params(self, x):
-        mu = self._mu.expand(*x.shape, self._mu.shape[-1])
-        log_sigma = torch.nn.functional.softplus(self._log_sigma).expand(*x.shape, self._log_sigma.shape[-1])
-        log_pdf_constraint = self._log_pdf_constraint.expand(*x.shape, self._log_pdf_constraint.shape[-1])
+    def _compute_params(self, _, out):
+        mu = self._mu.expand(*out.shape, self._mu.shape[-1])
+        log_sigma = torch.nn.functional.softplus(self._log_sigma).expand(*out.shape, self._log_sigma.shape[-1])
+        log_pdf_constraint = self._log_pdf_constraint.expand(*out.shape, self._log_pdf_constraint.shape[-1])
+        return mu, log_sigma, log_pdf_constraint
+    
+    
+class UniformIntervalConstrainedSigmoidComponents(ConstrainedSigmoidComponents):
+    
+    def __init__(self, compute_constraints, left_constraint=False, right_constraint=False, smoothness_type: str="type1"):
+        super().__init__(compute_params=None, smoothness_type=smoothness_type)
+        self._n_constraints = sum([left_constraint, right_constraint])
+        self._log_sigma = torch.nn.Parameter(torch.zeros(self._n_constraints))
+        self._left_constraint = left_constraint
+        self._right_constraint = right_constraint
+        self._compute_constraints = compute_constraints
+            
+    def _compute_params(self, cond, out):
+        mu = []
+        if self._left_constraint:
+            mu.append(torch.zeros_like(out))
+        if self._right_constraint:
+            mu.append(torch.ones_like(out))
+        mu = torch.stack(mu, dim=-1)
+        log_sigma = torch.nn.functional.softplus(self._log_sigma).expand(*out.shape, self._n_constraints)
+        print( self._compute_constraints(cond).shape, out.shape)
+        log_pdf_constraint = self._compute_constraints(cond).view(*out.shape, self._n_constraints) + np.log(self._n_constraints + 1)
         return mu, log_sigma, log_pdf_constraint
     
 
@@ -320,40 +336,22 @@ class ConstrainedBoundaryCDFTransformer(Transformer):
     def __init__(self, transformer: Transformer, compute_constraints, left_constraint=True, right_constraint=True, smoothness_type: str="type1"):
         super().__init__()
         self._transformer = transformer
-        self._compute_constraints = compute_constraints
         self._mixture = MixtureCDFTransformer(
-            compute_components=self._compute_components,
-            compute_weights=self._compute_weights
+            compute_components=self._compute_components
         )
-        self._constrained_cdfs = ConstrainedSigmoidTransformer(
-            compute_params=self._compute_constrained_params,
+        self._constrained_cdfs = UniformIntervalConstrainedSigmoidComponents(
+            compute_constraints=compute_constraints,
+            left_constraint=left_constraint,
+            right_constraint=right_constraint,
             smoothness_type=smoothness_type
         )
-        self._n_constraints = sum([left_constraint, right_constraint])
-        self._log_sigma = torch.nn.Parameter(torch.zeros(self._n_constraints))
-        self._left_constraint = left_constraint
-        self._right_constraint = right_constraint
         
-    def _compute_constrained_params(self, x):
-        mu = []
-        if self._left_constraint:
-            mu.append(torch.zeros_like(x))
-        if self._right_constraint:
-            mu.append(torch.ones_like(x))
-        mu = torch.stack(mu, dim=-1)
-        log_sigma = self._log_sigma.expand(*x.shape, self._n_constraints)
-        log_pdf_constraint = self._compute_constraints(x).view(*x.shape, self._n_constraints) + np.log(self._n_constraints + 1)
-        return torch.cat([mu, log_sigma, log_pdf_constraint], dim=-1)
-        
-    def _compute_components(self, x, y):
-        boundary_cdfs, boundary_pdfs = self._constrained_cdfs(x, y)
-        center_cdf, center_pdf = self._transformer(x, y)
+    def _compute_components(self, cond, out):
+        boundary_cdfs, boundary_pdfs = self._constrained_cdfs(cond, out)
+        center_cdf, center_pdf = self._transformer(cond, out)
         cdfs = torch.cat([boundary_cdfs, center_cdf.unsqueeze(-1)], dim=-1)
         pdfs = torch.cat([boundary_pdfs, center_pdf.unsqueeze(-1)], dim=-1)
         return cdfs, pdfs
-    
-    def _compute_weights(self, x):
-        return torch.zeros(*x.shape, self._n_constraints + 1, device=x.device, dtype=x.dtype)
-    
-    def _forward(self, x, y, *args, **kwargs):
-        return self._mixture(x, y)
+
+    def _forward(self, cond, out):
+        return self._mixture(cond, out)

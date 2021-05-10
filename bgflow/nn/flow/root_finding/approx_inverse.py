@@ -41,13 +41,13 @@ class DifferentiableApproximateInverse(torch.autograd.Function):
             the log derivative
 
         """
-        
-        def residue(x):
+
+        def residual(x):
             y_, log_dy_dx = bijection(x)
             return y_ - y, log_dy_dx
         
         with torch.no_grad():
-            x, log_dx_dy = root_finder(residue, x0=y)
+            x, log_dx_dy = root_finder(residual, x0=y)
             
         ctx.save_for_backward(x, *params)
         ctx.bijection = bijection
@@ -131,17 +131,18 @@ class TransformerToFlowAdapter(Flow):
     """Transformer with constant conditioner.
     """
     
-    def __init__(self, transformer, x):
+    def __init__(self, transformer, cond):
         super().__init__()
         self._transformer = transformer
-        self._x = x
+        self._cond = cond
     
-    def _forward(self, y, *args, **kwargs):
-        return self._transformer(self._x, y, *args, **kwargs)
+
+    def _forward(self, out, *args, **kwargs):
+        return self._transformer(self._cond, out, *args, **kwargs)
     
-    def _inverse(self, y, *args, **kwargs):
-        return self._transformer(self._x, y, inverse=True, *args, **kwargs)
-    
+    def _inverse(self, out, *args, **kwargs):
+        return self._transformer(self._cond, out, inverse=True, *args, **kwargs)
+
     
 class WrapTransformerWithInverse(Transformer):
     """Transformer with approximate black-box inversion (and variable conditioning).
@@ -151,17 +152,15 @@ class WrapTransformerWithInverse(Transformer):
         super().__init__()
         self._transformer = transformer
         self._root_finder = root_finder
-        
-    def _forward(self, x, y, *args, **kwargs):
-        y, dlogp = self._transformer(x, y, *args, **kwargs)
-        return y, dlogp.sum(-1, keepdim=True)
+
+    def _forward(self, cond, out, *args, **kwargs):
+        return self._transformer(cond, out, *args, **kwargs)
     
-    def _inverse(self, x, y, *args, **kwargs):
-        flow = TransformerToFlowAdapter(self._transformer, x)
-        y, dlogp = DifferentiableApproximateInverse.apply(
+    def _inverse(self, cond, out, *args, **kwargs):
+        flow = TransformerToFlowAdapter(self._transformer, cond=cond)
+        return DifferentiableApproximateInverse.apply(
             self._root_finder,
             flow,
-            y,
+            out,
             *flow.parameters()
         )
-        return y, dlogp.sum(-1, keepdim=True)
