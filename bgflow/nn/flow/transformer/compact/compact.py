@@ -145,7 +145,7 @@ class SmoothRamp(ConditionalRamp):
         compute_alpha: Callable,
         unimodal: bool=True,
         eps: torch.Tensor=torch.tensor(1e-8),
-        alpha_constraint: Callable=torch.nn.functional.softplus,
+        alpha_constraint: Callable=torch.nn.Softplus(),
         ramp_type: str="type1"
     ):
         super().__init__()

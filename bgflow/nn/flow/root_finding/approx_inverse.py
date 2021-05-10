@@ -135,7 +135,6 @@ class TransformerToFlowAdapter(Flow):
         super().__init__()
         self._transformer = transformer
         self._cond = cond
-    
 
     def _forward(self, out, *args, **kwargs):
         return self._transformer(self._cond, out, *args, **kwargs)
