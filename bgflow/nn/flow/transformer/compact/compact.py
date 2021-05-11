@@ -11,6 +11,7 @@ __all__ =[
     "SmoothRamp",
     "PowerRamp",
     "AffineSigmoidComponents",
+    "AffineSigmoidComponentInitGrid",
     "MixtureCDFTransformer",
     "ConstrainedBoundaryCDFTransformer"
 ]
@@ -29,12 +30,26 @@ _SMOOTH_RAMP_INFLECTION_ALPHA_2 = 0.3052033
 def smooth_ramp_pow2(x, alpha, unimodal=True, eps=1e-8):
     if unimodal:
         alpha = alpha + _SMOOTH_RAMP_INFLECTION_ALPHA_2
+    
+    nonzero = x > 0
+    
     xinv = x.clamp_min(eps).reciprocal()
+#     xinv = x.reciprocal()
     arg = xinv.pow(2).neg()
     ramp = ((1 + arg) * alpha).exp()
+#     ramp = torch.where(
+#         nonzero,
+#         ramp,
+#         torch.zeros_like(ramp)
+#     )
     
     grad_arg = xinv.pow(3) * 2
     grad = ramp * grad_arg * alpha
+#     grad = torch.where(
+#         nonzero,
+#         grad,
+#         torch.zeros_like(ramp)
+#     )
     
     return ramp, grad
 
@@ -44,12 +59,26 @@ _SMOOTH_RAMP_INFLECTION_ALPHA_1 = 0.8656721
 def smooth_ramp_pow1(x, alpha, unimodal=True, eps=1e-8):
     if unimodal:
         alpha = alpha + _SMOOTH_RAMP_INFLECTION_ALPHA_1
+        
+    nonzero = x > 0
+    
     xinv = x.clamp_min(eps).reciprocal()
+#     xinv = x.reciprocal()
     arg = xinv.neg()
     ramp = ((1 + arg) * alpha).exp()
+#     ramp = torch.where(
+#         nonzero,
+#         ramp,
+#         torch.zeros_like(ramp)
+#     )
     
     grad_arg = xinv.pow(2)
     grad = ramp * grad_arg * alpha
+#     grad = torch.where(
+#         nonzero,
+#         grad,
+#         torch.zeros_like(ramp)
+#     )
     
     return ramp, grad
 
@@ -141,7 +170,7 @@ class SmoothRamp(ConditionalRamp):
         compute_alpha: Callable,
         unimodal: bool=True,
         eps: torch.Tensor=torch.tensor(1e-8),
-        alpha_constraint: Callable=torch.nn.functional.softplus,
+        max_alpha: torch.Tensor=torch.tensor(10.),
         ramp_type: str="type1"
     ):
         super().__init__()
@@ -155,11 +184,12 @@ class SmoothRamp(ConditionalRamp):
         self._compute_alpha = compute_alpha
         self._unimodal = unimodal
         self.register_buffer("_eps", eps)
-        self._alpha_constraint = alpha_constraint
+        self.register_buffer("_max_alpha", max_alpha)
         
     
     def forward(self, out, cond):
-        alpha = self._alpha_constraint(self._compute_alpha(cond)).view(1, 1, *out.shape[2:])
+        alpha = self._compute_alpha(cond).sigmoid() * self._max_alpha
+        alpha = alpha.view(1, 1, *out.shape[2:])
         return self._ramp_fn(out, alpha, unimodal=self._unimodal, eps=self._eps)
 
 
@@ -170,6 +200,7 @@ class AffineSigmoidComponents(torch.nn.Module):
         conditional_ramp: ConditionalRamp,
         compute_params: torch.nn.Module,
         min_density=torch.tensor(1e-4),
+        log_sigma_bound=torch.tensor(4.),
         periodic=True,
         zero_boundary_left=False,
         zero_boundary_right=False
@@ -178,6 +209,7 @@ class AffineSigmoidComponents(torch.nn.Module):
         self._conditional_ramp = conditional_ramp
         self._param_net = compute_params
         self.register_buffer("_min_density_lower_bound", min_density)
+        self.register_buffer("_log_sigma_bound", log_sigma_bound)
         
         self._periodic = periodic
         self._zero_boundary_left = zero_boundary_left
@@ -202,14 +234,15 @@ class AffineSigmoidComponents(torch.nn.Module):
 
         log_sigma = log_sigma.view(*out.shape, -1)        
         if self._periodic or self._zero_boundary_right or self._zero_boundary_left:
-            # if boundary constraint exist assert that sigma in [1, \infty]
-            log_sigma = torch.nn.functional.softplus(log_sigma)
+            log_sigma = log_sigma.sigmoid() * self._log_sigma_bound
             min_value = torch.tensor(1.).to(out)
             if self._zero_boundary_left:
                 min_value = torch.minimum(mu, min_value)
             if self._zero_boundary_right:
                 min_value = torch.minimum(1. - mu, min_value)
             log_sigma = log_sigma - min_value.log()
+        else:
+            log_sigma = log_sigma.tanh() * self._log_sigma_bound
         
         # min density in [lb, 1]
         lower_bound = self._min_density_lower_bound.expand_as(min_density)
@@ -233,6 +266,27 @@ class AffineSigmoidComponents(torch.nn.Module):
             out, ramp, mu, log_sigma, min_density, periodic=self._periodic
         )
 
+
+class AffineSigmoidComponentInitGrid(torch.nn.Module):
+    
+    def __init__(self, components: AffineSigmoidComponents):
+        super().__init__()
+        self._components = components
+        
+    def forward(self, cond, inp):
+        mu, _, _ = self._components._compute_params(cond, inp)
+        if torch.any(mu.min(dim=-1).values > 0):
+            mu = torch.cat([
+                torch.zeros_like(mu[..., [0]]),
+                mu
+            ], dim=-1)
+        if torch.any(mu.max(dim=-1).values < 1):
+            mu = torch.cat([
+                mu,
+                torch.ones_like(mu[..., [-1]])
+            ], dim=-1)
+        return mu.permute(-1, *np.arange(len(mu.shape) - 1)).contiguous()
+    
     
 class MixtureCDFTransformer(Transformer):
     
@@ -326,7 +380,6 @@ class UniformIntervalConstrainedSigmoidComponents(ConstrainedSigmoidComponents):
             mu.append(torch.ones_like(out))
         mu = torch.stack(mu, dim=-1)
         log_sigma = torch.nn.functional.softplus(self._log_sigma).expand(*out.shape, self._n_constraints)
-        print( self._compute_constraints(cond).shape, out.shape)
         log_pdf_constraint = self._compute_constraints(cond).view(*out.shape, self._n_constraints) + np.log(self._n_constraints + 1)
         return mu, log_sigma, log_pdf_constraint
     
