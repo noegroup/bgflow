@@ -2,6 +2,7 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
+import warnings
 
 
 __all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution"]
@@ -73,3 +74,17 @@ class UniformDistribution(TorchDistribution):
         uniform = torch.distributions.Uniform(low, high, validate_args)
         independent = torch.distributions.Independent(uniform, n_event_dims)
         super().__init__(independent)
+
+    def log_prob(self, x):
+        try:
+            y = self._delegate.log_prob(x)
+            assert torch.isfinite(y)
+            return y
+        except (ValueError, AssertionError):
+            if torch.any(x < torch.distributions.Uniform.low):
+                indices = torch.where(x < torch.distributions.Uniform.low)[0]
+                print("too low", x[indices], "at indices", indices)
+            if torch.any(x > torch.distributions.Uniform.high):
+                indices = torch.where(x > torch.distributions.Uniform.high)[0]
+                print("too high", x[indices], "at indices", indices)
+            return self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape))
