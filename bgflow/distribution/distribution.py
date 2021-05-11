@@ -78,7 +78,7 @@ class UniformDistribution(TorchDistribution):
     def _energy(self, x):
         try:
             y = - self._delegate.log_prob(x)[:,None]
-            assert torch.isfinite(y)
+            assert torch.all(torch.isfinite(y))
             return y
         except (ValueError, AssertionError):
             if torch.any(x < self._delegate.base_dist.low):
