@@ -75,9 +75,9 @@ class UniformDistribution(TorchDistribution):
         independent = torch.distributions.Independent(uniform, n_event_dims)
         super().__init__(independent)
 
-    def log_prob(self, x):
+    def _energy(self, x):
         try:
-            y = self._delegate.log_prob(x)
+            y = - self._delegate.log_prob(x)[:,None]
             assert torch.isfinite(y)
             return y
         except (ValueError, AssertionError):
@@ -87,4 +87,4 @@ class UniformDistribution(TorchDistribution):
             if torch.any(x > self._delegate.base_dist.high):
                 indices = torch.where(x > self._delegate.base_dist.high)[0]
                 print("too high", x[indices], "at indices", indices)
-            return self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape))
+            return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape))[:,None]
