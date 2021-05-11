@@ -34,8 +34,8 @@ def bisection_inverse(
             print(f"iteration: {i}/{max_iters}, error: {fy.abs().max().detach().cpu().numpy():.5}")
         if torch.all(fy.abs() < abs_tol):
             return x, -dfy
-        gt = fy > abs_tol
-        lt = fy < -abs_tol
+        gt = fy >= abs_tol
+        lt = fy <= -abs_tol
         right[gt] = x[gt]
         left[lt] = x[lt]        
     if raise_exception:
