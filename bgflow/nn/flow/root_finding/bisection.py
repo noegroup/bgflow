@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import numpy as np
 
@@ -63,10 +65,10 @@ def find_interval(f, grid, threshold=1e-4, max_iters=100, verbose=False, raise_e
         print(f"starting grid search with max_iters={max_iters}, threshold={threshold:.4}")
     converged = False
     for it in range(max_iters):
+        (grid, (left, right, fleft, dfleft)) = filter_grid(f, grid)
         if torch.all(grid[-1] - grid[0] < threshold):
             converged=True
             break
-        (grid, (left, right, fleft, dfleft)) = filter_grid(f, grid)
         if verbose:
             print(f"it: {it}, interval: {(grid[-1] - grid[0]).abs().max().item():.4}, err: {fleft.abs().max().item():.4}")
     if not converged:

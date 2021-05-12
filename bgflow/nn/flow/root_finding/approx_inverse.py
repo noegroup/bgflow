@@ -163,7 +163,7 @@ class TransformerApproximateInverse(torch.autograd.Function):
                 create_graph=True
             )
         
-        return None, None, grad_in_y, *grad_in_params
+        return None, None, None, grad_in_y, *grad_in_params
     
     
 class WrapCDFTransformerWithInverse(Transformer):

@@ -13,7 +13,8 @@ __all__ =[
     "AffineSigmoidComponents",
     "AffineSigmoidComponentInitGrid",
     "MixtureCDFTransformer",
-    "ConstrainedBoundaryCDFTransformer"
+    "ConstrainedBoundaryCDFTransformer",
+    "SmoothRampWithTrainableExponent"
 ]
 
 # TODO: docstrings and tests!
@@ -73,6 +74,31 @@ def smooth_ramp_pow1(x, alpha, unimodal=True, eps=1e-8):
 #     )
     
     grad_arg = xinv.pow(2)
+    grad = ramp * grad_arg * alpha
+#     grad = torch.where(
+#         nonzero,
+#         grad,
+#         torch.zeros_like(ramp)
+#     )
+    
+    return ramp, grad
+
+
+
+def smooth_ramp_pow_beta(x, alpha, beta, eps=1e-8):
+
+    
+    xinv = x.clamp_min(eps).reciprocal()
+#     xinv = x.reciprocal()
+    arg = xinv.pow(beta).neg()
+    ramp = ((1 + arg) * alpha).exp()
+#     ramp = torch.where(
+#         nonzero,
+#         ramp,
+#         torch.zeros_like(ramp)
+#     )
+    
+    grad_arg = xinv.pow(beta + 1) * beta
     grad = ramp * grad_arg * alpha
 #     grad = torch.where(
 #         nonzero,
@@ -191,6 +217,35 @@ class SmoothRamp(ConditionalRamp):
         alpha = self._compute_alpha(cond).sigmoid() * self._max_alpha
         alpha = alpha.view(1, 1, *out.shape[2:])
         return self._ramp_fn(out, alpha, unimodal=self._unimodal, eps=self._eps)
+    
+    
+class SmoothRampWithTrainableExponent(ConditionalRamp):
+    
+    def __init__(
+        self,
+        compute_params: Callable,
+        unimodal: bool=True,
+        eps: torch.Tensor=torch.tensor(1e-8),
+        max_alpha: torch.Tensor=torch.tensor(10.),
+        max_beta: torch.Tensor=torch.tensor(2.),
+        min_beta: torch.Tensor=torch.tensor(0.5),
+    ):
+        super().__init__()        
+        self._compute_params = compute_params
+        self._unimodal = unimodal
+        self.register_buffer("_eps", eps)
+        self.register_buffer("_max_alpha", max_alpha)
+        self.register_buffer("_max_beta", max_beta)
+        self.register_buffer("_min_beta", min_beta)
+        
+    
+    def forward(self, out, cond):
+        alpha, beta = self._compute_params(cond).view(1, 1, *out.shape[2:], 2).chunk(2, dim=-1)
+        alpha = alpha[..., 0]
+        beta = beta[..., 0]
+        alpha = alpha.sigmoid() * self._max_alpha
+        beta = beta.sigmoid() * (self._max_beta - self._min_beta) + self._min_beta
+        return smooth_ramp_pow_beta(out, alpha, beta, eps=self._eps)
 
 
 class AffineSigmoidComponents(torch.nn.Module):
