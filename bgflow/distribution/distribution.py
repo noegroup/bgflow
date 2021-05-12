@@ -87,4 +87,4 @@ class UniformDistribution(TorchDistribution):
             if torch.any(x > self._delegate.base_dist.high):
                 indices = torch.where(x > self._delegate.base_dist.high)[0]
                 print("too high", x[indices], "at indices", indices)
-            return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape))[:,None]
+            return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape[:-1]))[:,None]
