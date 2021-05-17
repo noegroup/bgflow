@@ -263,7 +263,7 @@ class GridInversion(Transformer):
         def _residual(inp):
             extra_dims = len(out.shape) - len(cond.shape)
             out_pred, dlogp = self._transformer(
-                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape),#.repeat(*inp.shape[extra_dims], torch.ones_like(cond.shape)),
+                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape).repeat(*inp.shape[extra_dims], *(1 for _ in cond.shape)),
                 inp,
                 *args,
                 **kwargs
