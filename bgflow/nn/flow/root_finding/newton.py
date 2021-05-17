@@ -1,90 +1,70 @@
+import warnings
+
 import torch
 import numpy as np
 
 
 __all__ = [
-    "NewtonRaphsonRootFinder"
+    "stable_newton_raphson"
 ]
 
 
-# TODO this is not really working so far!
-def newton_raphson_inverse(
+def stable_newton_raphson(
     f,
-    x0,
-    abs_tol=1e-6,
-    max_iters=100,
+    left, 
+    right,
+    fleft=None,
+    dfleft=None,
+    abs_tol=1e-5,
+    max_iters=20,
     verbose=False,
-    max_step=0.1,
-    min_step=0.,
-    step_shrink=0.9,
-    log_derivative=True,
-    raise_exception=True
-):
-    x = x0
-    last_val = None    
-    max_step = torch.ones_like(x) * max_step
+    raise_exception=False
+):    
+    if verbose:
+        print(f"starting stable newton raphson with max_iters={max_iters}, abs_tol={abs_tol:.4}")
+    if fleft is None or dfleft is None:
+        fleft, dfleft = f(left)    
+    x = left
+    fx = fleft
+    dfx = dfleft
     
-    for i in range(max_iters):
-        fy, dfy = f(x)
-        if last_val is not None:
-            max_step=torch.where(
-                fy.abs() > last_val.abs(),
-                (max_step * step_shrink).clamp_min(min_step),
-                max_step
-            )
-            max_step = (max_step * step_shrink).clamp_min(min_step)
+    converged = False
+    
+    for it in range(max_iters):
+        
+        
+        
+        step = fx / dfx.exp()
+        x_cand = x - step
+        x = torch.where(
+            (x_cand > left) & (x_cand < right),
+            x_cand,
+            (left + right) / 2
+        )        
+        fx, dfx = f(x)        
+        err = fx.abs()
+        
         if verbose:
-            if verbose  <= 1:
-                print(f"iteration: {i}, error: {(fy).abs().max().item()}")
-            else:
-                print(f"iteration: {i}, x: {x.detach().cpu().numpy()}, f(x): {fy.detach().cpu().numpy()}")
-        if fy.abs().max().item() < abs_tol:
-            return x, -dfy
-        else:
-            dfy = (-dfy).exp()
-            step = fy * dfy.expand_as(x) 
-            step = torch.where(
-                step.abs() > max_step,
-                step.sign() * max_step,
-                step
-            )
-            x = x - step
-            x = x.clamp(0, 1)
-        
-        last_val = fy
-    if raise_exception:
-        raise ValueError(f"Root finding did not converge: error={fy.abs().max().item()}")
-    else:
-        return x, -dfy
-    
-    
-class NewtonRaphsonRootFinder(torch.nn.Module):
-    
-    def __init__(
-        self,
-        abs_tol=torch.tensor(1e-6),
-        max_iters=100,
-        max_step=torch.tensor(0.1),
-        step_shrink=torch.tensor(0.9),
-        verbose=False,
-        raise_exception=True
-    ):
-        super().__init__()
-        self._max_iters = max_iters
-        self.register_buffer("_abs_tol", abs_tol)
-        self.register_buffer("_max_step", max_step)
-        self.register_buffer("_step_shrink", step_shrink)
-        self._verbose=verbose
-        self._raise_exception=raise_exception
-        
-    def forward(self, callback, x0):
-        return newton_raphson_inverse(
-            callback,
-            x0,
-            abs_tol=self._abs_tol,
-            max_iters=self._max_iters,
-            max_step=self._max_step,
-            step_shrink=self._step_shrink,
-            verbose=self._verbose,
-            raise_exception=self._raise_exception
+            print(f"it: {it}, err: {err.max().item():.4}")
+            
+        converged = torch.all(
+            ((right - left) < abs_tol) | (fx.abs() < abs_tol) | (x == left) | (x == right)
         )
+
+        if converged:
+            break
+
+        lt = fx < 0
+        gt = fx > 0
+        
+        left[lt] = x[lt]        
+        right[gt] = x[gt]
+            
+    if not converged:
+        msg = f"root finding did not converge: err={err.max().item():.5}"
+        if raise_exception:
+            raise ValueError(msg)
+        else:
+            warnings.warn(msg)
+        
+    return x, -dfx

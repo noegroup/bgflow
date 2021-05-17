@@ -1,13 +1,19 @@
+import numpy as np
 import torch
     
 from bgflow.nn.flow.base import Flow
 from bgflow.nn.flow.transformer import Transformer
+from bgflow.nn.flow.root_finding.bisection import (
+    find_interval
+)
 
 __all__ = [
-    "DifferentiableApproximateInverse",
-    "WrapFlowWithInverse",
-    "TransformerToFlowAdapter",
-    "WrapTransformerWithInverse"
+#     "DifferentiableApproximateInverse",
+#     "WrapFlowWithInverse",
+#     "TransformerToFlowAdapter",
+#     "WrapTransformerWithInverse",
+    "WrapCDFTransformerWithInverse",
+    "GridInversion"
 ]
 
 
@@ -163,3 +169,124 @@ class WrapTransformerWithInverse(Transformer):
             out,
             *flow.parameters()
         )
+    
+
+class TransformerApproximateInverse(torch.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx, oracle, bijection, cond, out, *params):
+        
+        with torch.no_grad():
+            inp, dlogp = oracle(cond, out)
+            
+        ctx.save_for_backward(cond, inp, *params)
+        ctx.bijection = bijection
+        
+        return inp, dlogp
+    
+    @staticmethod
+    def backward(ctx, grad_out_x, grad_out_dlogp):        
+        cond, x, *params = ctx.saved_tensors        
+ 
+        with torch.enable_grad():
+            x = x.detach().requires_grad_(True)
+            y, dlogp = ctx.bijection(cond, x)
+
+            force = torch.autograd.grad(-dlogp.sum(), x, create_graph=True)[0]
+            
+            grad_out_x = (-dlogp).exp() * grad_out_x
+            grad_out_dlogp = (-dlogp).exp() * grad_out_dlogp
+            
+            grad_in_y = grad_out_x + force * grad_out_dlogp
+            
+            grad_in_params = torch.autograd.grad(
+                [
+                    y,
+                    y, 
+                    dlogp.exp()
+                ], 
+                params, 
+                grad_outputs=[
+                    -grad_out_x,
+                    -force * grad_out_dlogp,
+                    -grad_out_dlogp
+                ], 
+                create_graph=True
+            )
+        
+        return None, None, None, grad_in_y, *grad_in_params
+    
+    
+class WrapCDFTransformerWithInverse(Transformer):
+    
+    def __init__(self, transformer, oracle):
+        super().__init__()
+        self._transformer = transformer
+        self._oracle = oracle
+    
+    def _forward(self, *args, **kwargs):
+        return self._transformer(*args, **kwargs)
+    
+    def _inverse(self, cond, out, *args, **kwargs):
+        return TransformerApproximateInverse.apply(
+            self._oracle,
+            self._transformer,
+            cond,
+            out,
+            *self._transformer.parameters()
+        )
+    
+    
+class GridInversion(Transformer):
+    
+    def __init__(
+        self,
+        transformer,
+        compute_init_grid,
+        verbose=False,
+        abs_tol=1e-6,
+        newton_threshold=1e-4,
+        max_iters=100,
+        raise_exception=False
+    ):
+        super().__init__()
+        self._transformer = transformer
+        self._compute_init_grid = compute_init_grid
+        self._verbose = verbose
+        self._abs_tol = abs_tol
+        self._newton_threshold = newton_threshold
+        self._max_iters = max_iters
+        self._raise_exception = raise_exception
+    
+    def forward(self, cond, out, *args, **kwargs):
+        
+        def _residual(inp):
+            extra_dims = len(out.shape) - len(cond.shape)
+            out_pred, dlogp = self._transformer(
+                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape).expand_as(inp),
+                inp,
+                *args,
+                **kwargs
+            )
+            return out_pred - out, dlogp
+        
+        
+        init_grid = self._compute_init_grid(cond, out)
+        left, right, fleft, dfleft = find_interval(
+            _residual,
+            init_grid,
+            verbose=self._verbose,
+            threshold=self._abs_tol,
+            max_iters=self._max_iters,
+            raise_exception=self._raise_exception
+        )
+        
+        return left, -dfleft
+#         return stable_newton_raphson(
+#             _residual,
+#             left, right, fleft, dfleft,
+#             verbose=self._verbose,
+#             abs_tol=self._abs_tol,
+#             max_iters=self._max_iters,
+#             raise_exception=self._raise_exception
+#         )
