@@ -214,7 +214,7 @@ class TransformerApproximateInverse(torch.autograd.Function):
                 create_graph=True
             )
         
-        return None, None, None, grad_in_y, *grad_in_params
+        return (None, None, None, grad_in_y, *grad_in_params)
     
     
 class WrapCDFTransformerWithInverse(Transformer):
@@ -263,7 +263,7 @@ class GridInversion(Transformer):
         def _residual(inp):
             extra_dims = len(out.shape) - len(cond.shape)
             out_pred, dlogp = self._transformer(
-                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape).expand_as(inp),
+                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape),#.expand_as(inp),
                 inp,
                 *args,
                 **kwargs
