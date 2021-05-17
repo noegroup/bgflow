@@ -53,8 +53,7 @@ def filter_grid(f, grid):
     left = grid.gather(0, lidx)
     right = grid.gather(0, ridx)
     fleft = fgrid.gather(0, lidx)
-    lidx[-1] = 0
-    dfleft = dfgrid.gather(0, lidx)
+    dfleft = dfgrid.gather(0, lidx[:-1][...,None])
     return (
         torch.linspace(0, 1, len(grid), dtype=grid.dtype, device=grid.device).view(-1, 1, 1) * (right - left) + left,
         (left[0], right[0], fleft[0], dfleft[0]), 
