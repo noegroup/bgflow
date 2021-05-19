@@ -64,15 +64,17 @@ class Sin(torch.nn.Module):
 
 
 class SirenDenseNet(DenseNet):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, scale_first_weights=True, initialize=True, *args, **kwargs):
         super().__init__(*args, **kwargs, activation=Sin())
-        self._init_siren_weights(self._layers)
+        if initialize:
+            self._init_siren_weights(self._layers, scale_first_weights)
 
     @staticmethod
-    def _init_siren_weights(layers):
+    def _init_siren_weights(layers, scale_first_weights=True):
         with torch.no_grad():
             linear_layers = [layer for layer in layers if isinstance(layer, torch.nn.Linear)]
             for layer in linear_layers:
                 n = layer.weight.shape[-1]
                 layer.weight.data = -np.sqrt(6./n) + 2.0*np.sqrt(6./n) * torch.rand_like(layer.weight.data)
-            linear_layers[0].weight.data *= 30.
+            if scale_first_weights:
+                linear_layers[0].weight.data *= 30.
