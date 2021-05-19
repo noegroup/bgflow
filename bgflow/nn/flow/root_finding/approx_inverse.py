@@ -108,7 +108,7 @@ class WrapTransformerWithInverse(Transformer):
         self._root_finder = root_finder
         
     def _forward(self, cond, out, *args, **kwargs):
-        return self._transformer(cond, out, *args, **kwargs)
+        return (self._transformer(cond, out, *args, **kwargs))
     
     def _inverse(self, cond, out, *args, **kwargs):
         flow = TransformerToFlowAdapter(self._transformer, cond=cond)
@@ -163,7 +163,7 @@ class TransformerApproximateInverse(torch.autograd.Function):
                 create_graph=True
             )
         
-        return None, None, None, grad_in_y, *grad_in_params
+        return (None, None, None, grad_in_y, *grad_in_params)
     
     
 class WrapCDFTransformerWithInverse(Transformer):
@@ -210,9 +210,10 @@ class GridInversion(Transformer):
     def forward(self, cond, out, *args, **kwargs):
         
         def _residual(inp):
-            extra_dims = len(out.shape) - len(cond.shape)
+            n_extra_dims = len(inp.shape) - len(cond.shape)
+            extra_dims = inp.shape[:n_extra_dims]
             out_pred, dlogp = self._transformer(
-                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape).expand_as(inp),
+                cond.view(*np.ones(n_extra_dims, dtype=int), *cond.shape).expand(*extra_dims, *cond.shape),
                 inp,
                 *args,
                 **kwargs
