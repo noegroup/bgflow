@@ -159,7 +159,7 @@ class WrapTransformerWithInverse(Transformer):
         self._root_finder = root_finder
 
     def _forward(self, cond, out, *args, **kwargs):
-        return self._transformer(cond, out, *args, **kwargs)
+        return (self._transformer(cond, out, *args, **kwargs))
     
     def _inverse(self, cond, out, *args, **kwargs):
         flow = TransformerToFlowAdapter(self._transformer, cond=cond)
@@ -261,15 +261,16 @@ class GridInversion(Transformer):
     def forward(self, cond, out, *args, **kwargs):
         
         def _residual(inp):
-            extra_dims = len(inp.shape) - len(cond.shape)
+
+            n_extra_dims = len(inp.shape) - len(cond.shape)
+            extra_dims = inp.shape[:n_extra_dims]
             out_pred, dlogp = self._transformer(
-                cond.view(*np.ones(extra_dims, dtype=int), *cond.shape).repeat(*inp.shape[:extra_dims], *(1 for _ in cond.shape)),
+                cond.view(*np.ones(n_extra_dims, dtype=int), *cond.shape).expand(*extra_dims, *cond.shape),
                 inp,
                 *args,
                 **kwargs
             )
             return out_pred - out, dlogp
-        
         
         init_grid = self._compute_init_grid(cond, out)
         left, right, fleft, dfleft = find_interval(
@@ -282,11 +283,3 @@ class GridInversion(Transformer):
         )
         
         return left, -dfleft
-#         return stable_newton_raphson(
-#             _residual,
-#             left, right, fleft, dfleft,
-#             verbose=self._verbose,
-#             abs_tol=self._abs_tol,
-#             max_iters=self._max_iters,
-#             raise_exception=self._raise_exception
-#         )
