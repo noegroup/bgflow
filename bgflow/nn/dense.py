@@ -64,7 +64,7 @@ class Sin(torch.nn.Module):
 
 
 class SirenDenseNet(DenseNet):
-    def __init__(self, scale_first_weights=True, initialize=True, *args, **kwargs):
+    def __init__(self, *args, scale_first_weights=True, initialize=True, **kwargs):
         super().__init__(*args, **kwargs, activation=Sin())
         if initialize:
             self._init_siren_weights(self._layers, scale_first_weights)
