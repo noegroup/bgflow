@@ -289,6 +289,7 @@ class AffineSigmoidComponents(torch.nn.Module):
 
         log_sigma = log_sigma.view(*out.shape, -1)        
         if self._periodic or self._zero_boundary_right or self._zero_boundary_left:
+            log_sigma = -self._log_sigma_bound
             log_sigma = log_sigma.sigmoid() * self._log_sigma_bound
             min_value = torch.tensor(1.).to(out)
             if self._zero_boundary_left:
