@@ -82,7 +82,7 @@ class NonCompactAffineSigmoidComponents(torch.nn.Module):
         mu = mu.view(*out.shape, -1)#.softmax(dim=-1).cumsum(dim=-1)
             
         log_sigma = log_sigma.view(*out.shape, -1)    
-#         log_sigma = log_sigma.tanh() * self._log_sigma_bound
+        log_sigma = log_sigma.tanh() * self._log_sigma_bound
         
         # min density in [lb, 1]
         lower_bound = self._min_density_lower_bound.expand_as(min_density)
