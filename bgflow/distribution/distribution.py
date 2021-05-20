@@ -2,10 +2,10 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
-import warnings
+from torch.distributions import constraints
 
 
-__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution"]
+__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution", "SloppyUniform"]
 
 
 class CustomDistribution(Energy, Sampler):
@@ -68,11 +68,22 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
+class SloppyUniform(torch.distributions.Uniform):
+    def __init__(self, *args, tol=1e-5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tol = tol
+
+    @constraints.dependent_property(is_discrete=False, event_dim=0)
+    def support(self):
+        return constraints.interval(self.low-self.tol, self.high+self.tol)
+
+
 class UniformDistribution(TorchDistribution):
     """Shortcut"""
-    def __init__(self, low, high, validate_args=None, n_event_dims=1):
-        uniform = torch.distributions.Uniform(low, high, validate_args)
+    def __init__(self, low, high, tol=1e-5, validate_args=None, n_event_dims=1):
+        uniform = SloppyUniform(low, high, validate_args, tol=1e-5)
         independent = torch.distributions.Independent(uniform, n_event_dims)
+        self.tol = tol
         super().__init__(independent)
 
     def _energy(self, x):
@@ -81,10 +92,4 @@ class UniformDistribution(TorchDistribution):
             assert torch.all(torch.isfinite(y))
             return y
         except (ValueError, AssertionError):
-            if torch.any(x < self._delegate.base_dist.low):
-                indices = torch.where(x < self._delegate.base_dist.low)[0]
-                print("too low", x[indices], "at indices", indices)
-            if torch.any(x > self._delegate.base_dist.high):
-                indices = torch.where(x > self._delegate.base_dist.high)[0]
-                print("too high", x[indices], "at indices", indices)
             return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape[:-1]))[:,None]
