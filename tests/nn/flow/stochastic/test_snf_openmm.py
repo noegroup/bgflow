@@ -13,8 +13,11 @@ try:
     from simtk import openmm as mm
     from simtk import unit
     import openmmtools
+    _OPENMM_INSTALLED = True
 except ImportError:
-    pytestmark = pytest.mark.skip
+    _OPENMM_INSTALLED = False
+
+pytestmark = pytest.mark.skipif(not _OPENMM_INSTALLED)
 
 
 def _copy_integrator(integrator):
