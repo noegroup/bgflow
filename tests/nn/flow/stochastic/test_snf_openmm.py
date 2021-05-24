@@ -12,8 +12,12 @@ import torch
 try:
     from simtk import openmm as mm
     from simtk import unit
+    from openmmtools.integrators import ThermostatedIntegrator
+    _OPENMM_INSTALLED = True
 except ImportError:
-    pytestmark = pytest.mark.skip
+    _OPENMM_INSTALLED = False
+
+pytestmark = pytest.mark.skipif(not _OPENMM_INSTALLED, reason="requires openmm and openmmtools")
 
 
 def _copy_integrator(integrator):
@@ -94,19 +98,21 @@ def test_flow_bridge(temperature, n_workers):
 
 
 @pytest.mark.parametrize(
-    "integrator,reference_integrator",
-    [
-        (BrownianPathProbabilityIntegrator(300, 1, 0.001), mm.BrownianIntegrator(300, 1, 0.001))
-    ]
+    "IntegratorClass", [BrownianPathProbabilityIntegrator]
 )
-def test_temperature(integrator, reference_integrator):
+def test_temperature(IntegratorClass):
+    ReferenceIntegratorClass = {
+        BrownianPathProbabilityIntegrator: mm.BrownianIntegrator
+    }[IntegratorClass]
     n_particles = 100
     n_steps = 1000
     force_constant = 1000.0 * unit.kilojoules_per_mole/unit.nanometer**2
     system = make_harmonic_system(n_particles, force_constant)
-   
+
+    integrator = IntegratorClass(300, 1, 0.001)
     # copy integrators to enable test repeats
     integrator = _copy_integrator(integrator)
+    reference_integrator = ReferenceIntegratorClass(300, 1, 0.001)
     reference_integrator = _copy_integrator(reference_integrator)
 
     kT = integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
