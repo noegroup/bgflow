@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="bgflow",
@@ -9,5 +9,5 @@ setup(
     author="Jonas, Koehler, Frank Noe, Leon Klein, Andreas Krämer",
     author_email="jonas.koehler@fu-berlin.de",
     url="https://www.mi.fu-berlin.de/en/math/groups/comp-mol-bio/index.html",
-    packages=["bgflow"],
+    packages=find_packages()
 )
