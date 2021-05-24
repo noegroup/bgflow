@@ -98,12 +98,12 @@ def test_flow_bridge(temperature, n_workers):
 
 
 @pytest.mark.parametrize(
-    "IntegratorClass,ReferenceIntegratorClass",
-    [
-        (BrownianPathProbabilityIntegrator, mm.BrownianIntegrator)
-    ]
+    "IntegratorClass", [BrownianPathProbabilityIntegrator]
 )
-def test_temperature(IntegratorClass, ReferenceIntegratorClass):
+def test_temperature(IntegratorClass):
+    ReferenceIntegratorClass = {
+        BrownianPathProbabilityIntegrator: mm.BrownianIntegrator
+    }[IntegratorClass]
     n_particles = 100
     n_steps = 1000
     force_constant = 1000.0 * unit.kilojoules_per_mole/unit.nanometer**2
