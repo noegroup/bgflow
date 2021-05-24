@@ -29,7 +29,7 @@ jobs:
 
 # Command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
 install:
-  - pip install -U torch$TORCH numpy matplotlib
+  - pip install -U torch$TORCH numpy matplotlib nflows
   - python setup.py install
 
 # Command to run tests, e.g. python setup.py test
