@@ -12,12 +12,12 @@ import torch
 try:
     from simtk import openmm as mm
     from simtk import unit
-    import openmmtools
+    from openmmtools.integrators import ThermostatedIntegrator
     _OPENMM_INSTALLED = True
 except ImportError:
     _OPENMM_INSTALLED = False
 
-pytestmark = pytest.mark.skipif(not _OPENMM_INSTALLED)
+pytestmark = pytest.mark.skipif(not _OPENMM_INSTALLED, reason="requires openmm and openmmtools")
 
 
 def _copy_integrator(integrator):
