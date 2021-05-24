@@ -76,7 +76,10 @@ def test_path_probability(IntegratorClass):
 def test_flow_bridge(temperature, n_workers):
     """Test the API of the flow interface"""
     from bgflow.distribution.energy.openmm import OpenMMBridge
-    from openmmtools.testsystems import AlanineDipeptideImplicit
+    try:
+        from openmmtools.testsystems import AlanineDipeptideImplicit
+    except ImportError:
+        pytest.skip("test requires openmmtools")
     integrator = BrownianPathProbabilityIntegrator(temperature, 100, 0.001)
     ala2 = AlanineDipeptideImplicit()
     bridge = OpenMMBridge(ala2.system, integrator, n_workers=n_workers, n_simulation_steps=4)
