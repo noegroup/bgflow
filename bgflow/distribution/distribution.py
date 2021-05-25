@@ -68,10 +68,11 @@ class TorchDistribution(Energy, Sampler):
             msg = msg.replace(self._delegate.__class__.__name__, "Distribution")
             raise AttributeError(msg)
 
+
 @distribution_module
 class SloppyUniform(torch.distributions.Uniform, torch.nn.Module):
     def __init__(self, *args, tol=1e-5, **kwargs):
-        super().__init__(self._low, self._high, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.tol = tol
 
     @constraints.dependent_property(is_discrete=False, event_dim=0)
