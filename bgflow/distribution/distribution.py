@@ -46,9 +46,6 @@ class TorchDistribution(Energy, Sampler):
         self._delegate = distribution
         super().__init__(dim=distribution.event_shape)
 
-    def _apply(self, fn):
-        pass
-
     def _sample(self, n_samples):
         if isinstance(n_samples, int):
             return self._delegate.sample(torch.Size([n_samples]))
