@@ -70,7 +70,7 @@ class TorchDistribution(Energy, Sampler):
 
 class SloppyUniform(torch.distributions.Uniform, torch.nn.Module):
     def __init__(self, low, high, *args, tol=1e-5, **kwargs):
-        super().__init__(*args, low=low, high=high, **kwargs)
+        super().__init__(low, high, *args, **kwargs)
         self.register_buffer("_low", low)
         self.register_buffer("_high", high)
         self.tol = tol
