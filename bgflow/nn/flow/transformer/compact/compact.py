@@ -357,14 +357,16 @@ class MixtureCDFTransformer(Transformer):
         self._compute_components = compute_components
         self._compute_weights = compute_weights
 
-    def _forward(self, cond, out, log_weights=None, *args, **kwargs):
+    def _forward(self, cond, out, log_weights=None, *args, elementwise_jacobian=False, **kwargs):
         cdfs, log_pdfs = self._compute_components(cond, out)
         if log_weights is None and self._compute_weights is not None:
             log_weights = self._compute_weights(cond).view(*cdfs.shape).log_softmax(dim=-1)
         else:
             log_weights = torch.zeros(*cdfs.shape).log_softmax(dim=-1)
         out, dlogp = mixture_cdf_transform(cdfs, log_pdfs, log_weights)
-        return out, dlogp.sum(dim=-1, keepdim=True)
+        if not elementwise_jacobian:
+            dlogp = dlogp.sum(dim=-1, keepdim=True)
+        return out, dlogp
     
     def _inverse(self, x, y, *args, **kwargs):
         raise NotImplementedError("No analytic inverse")

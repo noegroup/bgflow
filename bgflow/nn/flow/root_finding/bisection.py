@@ -77,7 +77,8 @@ def find_interval(f, grid, threshold=1e-4, max_iters=100, verbose=False, raise_e
             raise ValueError(msg)
         else:
             warnings.warn(msg)
-    return left, right, fleft, dfleft.sum(-1, keepdim=True)
+    dfleft = f(left)[-1]
+    return left, right, fleft, dfleft
 
 
 class BisectionRootFinder(torch.nn.Module):

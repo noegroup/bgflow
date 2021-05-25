@@ -85,7 +85,7 @@ class DifferentiableApproximateInverse(torch.autograd.Function):
  
         with torch.enable_grad():
             x = x.detach().requires_grad_(True)
-            y, dlogp = ctx.bijection(x)
+            y, dlogp = ctx.bijection(x, diagonal_jacobian=True)
 
             force = torch.autograd.grad(-dlogp.sum(), x, create_graph=True)[0]
             
