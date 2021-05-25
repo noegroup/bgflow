@@ -69,11 +69,20 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
-@distribution_module
 class SloppyUniform(torch.distributions.Uniform, torch.nn.Module):
-    def __init__(self, *args, tol=1e-5, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, low, high, tol=1e-5, **kwargs):
+        super().__init__(low=low, high=high, **kwargs)
+        self.register_buffer("_low", low)
+        self.register_buffer("_high", high)
         self.tol = tol
+
+    @property
+    def low(self):
+        return self._low
+
+    @property
+    def high(self):
+        return self._high
 
     @constraints.dependent_property(is_discrete=False, event_dim=0)
     def support(self):
