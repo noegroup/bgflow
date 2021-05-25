@@ -46,6 +46,9 @@ class TorchDistribution(Energy, Sampler):
         self._delegate = distribution
         super().__init__(dim=distribution.event_shape)
 
+    def _apply(self, fn):
+        pass
+
     def _sample(self, n_samples):
         if isinstance(n_samples, int):
             return self._delegate.sample(torch.Size([n_samples]))
@@ -68,24 +71,24 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
-class SloppyUniform(torch.distributions.Uniform, torch.nn.Module):
-    def __init__(self, low, high, *args, tol=1e-5, **kwargs):
-        super().__init__(low, high, *args, **kwargs)
-        self.register_buffer("_low", low)
-        self.register_buffer("_high", high)
+class SloppyUniform(torch.nn.Module):
+    def __init__(self, low, high, tol=1e-5):
+        super().__init__()
+        self.register_buffer("low", low)
+        self.register_buffer("high", high)
         self.tol = tol
-
-    @property
-    def low(self):
-        return self._low
-
-    @property
-    def high(self):
-        return self._high
 
     @constraints.dependent_property(is_discrete=False, event_dim=0)
     def support(self):
         return constraints.interval(self.low-self.tol, self.high+self.tol)
+
+    def __getattr__(self, item):
+        uniform = torch.distributions.Uniform(self.low, self.high)
+        uniform.support = self.support
+        if hasattr(uniform, item):
+            return getattr(uniform, item)
+        else:
+            raise AttributeError(f"SloppyUniform has no attribute {item}")
 
 
 class UniformDistribution(TorchDistribution):
