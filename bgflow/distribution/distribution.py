@@ -84,12 +84,16 @@ class SloppyUniform(torch.nn.Module):
         return constraints.interval(self.low-self.tol, self.high+self.tol)
 
     def __getattr__(self, name):
-        uniform = torch.distributions.Uniform(self.low, self.high, self.validate_args)
-        uniform.support = self.support
-        if hasattr(uniform, name):
-            return getattr(uniform, name)
-        else:
+        try:
             return super().__getattr__(name=name)
+        except AttributeError:
+            uniform = torch.distributions.Uniform(self.low, self.high, self.validate_args)
+            uniform.support = self.support
+            if hasattr(uniform, name):
+                return getattr(uniform, name)
+        except:
+            raise AttributeError(f"SloppyUniform has no attribute {name}")
+
 
 
 class UniformDistribution(TorchDistribution):
