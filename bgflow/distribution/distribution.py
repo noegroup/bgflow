@@ -103,8 +103,8 @@ class SloppyUniform(torch.nn.Module):
 class UniformDistribution(TorchDistribution):
     """Shortcut"""
     def __init__(self, low, high, tol=1e-5, validate_args=None, n_event_dims=1):
-        uniform = SloppyUniform(low, high, validate_args, tol=1e-5)
-        independent = torch.distributions.Independent(uniform, n_event_dims)
+        self.uniform = SloppyUniform(low, high, validate_args, tol=1e-5)
+        independent = torch.distributions.Independent(self.uniform, n_event_dims)
         self.tol = tol
         super().__init__(independent)
 
