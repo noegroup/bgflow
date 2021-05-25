@@ -124,13 +124,17 @@ class WrapFlowWithInverse(Flow):
     def _forward(self, x, *args, **kwargs):
         return self._flow(x, *args, **kwargs)
     
-    def _inverse(self, y, *args, **kwargs):
-        return DifferentiableApproximateInverse.apply(
+    def _inverse(self, y, *args, elementwise_jacobian=False, **kwargs):
+        x, dlogp = DifferentiableApproximateInverse.apply(
             self._root_finder,
             self,
             y,
             *self.parameters()
         )
+        if not elementwise_jacobian:
+            dlogp = dlogp.sum(-1, keepdim=True)
+        return x, dlogp
+
 
     
 class TransformerToFlowAdapter(Flow):
