@@ -2,7 +2,6 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
-from .modulify import distribution_module
 from torch.distributions import constraints
 
 
