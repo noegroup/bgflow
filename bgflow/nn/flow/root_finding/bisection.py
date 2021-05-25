@@ -36,8 +36,8 @@ def bisection_inverse(
             print(f"iteration: {i}/{max_iters}, error: {fy.abs().max().detach().cpu().numpy():.5}")
         if torch.all(fy.abs() < abs_tol):
             return x, -dfy
-        gt = fy > abs_tol
-        lt = fy < -abs_tol
+        gt = fy >= abs_tol
+        lt = fy <= -abs_tol
         right[gt] = x[gt]
         left[lt] = x[lt]        
     if raise_exception:
@@ -77,7 +77,8 @@ def find_interval(f, grid, threshold=1e-4, max_iters=100, verbose=False, raise_e
             raise ValueError(msg)
         else:
             warnings.warn(msg)
-    return left, right, fleft, dfleft.sum(-1, keepdim=True)
+    dfleft = f(left)[-1]
+    return left, right, fleft, dfleft
 
 
 class BisectionRootFinder(torch.nn.Module):

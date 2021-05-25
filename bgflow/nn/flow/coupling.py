@@ -35,7 +35,7 @@ class SplitFlow(Flow):
     """
     def __init__(self, *sizes_or_indices, dim=-1):
         super().__init__()
-        if isinstance(sizes_or_indices[0], Sequence):
+        if isinstance(sizes_or_indices[0], Sequence) or isinstance(sizes_or_indices[0], np.ndarray):
             self._sizes = None
             self._indices = sizes_or_indices
         else:

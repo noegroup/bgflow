@@ -103,7 +103,7 @@ class ConditionalSplineTransformer(Transformer):
         slopes[..., self._noncircular_indices(y_dim), -1] = noncircular_slopes
         return widths, heights, slopes
 
-    def _forward(self, x, y, *args, **kwargs):
+    def _forward(self, x, y, *args, elementwise_jacobian=False, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
@@ -118,9 +118,11 @@ class ConditionalSplineTransformer(Transformer):
             top=self._top,
             bottom=self._bottom,
         )
-        return z, dlogp.sum(dim=-1, keepdim=True)
+        if not elementwise_jacobian:
+            dlogp = dlogp.sum(dim=-1, keepdim=True)
+        return z, dlogp
 
-    def _inverse(self, x, y, *args, **kwargs):
+    def _inverse(self, x, y, *args, elementwise_jacobian=False, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
@@ -135,7 +137,9 @@ class ConditionalSplineTransformer(Transformer):
             top=self._top,
             bottom=self._bottom,
         )
-        return z, dlogp.sum(dim=-1, keepdim=True)
+        if not elementwise_jacobian:
+            dlogp = dlogp.sum(dim=-1, keepdim=True)
+        return z, dlogp
 
     def _n_noncircular(self, y_dim):
         if self._is_circular.all():

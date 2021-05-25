@@ -2,9 +2,10 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
+from torch.distributions import constraints
 
 
-__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution"]
+__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution", "SloppyUniform"]
 
 
 class CustomDistribution(Energy, Sampler):
@@ -67,9 +68,28 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
+class SloppyUniform(torch.distributions.Uniform):
+    def __init__(self, *args, tol=1e-5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tol = tol
+
+    @constraints.dependent_property(is_discrete=False, event_dim=0)
+    def support(self):
+        return constraints.interval(self.low-self.tol, self.high+self.tol)
+
+
 class UniformDistribution(TorchDistribution):
     """Shortcut"""
-    def __init__(self, low, high, validate_args=None, n_event_dims=1):
-        uniform = torch.distributions.Uniform(low, high, validate_args)
+    def __init__(self, low, high, tol=1e-5, validate_args=None, n_event_dims=1):
+        uniform = SloppyUniform(low, high, validate_args, tol=1e-5)
         independent = torch.distributions.Independent(uniform, n_event_dims)
+        self.tol = tol
         super().__init__(independent)
+
+    def _energy(self, x):
+        try:
+            y = - self._delegate.log_prob(x)[:,None]
+            assert torch.all(torch.isfinite(y))
+            return y
+        except (ValueError, AssertionError):
+            return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape[:-1]))[:,None]
