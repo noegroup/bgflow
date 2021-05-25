@@ -100,10 +100,10 @@ class SloppyUniform(torch.nn.Module):
 class UniformDistribution(TorchDistribution):
     """Shortcut"""
     def __init__(self, low, high, tol=1e-5, validate_args=None, n_event_dims=1):
-        self.uniform = SloppyUniform(low, high, validate_args, tol=1e-5)
-        independent = torch.distributions.Independent(self.uniform, n_event_dims)
-        self.tol = tol
+        uniform = SloppyUniform(low, high, validate_args, tol=tol)
+        independent = torch.distributions.Independent(uniform, n_event_dims)
         super().__init__(independent)
+        self.uniform = uniform
 
     def _energy(self, x):
         try:
