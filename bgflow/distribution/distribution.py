@@ -93,7 +93,7 @@ class SloppyUniform(torch.nn.Module):
         try:
             return super().__getattr__(name=name)
         except AttributeError:
-            uniform = _SloppyUniform(self.low, self.high, self.validate_args, self.tol)
+            uniform = _SloppyUniform(self.low, self.high, self.validate_args, tol=self.tol)
             if hasattr(uniform, name):
                 return getattr(uniform, name)
         except:
