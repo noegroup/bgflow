@@ -118,7 +118,7 @@ class ConditionalSplineTransformer(Transformer):
             top=self._top,
             bottom=self._bottom,
         )
-        if elementwise_jacobian:
+        if not elementwise_jacobian:
             dlogp = dlogp.sum(dim=-1, keepdim=True)
         return z, dlogp
 
@@ -137,7 +137,7 @@ class ConditionalSplineTransformer(Transformer):
             top=self._top,
             bottom=self._bottom,
         )
-        if elementwise_jacobian:
+        if not elementwise_jacobian:
             dlogp = dlogp.sum(dim=-1, keepdim=True)
         return z, dlogp
 
