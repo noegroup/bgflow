@@ -165,14 +165,17 @@ class WrapTransformerWithInverse(Transformer):
     def _forward(self, cond, out, *args, **kwargs):
         return (self._transformer(cond, out, *args, **kwargs))
     
-    def _inverse(self, cond, out, *args, **kwargs):
+    def _inverse(self, cond, out, *args, elementwise_jacobian=False, **kwargs):
         flow = TransformerToFlowAdapter(self._transformer, cond=cond)
-        return DifferentiableApproximateInverse.apply(
+        x, dlogp = DifferentiableApproximateInverse.apply(
             self._root_finder,
             flow,
             out,
             *flow.parameters()
         )
+        if not elementwise_jacobian:
+            dlogp = dlogp.sum(-1, keepdim=True)
+        return x, dlogp
     
 
 class TransformerApproximateInverse(torch.autograd.Function):
