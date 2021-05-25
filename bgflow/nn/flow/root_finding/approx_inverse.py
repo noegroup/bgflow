@@ -235,7 +235,7 @@ class WrapCDFTransformerWithInverse(Transformer):
         return self._transformer(*args, **kwargs)
     
     def _inverse(self, cond, out, *args, elementwise_jacobian=False, **kwargs):
-        x, dlogp= TransformerApproximateInverse.apply(
+        x, dlogp = TransformerApproximateInverse.apply(
             self._oracle,
             self._transformer,
             cond,
@@ -243,7 +243,7 @@ class WrapCDFTransformerWithInverse(Transformer):
             *self._transformer.parameters()
         )
         if not elementwise_jacobian:
-            dlogp = dlogp.sum(-1, keepdim=True)
+            dlogp = dlogp.sum(dim=-1, keepdim=True)
         return x, dlogp
     
     
