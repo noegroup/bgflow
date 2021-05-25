@@ -2,6 +2,7 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
+from .modulify import distribution_module
 from torch.distributions import constraints
 
 
@@ -68,6 +69,7 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
+@distribution_module
 class SloppyUniform(torch.distributions.Uniform):
     def __init__(self, *args, tol=1e-5, **kwargs):
         super().__init__(*args, **kwargs)
