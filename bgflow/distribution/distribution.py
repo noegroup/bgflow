@@ -72,18 +72,19 @@ class TorchDistribution(Energy, Sampler):
 
 
 class SloppyUniform(torch.nn.Module):
-    def __init__(self, low, high, tol=1e-5):
+    def __init__(self, low, high, validate_args=None, tol=1e-5, **kwargs):
         super().__init__()
         self.register_buffer("low", low)
         self.register_buffer("high", high)
         self.tol = tol
+        self.validate_args = validate_args
 
     @constraints.dependent_property(is_discrete=False, event_dim=0)
     def support(self):
         return constraints.interval(self.low-self.tol, self.high+self.tol)
 
     def __getattr__(self, item):
-        uniform = torch.distributions.Uniform(self.low, self.high)
+        uniform = torch.distributions.Uniform(self.low, self.high, self.validate_args)
         uniform.support = self.support
         if hasattr(uniform, item):
             return getattr(uniform, item)
