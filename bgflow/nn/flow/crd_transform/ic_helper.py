@@ -1,12 +1,70 @@
 import torch
 import warnings
 
-# TODO numpy-style docstrings for single functions
+from bgflow.utils.autograd import brute_force_jacobian
 
 
-# def _safe_div(x, y):
-# """ guarantees x/y -> 0 if x -> 0 and y -> 0 """
-# return torch.where(x.abs() > 0.0, x / y, torch.zeros_like(x))
+_INIT_ICS_DET_PERMUTATIONS = torch.LongTensor([
+    (0, 1, 2, 3, 6, 7, 4, 5, 8),
+    (0, 1, 2, 3, 6, 8, 4, 5, 7),
+    (0, 1, 2, 3, 7, 6, 4, 5, 8),
+    (0, 1, 2, 3, 7, 8, 4, 5, 6),
+    (0, 1, 2, 3, 8, 6, 4, 5, 7),
+    (0, 1, 2, 3, 8, 7, 4, 5, 6),
+    (0, 1, 2, 4, 6, 7, 3, 5, 8),
+    (0, 1, 2, 4, 6, 8, 3, 5, 7),
+    (0, 1, 2, 4, 7, 6, 3, 5, 8),
+    (0, 1, 2, 4, 7, 8, 3, 5, 6),
+    (0, 1, 2, 4, 8, 6, 3, 5, 7),
+    (0, 1, 2, 4, 8, 7, 3, 5, 6),
+    (0, 1, 2, 5, 6, 7, 3, 4, 8),
+    (0, 1, 2, 5, 6, 7, 4, 3, 8),
+    (0, 1, 2, 5, 6, 8, 3, 4, 7),
+    (0, 1, 2, 5, 6, 8, 4, 3, 7),
+    (0, 1, 2, 5, 7, 6, 3, 4, 8),
+    (0, 1, 2, 5, 7, 6, 4, 3, 8),
+    (0, 1, 2, 5, 7, 8, 3, 4, 6),
+    (0, 1, 2, 5, 7, 8, 4, 3, 6),
+    (0, 1, 2, 5, 8, 6, 3, 4, 7),
+    (0, 1, 2, 5, 8, 6, 4, 3, 7),
+    (0, 1, 2, 5, 8, 7, 3, 4, 6),
+    (0, 1, 2, 5, 8, 7, 4, 3, 6)
+])
+
+
+_INIT_ICS_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1])
+
+
+_INIT_XYZ_DET_PERMUTATIONS = torch.LongTensor([
+    (0, 1, 2, 3, 6, 7, 4, 5, 8),
+    (0, 1, 2, 3, 6, 7, 4, 8, 5),
+    (0, 1, 2, 3, 6, 7, 5, 4, 8),
+    (0, 1, 2, 3, 6, 7, 5, 8, 4),
+    (0, 1, 2, 3, 6, 7, 8, 4, 5),
+    (0, 1, 2, 3, 6, 7, 8, 5, 4),
+    (0, 1, 2, 6, 3, 7, 4, 5, 8),
+    (0, 1, 2, 6, 3, 7, 4, 8, 5),
+    (0, 1, 2, 6, 3, 7, 5, 4, 8),
+    (0, 1, 2, 6, 3, 7, 5, 8, 4),
+    (0, 1, 2, 6, 3, 7, 8, 4, 5),
+    (0, 1, 2, 6, 3, 7, 8, 5, 4),
+    (0, 1, 2, 6, 7, 3, 4, 5, 8),
+    (0, 1, 2, 6, 7, 3, 4, 8, 5),
+    (0, 1, 2, 6, 7, 3, 5, 4, 8),
+    (0, 1, 2, 6, 7, 3, 5, 8, 4),
+    (0, 1, 2, 6, 7, 3, 8, 4, 5),
+    (0, 1, 2, 6, 7, 3, 8, 5, 4),
+    (0, 1, 2, 7, 6, 3, 4, 5, 8),
+    (0, 1, 2, 7, 6, 3, 4, 8, 5),
+    (0, 1, 2, 7, 6, 3, 5, 4, 8),
+    (0, 1, 2, 7, 6, 3, 5, 8, 4),
+    (0, 1, 2, 7, 6, 3, 8, 4, 5),
+    (0, 1, 2, 7, 6, 3, 8, 5, 4)
+])
+
+
+_INIT_XYZ_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1])
+
 
 
 def outer(x, y):
@@ -218,3 +276,138 @@ def torsion_deriv(x1, x2, x3, x4, eps=1e-7, enforce_boundaries=True, raise_warni
     J = da_dx @ dx_dv @ dv_db0 + da_dy @ dy_db1xv @ db1xv_dv @ dv_db0
 
     return a[..., 0, 0], J[..., 0, :]
+
+
+def _permutation_parity(perm):
+    """computes parity of permutation in O(n log n) time using cycle decomposition"""
+    n = len(perm)
+    not_visited = set(range(n))
+    i = perm[0]
+    c = 1
+    while len(not_visited) > 0:
+        if i in not_visited:
+            not_visited.remove(i)      
+        else:       
+            c += 1
+            i = not_visited.pop()
+        i = perm[i]            
+    return (-1) ** (n - c)
+
+
+def _determinant_from_permutations(mat, permutations, signs):
+    n = mat.shape[-1]
+    return (mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs).sum(dim=-1)
+    
+    
+def _to_euler_angles(x, y, z):
+    alpha = torch.acos(- z[..., 1] / (1. - z[..., 2].pow(2)).sqrt())
+    beta = torch.acos(z[..., 2])
+    gamma = torch.acos(y[..., 2] / (1. - z[..., 2].pow(2)).sqrt())
+    return alpha, beta, gamma
+
+
+def _rotmat3x3(theta, axis):
+    r = torch.eye(3, dtype=theta.dtype, device=theta.device).repeat(*theta.shape[:-1], 1, 1)    
+    axes = [i for i in range(3) if i != axis]
+    r[..., axes[0], axes[0]] = torch.cos(theta)
+    r[..., axes[0], axes[1]] = torch.sin(theta)
+    r[..., axes[1], axes[0]] = -torch.sin(theta)
+    r[..., axes[1], axes[1]] = torch.cos(theta)
+    return r
+
+
+def _from_euler_angles(alpha, beta, gamma):
+    xrot = _rotmat3x3(alpha, axis=2)
+    yrot = _rotmat3x3(beta, axis=0)
+    zrot = _rotmat3x3(gamma, axis=2)
+    return xrot @ yrot @ zrot
+
+
+def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+    
+    with torch.enable_grad():
+        
+        xs = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1).requires_grad_(True)
+        x0 = xs[..., :3].unsqueeze(-2)
+        d01, d12, a012, alpha, beta, gamma = xs[..., 3:].chunk(6, dim=-1)
+        
+        n_batch = d01.shape[0]
+        dlogp = 0
+
+        # first point placed in origin
+        p0 = torch.zeros(n_batch, 1, 3, device=d01.device, dtype=d01.dtype)
+
+        # second point placed in z-axis
+        p1 = torch.zeros_like(x0)
+        p1[..., 2] = d01
+
+        # third point placed wrt to p0 and p1
+        p2, J2 = ic2xy0_deriv(
+            p1,
+            p0,
+            d12[:, None],
+            a012[:, None],
+            eps=eps,
+            enforce_boundaries=enforce_boundaries,
+            raise_warnings=raise_warnings
+        )
+
+        R = _from_euler_angles(alpha, beta, gamma)
+    
+
+        print(p1.shape, R.shape)
+        # bring back to original reference frame
+        x1 = torch.einsum("bnd, bed -> bne", p1, R) + x0
+        x2 = torch.einsum("bnd, bed -> bne", p2, R) + x0
+        
+        ys = torch.cat([x0.squeeze(-2), x1.squeeze(-2), x2.squeeze(-2)], dim=-1)
+        J = brute_force_jacobian(ys, xs)
+        
+        dlogp = _determinant_from_permutations(
+            J,
+            _INIT_XYZ_DET_PERMUTATIONS,
+            _INIT_XYZ_DET_PERMUTATION_SIGNS.to(J)
+        ).abs().log().unsqueeze(-1)
+
+        return x0, x1, x2, dlogp
+
+    
+def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+    
+    with torch.enable_grad():
+        xs = torch.cat([x0, x1, x2], dim=-1).requires_grad_(True)
+        x0, x1, x2 = xs.chunk(3, dim=-1)
+        d01, _ = dist_deriv(
+            x0, x1,
+            eps=eps, 
+            enforce_boundaries=enforce_boundaries, 
+            raise_warnings=raise_warnings
+        )
+        d12, _ = dist_deriv(x1, x2,
+            eps=eps, 
+            enforce_boundaries=enforce_boundaries, 
+            raise_warnings=raise_warnings
+        )
+        a012, _ = angle_deriv(x0, x1, x2,
+            eps=eps, 
+            enforce_boundaries=enforce_boundaries, 
+            raise_warnings=raise_warnings
+        )
+
+        basis = tripod(x0, x1, x2,
+            eps=eps, 
+            enforce_boundaries=enforce_boundaries, 
+            raise_warnings=raise_warnings
+        )
+        alpha, beta, gamma = _to_euler_angles(*basis)
+        
+        ys = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1)        
+        J = brute_force_jacobian(ys, xs)
+        
+        dlogp = _determinant_from_permutations(
+            J,
+            _INIT_ICS_DET_PERMUTATIONS,
+            _INIT_ICS_DET_PERMUTATION_SIGNS.to(J)
+        ).abs().log().unsqueeze(-1)
+    
+    return x0, d01, d12, a012, alpha, beta, gamma, dlogp

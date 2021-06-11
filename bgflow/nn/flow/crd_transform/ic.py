@@ -12,6 +12,9 @@ from .ic_helper import (
     orientation,
     det3x3,
     det2x2,
+    init_xyz2ics,
+    init_ics2xyz,
+    _from_euler_angles
 )
 from .pca import WhitenFlow
 
@@ -222,6 +225,9 @@ def unnormalize_angles(angles):
     return angles, dlogp
 
 
+
+
+
 class ReferenceSystemTransformation(Flow):
     """
     Internal coordinate transformation of the reference frame set by the first three atoms.
@@ -241,97 +247,48 @@ class ReferenceSystemTransformation(Flow):
         raise warnings if manifold boundaries are violated
     """
 
-    def __init__(self, normalize_angles=True, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+    def __init__(self, normalize_angles=True, orientation="euler", eps=1e-7, enforce_boundaries=True, raise_warnings=True):
         super().__init__()
         self._normalize_angles = normalize_angles
         self._eps = eps
         self._enforce_boundaries = enforce_boundaries
         self._raise_warnings = raise_warnings
+        assert orientation in ["euler"]
+        self._orientation = orientation
 
     def _forward(self, x0, x1, x2, *args, **kwargs):
-
-        R = orientation(
-            x0,
-            x1,
-            x2,
+        
+        x0, d01, d12, a012, alpha, beta, gamma, dlogp = init_xyz2ics(
+            x0, x1, x2,
             eps=self._eps,
             enforce_boundaries=self._enforce_boundaries,
             raise_warnings=self._raise_warnings
         )
-        d01, _ = dist_deriv(
-            x0,
-            x1,
-            eps=self._eps,
-            enforce_boundaries=self._enforce_boundaries,
-            raise_warnings=self._raise_warnings
-        )
-        d12, _ = dist_deriv(
-            x1,
-            x2,
-            eps=self._eps,
-            enforce_boundaries=self._enforce_boundaries,
-            raise_warnings=self._raise_warnings
-        )
-        a012, _ = angle_deriv(
-            x0,
-            x1,
-            x2,
-            eps=self._eps,
-            enforce_boundaries=self._enforce_boundaries,
-            raise_warnings=self._raise_warnings
-        )
-
-        dlogp = 0
-
-        _, _, _, neg_dlogp = self._init_points(x0, R, d01, d12, a012)
-
+        
         if self._normalize_angles:
             a012, dlogp_a = normalize_angles(a012)
             dlogp += dlogp_a
+            
+        return (x0, d01, d12, a012, alpha, beta, gamma, dlogp)
 
-        dlogp += -neg_dlogp
-
-        return x0, R, d01, d12, a012, dlogp
-
-    def _init_points(self, x0, R, d01, d12, a012):
-        n_batch = d01.shape[0]
-        dlogp = 0
-
-        # first point placed in origin
-        p0 = torch.zeros(n_batch, 1, 3).to(d01)
-
-        # second point placed in z-axis
-        p1 = torch.zeros_like(x0).to(d01)
-        p1[..., 2] = d01
-
-        # third point placed wrt to p0 and p1
-        p2, J = ic2xy0_deriv(
-            p1,
-            p0,
-            d12[:, None],
-            a012[:, None],
-            eps=self._eps,
-            enforce_boundaries=self._enforce_boundaries,
-            raise_warnings=self._raise_warnings
-        )
-        dlogp += det2x2(J[..., [0, 2], :]).abs().log()
-
-        # bring back to original reference frame
-        x1 = torch.einsum("bnd, bned -> bne", p1, R) + x0
-        x2 = torch.einsum("bnd, bned -> bne", p2, R) + x0
-
-        return x0, x1, x2, dlogp
-
-    def _inverse(self, x0, R, d01, d12, a012, *args, **kwargs):
+    def _inverse(self, x0, d01, d12, a012, alpha, beta, gamma, *args, **kwargs):
+        
         dlogp = 0
 
         if self._normalize_angles:
             a012, dlogp_a = unnormalize_angles(a012)
             dlogp += dlogp_a
-
-        *res, dlogp_b = self._init_points(x0, R, d01, d12, a012)
+        
+        x0, x1, x2, dlogp_b = init_ics2xyz(
+            x0, d01, d12, a012, alpha, beta, gamma,
+            eps=self._eps,
+            enforce_boundaries=self._enforce_boundaries,
+            raise_warnings=self._raise_warnings
+        )
+        
         dlogp += dlogp_b
-        return (*res, dlogp)
+        
+        return (x0, x1, x2, dlogp)
 
 
 class RelativeInternalCoordinateTransformation(Flow):
@@ -733,7 +690,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         x_fixed = x_fixed.view(n_batch, -1, 3)
 
         # transform reference system
-        x0, R, d01, d12, a012, dlogp_ref = self._ref_ic(
+        x0, d01, d12, a012, alpha, beta, gamma, dlogp_ref = self._ref_ic(
             x_fixed[:, [0]], x_fixed[:, [1]], x_fixed[:, [2]]
         )
 
@@ -745,9 +702,9 @@ class GlobalInternalCoordinateTransformation(Flow):
         # aggregate volume change
         dlogp = dlogp_rel + dlogp_ref
 
-        return bonds, angles, torsions, x0, R, dlogp
+        return bonds, angles, torsions, x0, alpha, beta, gamma, dlogp
 
-    def _inverse(self, bonds, angles, torsions, x0, R, *args, **kwargs):
+    def _inverse(self, bonds, angles, torsions, x0, alpha, beta, gamma, *args, **kwargs):
         """
         Parameters:
         -----------
@@ -774,7 +731,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         a012 = angles[:, [0]]
 
         # transform reference system back
-        x0, x1, x2, dlogp_ref = self._ref_ic(x0, R, d01, d12, a012, inverse=True)
+        x0, x1, x2, dlogp_ref = self._ref_ic(x0, d01, d12, a012, alpha, beta, gamma, inverse=True)
         x_init = torch.cat([x0, x1, x2], dim=1)
 
         # now transform relative system wrt reference system back
