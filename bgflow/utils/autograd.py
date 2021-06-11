@@ -72,8 +72,8 @@ def brute_force_jacobian(y, x):
             create_graph=True,
             retain_graph=True,
         )[0]
-        rows.append(row.view(-1, 1, input_dim))
-    jac = torch.cat(rows, dim=-2)
+        rows.append(row)
+    jac = torch.stack(rows, dim=-2)
     return jac
 
 
