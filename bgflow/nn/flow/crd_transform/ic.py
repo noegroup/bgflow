@@ -619,6 +619,8 @@ class GlobalInternalCoordinateTransformation(Flow):
         z matrix used for ic transformation
     normalize_angles : bool
         bring angles and torsions into (0, 1) interval
+    orientation : ["euler", "basis"]
+        representation format for the orientation of the system (see ReferenceSystemTransformation)
     eps : float
         numerical epsilon used to enforce manifold boundaries
     raise_warnings : bool
@@ -705,6 +707,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         self,
         z_matrix,
         normalize_angles=True,
+        orientation="euler",
         eps: float=1e-7,
         enforce_boundaries: bool=True,
         raise_warnings: bool=True
@@ -724,6 +727,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         )
         self._ref_ic = ReferenceSystemTransformation(
             normalize_angles=normalize_angles,
+            orientation=orientation,
             eps=eps,
             enforce_boundaries=enforce_boundaries,
             raise_warnings=raise_warnings
