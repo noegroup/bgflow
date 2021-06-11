@@ -62,7 +62,6 @@ def brute_force_jacobian(y, x):
     TODO
     """
     output_dim = y.shape[-1]
-    input_dim = x.shape[-1]
     rows = []
     for i in range(output_dim):
         row = torch.autograd.grad(

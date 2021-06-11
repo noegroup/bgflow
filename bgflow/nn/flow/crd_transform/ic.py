@@ -11,10 +11,10 @@ from .ic_helper import (
     torsion_deriv,
     orientation,
     det3x3,
-    det2x2,
     init_xyz2ics,
     init_ics2xyz,
-    _from_euler_angles
+    _from_euler_angles,
+    _to_euler_angles
 )
 from .pca import WhitenFlow
 
@@ -241,6 +241,8 @@ class ReferenceSystemTransformation(Flow):
     ----------
     normalize_angles : bool
         bring angles and torsions into (0, 1) interval
+    orientation : "euler" | "basis"
+        which representation is used to represent the global orientation of the system
     eps : float
         numerical epsilon used to enforce manifold boundaries
     raise_warnings : bool
@@ -253,10 +255,30 @@ class ReferenceSystemTransformation(Flow):
         self._eps = eps
         self._enforce_boundaries = enforce_boundaries
         self._raise_warnings = raise_warnings
-        assert orientation in ["euler"]
+        assert orientation in ["basis", "euler"]
         self._orientation = orientation
 
     def _forward(self, x0, x1, x2, *args, **kwargs):
+        """
+        Parameters:
+        ----------
+        x0, x1, x2: torch.Tensor
+            xyz coordinates of the first three points
+
+        Returns:
+        --------
+        x0: torch.Tensor
+            origin of the system
+        orientation: torch.Tensor
+            if orientation is "basis" returns [3,3] matrix 
+            if orientation is "euler" returns tuple with three Euler angles (alpha, beta, gamma)
+                their range are in [0, pi] if unnormalized and [0, 1] if normalized
+        d01: torch.Tensor
+        d12: torch.Tensor
+        a012: torch.Tensor
+        dlogp: torch.Tensor
+            log det jacobian of the transformation
+        """
         
         x0, d01, d12, a012, alpha, beta, gamma, dlogp = init_xyz2ics(
             x0, x1, x2,
@@ -268,13 +290,61 @@ class ReferenceSystemTransformation(Flow):
         if self._normalize_angles:
             a012, dlogp_a = normalize_angles(a012)
             dlogp += dlogp_a
+        
+        if self._orientation == "basis":
+            orientation = _from_euler_angles(alpha, beta, gamma)
+        elif self._orientation == "euler":            
+            if self._normalize_angles:
+                alpha, dlogp_alpha = normalize_angles(alpha)
+                dlogp += dlogp_alpha
+                beta, dlogp_beta = normalize_angles(beta)
+                dlogp += dlogp_beta
+                gamma, dlogp_gamma = normalize_angles(gamma)
+                dlogp += dlogp_gamma                
+            orientation = (alpha, beta, gamma)
+        else:
+            raise ValueError("should never happen")
             
-        return (x0, d01, d12, a012, alpha, beta, gamma, dlogp)
+        return (x0, orientation, d01, d12, a012, dlogp)
 
-    def _inverse(self, x0, d01, d12, a012, alpha, beta, gamma, *args, **kwargs):
+    def _inverse(self, x0, orientation, d01, d12, a012, *args, **kwargs):
+        """
+        Parameters:
+        ----------
+        x0: torch.Tensor
+            origin of the system
+        orientation: torch.Tensor
+            if orientation is "basis" returns [3,3] matrix 
+            if orientation is "euler" returns tuple with three Euler angles (alpha, beta, gamma)
+                their range are in [0, pi] if unnormalized and [0, 1] if normalized
+        d01: torch.Tensor
+        d12: torch.Tensor
+        a012: torch.Tensor
+
+        Returns:
+        --------        
+        x0, x1, x2: torch.Tensor
+            xyz coordinates of the first three points
+            
+        dlogp: torch.Tensor
+            log det jacobian of the transformation
+        """
         
         dlogp = 0
-
+        
+        if self._orientation == "basis":
+            basis = [b[..., 0] for b in orientation.chunk(3, dim=-1)]
+            alpha, beta, gamma = _to_euler_angles(*basis)
+        elif self._orientation == "euler":
+            alpha, beta, gamma = orientation
+            if self._normalize_angles:
+                alpha, dlogp_alpha = unnormalize_angles(alpha)
+                dlogp += dlogp_alpha
+                beta, dlogp_beta = unnormalize_angles(beta)
+                dlogp += dlogp_beta
+                gamma, dlogp_gamma = unnormalize_angles(gamma)
+                dlogp += dlogp_gamma 
+                
         if self._normalize_angles:
             a012, dlogp_a = unnormalize_angles(a012)
             dlogp += dlogp_a
@@ -675,8 +745,10 @@ class GlobalInternalCoordinateTransformation(Flow):
             the systems origin point set in the first atom.
             has shape [batch, 1, 3]
         R: torch.Tensor
-            the 3x3 matrix spanning the global rotation of the system
-            spanned by the first three atoms. has shape [batch, 1, 3, 3]
+            global rotation of the system. 
+            can be either a 3-vector of Euler angles
+            or a matrix containing three basis vectors spanning the system
+            see ReferenceSystemTransformation for more details. 
         dlogp: torch.Tensor
             log det jacobian of the transformation
         """
@@ -690,7 +762,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         x_fixed = x_fixed.view(n_batch, -1, 3)
 
         # transform reference system
-        x0, d01, d12, a012, alpha, beta, gamma, dlogp_ref = self._ref_ic(
+        x0, R, d01, d12, a012, dlogp_ref = self._ref_ic(
             x_fixed[:, [0]], x_fixed[:, [1]], x_fixed[:, [2]]
         )
 
@@ -702,9 +774,9 @@ class GlobalInternalCoordinateTransformation(Flow):
         # aggregate volume change
         dlogp = dlogp_rel + dlogp_ref
 
-        return bonds, angles, torsions, x0, alpha, beta, gamma, dlogp
+        return bonds, angles, torsions, x0, R, dlogp
 
-    def _inverse(self, bonds, angles, torsions, x0, alpha, beta, gamma, *args, **kwargs):
+    def _inverse(self, bonds, angles, torsions, x0, R, *args, **kwargs):
         """
         Parameters:
         -----------
@@ -714,8 +786,10 @@ class GlobalInternalCoordinateTransformation(Flow):
         x0: torch.Tensor
             system's origin. should have shape [batch, 1, 3]
         R: torch.Tensor
-            orthogonal matrix setting the reference frame for the
-            first three atoms. should have shape [batch, 1, 3, 3]
+            lobal rotation of the system. 
+            can be either a 3-vector of Euler angles
+            or a matrix containing three basis vectors spanning the system
+            see ReferenceSystemTransformation for more details.
 
         Returns:
         --------
@@ -731,7 +805,7 @@ class GlobalInternalCoordinateTransformation(Flow):
         a012 = angles[:, [0]]
 
         # transform reference system back
-        x0, x1, x2, dlogp_ref = self._ref_ic(x0, d01, d12, a012, alpha, beta, gamma, inverse=True)
+        x0, x1, x2, dlogp_ref = self._ref_ic(x0, R, d01, d12, a012 inverse=True)
         x_init = torch.cat([x0, x1, x2], dim=1)
 
         # now transform relative system wrt reference system back

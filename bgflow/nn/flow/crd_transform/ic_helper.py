@@ -4,6 +4,7 @@ import warnings
 from bgflow.utils.autograd import brute_force_jacobian
 
 
+# permutations used in the xyz->ic matrix determinant computation
 _INIT_ICS_DET_PERMUTATIONS = torch.LongTensor([
     (0, 1, 2, 3, 6, 7, 4, 5, 8),
     (0, 1, 2, 3, 6, 8, 4, 5, 7),
@@ -32,9 +33,11 @@ _INIT_ICS_DET_PERMUTATIONS = torch.LongTensor([
 ])
 
 
+# signs used in the xyz->ic matrix determinant computation
 _INIT_ICS_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1])
 
 
+# permutations used in the ic->xyz matrix determinant computation
 _INIT_XYZ_DET_PERMUTATIONS = torch.LongTensor([
     (0, 1, 2, 3, 6, 7, 4, 5, 8),
     (0, 1, 2, 3, 6, 7, 4, 8, 5),
@@ -63,6 +66,7 @@ _INIT_XYZ_DET_PERMUTATIONS = torch.LongTensor([
 ])
 
 
+# signs used in the ic->xyz matrix determinant computation
 _INIT_XYZ_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1])
 
 
@@ -295,11 +299,26 @@ def _permutation_parity(perm):
 
 
 def _determinant_from_permutations(mat, permutations, signs):
+    """ The determinant of a NxN matrix A is 
+            
+            \det A = \sum_{\sigma} \sign{\sigma} \prod_{i} A[i, \sigma[i]]
+        
+        where the sum is over all possible permutation \sigma of {1, ..., N}
+        
+        If we know the non-vanishing permutations and their signs, we can compute it explicitly.
+        
+        The function takes a matrix, all non-vanishing permutations with corresponding signs and
+        uses it to compute the determinant of it.
+    """
     n = mat.shape[-1]
     return (mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs).sum(dim=-1)
     
     
 def _to_euler_angles(x, y, z):
+    """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles 
+        output values are in [0, pi]
+    """
+    x, y, z = basis.chunk
     alpha = torch.acos(- z[..., 1] / (1. - z[..., 2].pow(2)).sqrt())
     beta = torch.acos(z[..., 2])
     gamma = torch.acos(y[..., 2] / (1. - z[..., 2].pow(2)).sqrt())
@@ -307,6 +326,7 @@ def _to_euler_angles(x, y, z):
 
 
 def _rotmat3x3(theta, axis):
+    """ computes the matrix corresponding to a 2D rotation around `axis` in 3D """
     r = torch.eye(3, dtype=theta.dtype, device=theta.device).repeat(*theta.shape[:-1], 1, 1)    
     axes = [i for i in range(3) if i != axis]
     r[..., axes[0], axes[0]] = torch.cos(theta)
@@ -317,6 +337,9 @@ def _rotmat3x3(theta, axis):
 
 
 def _from_euler_angles(alpha, beta, gamma):
+    """ converts proper euler angles in x-y-z representation into the corresponding rotation matrix
+        input values are in [0, pi]
+    """
     xrot = _rotmat3x3(alpha, axis=2)
     yrot = _rotmat3x3(beta, axis=0)
     zrot = _rotmat3x3(gamma, axis=2)
@@ -324,9 +347,30 @@ def _from_euler_angles(alpha, beta, gamma):
 
 
 def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+    """ computes the first three points given initial ICs and the position of the first point 
+        
+        Parameters:
+        -----------
+        x0: first point
+        d01: distance between x0 and x1
+        d12: distance between x1 and x2
+        a021: angle between (x2 - x0) and (x1 - x0)
+        alpha: first euler angle (in [0, pi])
+        beta: second euler angle (in [0, pi])
+        gamma: third euler angle (in [0, pi])
+        
+        Returns:
+        x0: first point
+        x1: second point
+        x2: third point
+        dlogp: density change
+    """
     
+     # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
         
+        # needed for autograd backward pass        
+        # we flatten the x0, the ics and the euler angles into a 9-dimensional state vector
         xs = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1).requires_grad_(True)
         x0 = xs[..., :3].unsqueeze(-2)
         d01, d12, a012, alpha, beta, gamma = xs[..., 3:].chunk(6, dim=-1)
@@ -352,17 +396,21 @@ def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_bound
             raise_warnings=raise_warnings
         )
 
+        # compute rotation matrix from euler angles
         R = _from_euler_angles(alpha, beta, gamma)
     
-
-        print(p1.shape, R.shape)
         # bring back to original reference frame
         x1 = torch.einsum("bnd, bed -> bne", p1, R) + x0
         x2 = torch.einsum("bnd, bed -> bne", p2, R) + x0
         
+        # now flatten the three output points into a 9 dimensional state vector
         ys = torch.cat([x0.squeeze(-2), x1.squeeze(-2), x2.squeeze(-2)], dim=-1)
+        
+        # compute the 9x9 jacobian using bruteforce autograd
         J = brute_force_jacobian(ys, xs)
         
+        # we can compute the determinant of this jacobian
+        # by summing only the 24 non-vanishing permuations
         dlogp = _determinant_from_permutations(
             J,
             _INIT_XYZ_DET_PERMUTATIONS,
@@ -373,10 +421,35 @@ def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_bound
 
     
 def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+    """ computes the initial ICs and the position of the first poin given first three points
+        
+        Parameters:
+        -----------        
+        x0: first point
+        x1: second point
+        x2: third point
+        
+        Returns:
+        --------
+        x0: first point
+        d01: distance between x0 and x1
+        d12: distance between x1 and x2
+        a021: angle between (x2 - x0) and (x1 - x0)
+        alpha: first euler angle (in [0, pi])
+        beta: second euler angle (in [0, pi])
+        gamma: third euler angle (in [0, pi])
+        dlogp: density change
+    """
     
+    # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
+        
+        # needed for autograd backward pass        
+        # we flatten the three input into a 9-dimensional state vector
         xs = torch.cat([x0, x1, x2], dim=-1).requires_grad_(True)
         x0, x1, x2 = xs.chunk(3, dim=-1)
+        
+        # compute ICs as usual
         d01, _ = dist_deriv(
             x0, x1,
             eps=eps, 
@@ -394,16 +467,24 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
             raise_warnings=raise_warnings
         )
 
+        # build a basis made of the first three points
         basis = tripod(x0, x1, x2,
             eps=eps, 
             enforce_boundaries=enforce_boundaries, 
             raise_warnings=raise_warnings
         )
+        
+        # and compute the euler angles given this basis (range is [0, pi])
         alpha, beta, gamma = _to_euler_angles(*basis)
         
+        # now we flatten the outputs (x0, ics, euler angles) into a 9-dim output vec
         ys = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1)        
+        
+        # compute the 9x9 jacobian via autograd
         J = brute_force_jacobian(ys, xs)
         
+        # we can compute the determinant of this jacobian
+        # by summing only the 24 non-vanishing permuations
         dlogp = _determinant_from_permutations(
             J,
             _INIT_ICS_DET_PERMUTATIONS,
