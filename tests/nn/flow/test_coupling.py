@@ -1,7 +1,7 @@
 import pytest
 
 import torch
-from bgflow import Flow, SplitFlow, Transformer, CouplingFlow, WrapFlow
+from bgflow import SplitFlow, Transformer, CouplingFlow, WrapFlow, SetConstantFlow
 
 
 def test_split_flow(ctx):
@@ -147,3 +147,20 @@ def test_wrap_flow(device, dtype):
     assert torch.allclose(z2, x2)
     assert torch.allclose(z3, x3)
     assert torch.allclose(dlogp, torch.zeros_like(x1[...,[0]]))
+
+
+def test_set_constant_flow(ctx):
+    batchsize = 4
+    x = torch.arange(20.0, **ctx).reshape(batchsize, -1)
+    const = torch.arange(5.0, 10.0, **ctx)
+    flow = SetConstantFlow((1,), (const, ))
+    *y, dlogp = flow._forward(x)
+    assert len(y) == 2
+    assert torch.allclose(y[0], x)
+    for i in range(batchsize):
+        assert torch.allclose(y[1][i], const)
+    assert torch.allclose(dlogp, torch.zeros(batchsize, **ctx))
+
+    x2, dlogp = flow._inverse(*y)
+    assert torch.allclose(x2, x)
+    assert torch.allclose(dlogp, torch.zeros(batchsize, **ctx))
