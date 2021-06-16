@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 from .tensor_info import BONDS, ANGLES, TORSIONS, FIXED, AUGMENTED
-from ..distribution.normal import TruncatedNormalDistribution, NormalDistribution
+from ..distribution.normal import TruncatedNormalDistribution
 from ..distribution.distribution import SloppyUniform
 #from ..utils.ff import lookup_bonds, lookup_angles
 
@@ -32,7 +32,6 @@ class InternalCoordinateMarginals(dict):
             fixed=FIXED,
             augmented=AUGMENTED,
     ):
-        self.current_dims = current_dims
         self.ctx = ctx
         super().__init__()
         if bonds in current_dims:
@@ -72,6 +71,9 @@ class InternalCoordinateMarginals(dict):
                 loc=torch.zeros(current_dims[augmented], **ctx),
                 scale=torch.ones(current_dims[augmented], **ctx)
             )
+
+    def __eq__(self, other):
+        return super().__eq__(other) and (other.ctx == self.ctx)
 
     def inform_with_force_field(self, system, coordinate_transform, temperature):
         return NotImplemented
@@ -119,6 +121,8 @@ class InternalCoordinateMarginals(dict):
 
         torsion_values = torsion_values.detach().cpu().numpy()
         density, edges = np.histogram(torsion_values, range=(torsion_lower, torsion_upper), density=True)
+        density
+        edges
 
 
 

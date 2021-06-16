@@ -7,7 +7,7 @@ import torch
 import bgflow as bg
 from ..nn.flow.coupling import SetConstantFlow
 from .tensor_info import (
-    ShapeDictionary, TensorInfo, BONDS, ANGLES, TORSIONS, FIXED, ORIGIN, ROTATION, AUGMENTED, TARGET
+    TensorInfo, BONDS, ANGLES, TORSIONS, FIXED, ORIGIN, ROTATION, AUGMENTED, TARGET
 )
 from .conditioner_factory import make_conditioners
 from .transformer_factory import make_transformer

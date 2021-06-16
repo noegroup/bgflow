@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 
 
 # TODO: write docstrings
@@ -114,7 +113,6 @@ class LinearSplineFlow(torch.nn.Module):
         self._max_val = max_val
 
     def forward(self, x, inverse=False):
-        n_dim = x.shape[-1]
         x = (x - self._min_val) / (self._max_val - self._min_val)
         y, logdet = _spline(x, self._pdf, grid=None, inverse=inverse)
         y = y * (self._max_val - self._min_val) + self._min_val

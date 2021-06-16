@@ -1,7 +1,6 @@
 import torch
 
 from .base import Flow
-from ...utils.types import is_list_or_tuple
 
 
 class SequentialFlow(Flow):

@@ -41,7 +41,7 @@ class NumpyReporter(object):
         """
         import mdtraj as md
         from simtk.openmm.app.topology import Topology as _Topology
-        if superimpose==None:
+        if superimpose is None:
             return np.array(self._coords)
         elif isinstance(superimpose, _Topology):
             trajectory = md.Trajectory(np.array(self._coords).reshape(-1, superimpose.getNumAtoms(), 3), 
