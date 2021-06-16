@@ -231,7 +231,7 @@ class SetConstantFlow(Flow):
         Indices to be set to constants.
     values : Sequence[tensor]
         Constant values; sequence has to have the same length as `indices`.
-    n_event_dims0 : int
+    n_event_dims0 : int, optional
         The number of event dims of x[0]. Required to infer the batch shape.
     """
 
