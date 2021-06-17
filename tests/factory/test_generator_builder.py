@@ -12,7 +12,7 @@ from bgflow import (
     make_distribution, make_transformer, make_conditioners, ShapeDictionary, InternalCoordinateMarginals
 )
 # TODO: change this!
-from bgmol import ZMatrixFactory, build_fake_topology
+#from bgmol import ZMatrixFactory, build_fake_topology
 
 
 def test_builder_api(ala2, ctx):

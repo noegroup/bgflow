@@ -1,11 +1,21 @@
+"""High-level Builder API for Boltzmann generators."""
 
 import warnings
 import copy
 
 import numpy as np
 import torch
-import bgflow as bg
+from ..nn.flow.sequential import SequentialFlow
 from ..nn.flow.coupling import SetConstantFlow
+from ..nn.flow.transformer.spline import ConditionalSplineTransformer
+from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow
+from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
+from ..nn.flow.inverted import InverseFlow
+from ..nn.flow.cdf import CDFTransform
+from ..distribution.distribution import UniformDistribution
+from ..distribution.normal import NormalDistribution
+from ..distribution.product import ProductDistribution, ProductEnergy
+from ..bg import BoltzmannGenerator
 from .tensor_info import (
     TensorInfo, BONDS, ANGLES, TORSIONS, FIXED, ORIGIN, ROTATION, AUGMENTED, TARGET
 )
@@ -19,6 +29,9 @@ __all__ = ["BoltzmannGeneratorBuilder"]
 
 
 def _tuple(thing):
+    """Turn something into a tuple; everything but tuple and list is turned into a one-element tuple
+    containing that thing.
+    """
     if isinstance(thing, tuple) and not hasattr(thing, "_fields"):  # exclude namedtuples
         return thing
     elif isinstance(thing, list):
@@ -34,18 +47,63 @@ class BoltzmannGeneratorBuilder:
     ----------
     prior_dims : ShapeDictionary
         The tensor dimensions sampled by the prior.
+    target : bgflow.Energy, optional
+        The target energy that we want to learn to sample from.
+    device : torch.device
+        The device that the generator should run on.
+    dtype : torch.dtype
+        The data type that the generator should use.
+
+    Attributes
+    ----------
+    default_transformer_type : bgflow.nn.flow.transformer.base.Transformer
+        The transformer type that is used by default (default: bgflow.ConditionalSplineTransformer).
+    default_transformer_kwargs : dict
+        The default keyword arguments for the transformer construction (default: {}).
+    default_conditioner_kwargs: dict
+        The default keyword arguments for the conditioner construction (default: {}).
+    default_prior_type : bgflow.distribution.distribution.Distribution
+        The transformer type that is used by default (default: bgflow.UniformDistribution).
+    default_prior_kwargs: dict
+        The default keyword arguments for the prior construction (default: {}).
+    ctx : dict
+        A dictionary that contains the dtype and device.
+    prior_dims : ShapeDictionary
+        The shapes of tensors sampled by the prior;
+        we often use product distributions as priors that can sample multiple tensors at once.
+    current_dims : ShapeDictionary
+        The "current" shapes; they are initialized with the prior shapes and changed
+        according to the flow transformations that are added.
+    layers : list of torch.nn.Module
+        A list of flow transformations.
+    constants : list of TensorInfo
+        A list of tensors that are not sampled from the prior but set constant.
+    # TODO
+
+
+    Examples
+    --------
+    >>>  shape_info = ShapeDictionary()
+    >>>  shape_info[BONDS] = (10, )
+    >>>  shape_info[ANGLES] = (20, )
+    >>>  builder = BoltzmannGeneratorBuilder(shape_info, device=torch.device("cpu"), dtype=torch.float32)
+    >>>  split1 = TensorInfo("SPLIT_1")
+    >>>  split2 = TensorInfo("SPLIT_2")
+    >>>  # split angle priors into two channels
+    >>>  builder.add_split(ANGLES, (split1, split2), (8, 12))
+    >>>  # condition first on second angle channel, then condition bonds on first angle channel
+    >>>  builder.add_condition(split1, on=split2)
+    >>>  builder.add_condition(BONDS, on=split1)
+    >>>  generator = builder.build_generator(zero_parameters=True)
+    >>>  samples = generator.sample(11)
 
     """
-    # for global coordinate add_transform
-    _DEFAULT_ORIGIN_INDEX = 3
-    _DEFAULT_ROTATION_INDEX = 4
-
     def __init__(self, prior_dims, target=None, device=None, dtype=None):
-        self.DEFAULT_TRANSFORMER_TYPE = bg.ConditionalSplineTransformer
-        self.DEFAULT_TRANSFORMER_KWARGS = dict()
-        self.DEFAULT_CONDITIONER_KWARGS = dict()
-        self.DEFAULT_PRIOR_TYPE = bg.UniformDistribution
-        self.DEFAULT_PRIOR_KWARGS = dict()
+        self.default_transformer_type = ConditionalSplineTransformer
+        self.default_transformer_kwargs = dict()
+        self.default_conditioner_kwargs = dict()
+        self.default_prior_type = UniformDistribution
+        self.default_prior_kwargs = dict()
 
         self.ctx = {"device": device, "dtype": dtype}
         self.prior_dims = prior_dims
@@ -64,11 +122,23 @@ class BoltzmannGeneratorBuilder:
             self.targets[TARGET] = target
         if AUGMENTED in self.prior_dims:
             dim = self.prior_dims[AUGMENTED]
-            self.targets[AUGMENTED] = bg.NormalDistribution(dim, torch.zeros(dim, **self.ctx))
+            self.targets[AUGMENTED] = NormalDistribution(dim, torch.zeros(dim, **self.ctx))
 
     def build_generator(self, zero_parameters=False):
+        """Build the Boltzmann Generator. The layers are cleared after building.
+
+        Parameters
+        ----------
+        zero_parameters : bool, optional
+            Whether the flow should be initialized with all trainable parameters set to zero.
+
+        Returns
+        -------
+        generator : bgflow.bg.BoltzmannGenerator
+            The Boltzmann generator.
+        """
         # TODO (Jonas): if build_target returns None -> return Generator
-        generator = bg.BoltzmannGenerator(
+        generator = BoltzmannGenerator(
             prior=self.build_prior(),
             flow=self.build_flow(zero_parameters=zero_parameters),
             target=self.build_target()
@@ -77,19 +147,38 @@ class BoltzmannGeneratorBuilder:
         return generator
 
     def build_flow(self, zero_parameters=False):
-        flow = bg.SequentialFlow(self.layers)
+        """Build the normalizing flow.
+
+        Parameters
+        ----------
+        zero_parameters : bool, optional
+            Whether the flow should be initialized with all trainable parameters set to zero.
+
+        Returns
+        -------
+        flow : bgflow.nn.flow.sequential.SequentialFlow
+            The diffeomorphic transformation.
+        """
+        flow = SequentialFlow(self.layers)
         if zero_parameters:
             for p in flow.parameters():
                 p.data.zero_()
         return flow
 
     def build_prior(self):
+        """Build the prior.
+
+        Returns
+        -------
+        prior : bgflow.energy.product.ProductDistribution
+            The prior.
+        """
         priors = []
         for field in self.prior_dims:
             if field in self.constants:
                 continue
-            prior_type = self.prior_type.get(field, self.DEFAULT_PRIOR_TYPE)
-            prior_kwargs = self.prior_kwargs.get(field, self.DEFAULT_PRIOR_KWARGS)
+            prior_type = self.prior_type.get(field, self.default_prior_type)
+            prior_kwargs = self.prior_kwargs.get(field, self.default_prior_kwargs)
             prior = make_distribution(
                 distribution_type=prior_type,
                 shape=self.prior_dims[field],
@@ -98,11 +187,18 @@ class BoltzmannGeneratorBuilder:
             )
             priors.append(prior)
         if len(priors) > 1:
-            return bg.ProductDistribution(priors)
+            return ProductDistribution(priors)
         else:
             return priors[0]
 
     def build_target(self):
+        """Build the target energy.
+
+        Returns
+        -------
+        target : bgflow.energy.product.ProductEnergy
+            The target energy.
+        """
         targets = []
         for field in self.current_dims:
             if field in self.targets:
@@ -111,31 +207,33 @@ class BoltzmannGeneratorBuilder:
                 warnings.warn(f"No target energy for {field}.", UserWarning)
 
         if len(targets) > 1:
-            return bg.ProductEnergy(targets)
+            return ProductEnergy(targets)
         elif len(targets) == 1:
             return targets[0]
         else:
             return None
 
     def clear(self):
+        """Remove all transform layers."""
         self.layers = []
         self.current_dims = self.prior_dims.copy()
 
     def add_condition(self, what, on=tuple(), **kwargs):
-        """
+        """Add a coupling layer, i.e. a transformation of the tensor `what`
+        that is conditioned on the tensors `on`.
 
         Parameters
         ----------
-        what
-        on
-        **kwargs
+        what : TensorInfo
+            The tensor to be transformed.
+        on : Sequence[TensorInfo]
+            The tensor on which the transformation is conditioned.
+        **kwargs : Keyword arguments
+            The other keyword arguments
 
         Notes
         -----
         Always take transformer of what[0].
-
-        Returns
-        -------
 
         """
         on = _tuple(on)
@@ -145,16 +243,16 @@ class BoltzmannGeneratorBuilder:
         if len(what) == 0:
             raise ValueError("Need to transform something.")
 
-        transformer_types = [self.transformer_type.get(el, self.DEFAULT_TRANSFORMER_TYPE) for el in what]
+        transformer_types = [self.transformer_type.get(el, self.default_transformer_type) for el in what]
         transformer_type = transformer_types[0]
         if not all(ttype == transformer_type for ttype in transformer_types):
             raise ValueError("Fields with different transformer_type cannot be transformed together.")
-        transformer_kwargss = [self.transformer_kwargs.get(el, self.DEFAULT_TRANSFORMER_KWARGS) for el in what]
+        transformer_kwargss = [self.transformer_kwargs.get(el, self.default_transformer_kwargs) for el in what]
         transformer_kwargs = transformer_kwargss[0]
         if not all(tkwargs == transformer_kwargs for tkwargs in transformer_kwargss):
             raise ValueError("Fields with different transformer_kwargs cannot be transformed together.")
 
-        conditioner_kwargs = copy.copy(self.DEFAULT_CONDITIONER_KWARGS)
+        conditioner_kwargs = copy.copy(self.default_conditioner_kwargs)
         conditioner_kwargs.update(kwargs)
         conditioners = make_conditioners(
             transformer_type=transformer_type,
@@ -171,7 +269,7 @@ class BoltzmannGeneratorBuilder:
             conditioners=conditioners,
             **transformer_kwargs
         )
-        coupling = bg.CouplingFlow(
+        coupling = CouplingFlow(
             transformer=transformer,
             transformed_indices=[self.current_dims.index(f) for f in what],
             cond_indices=[self.current_dims.index(f) for f in on]
@@ -208,14 +306,14 @@ class BoltzmannGeneratorBuilder:
             if isinstance(el, str):
                 into[i] = TensorInfo(name=el, is_circular=what.is_circular)
         input_index = self.current_dims.index(what)
-        split_flow = bg.SplitFlow(*sizes_or_indices, dim=dim)
+        split_flow = SplitFlow(*sizes_or_indices, dim=dim)
         if split_flow._sizes is None:
             sizes = (len(size) for size in sizes_or_indices)
         else:
             sizes = sizes_or_indices
         self.current_dims.split(what, into, sizes, dim=dim)
         output_indices = [self.current_dims.index(el) for el in into]
-        wrap_flow = bg.WrapFlow(split_flow, indices=(input_index,), out_indices=output_indices)
+        wrap_flow = WrapFlow(split_flow, indices=(input_index,), out_indices=output_indices)
         self.layers.append(wrap_flow)
         return tuple(into)
 
@@ -230,10 +328,10 @@ class BoltzmannGeneratorBuilder:
         input_indices = [self.current_dims.index(el) for el in what]
         if sizes_or_indices is None:
             sizes_or_indices = [self.current_dims[el][dim] for el in what]
-        merge_flow = bg.MergeFlow(*sizes_or_indices, dim=dim)
+        merge_flow = MergeFlow(*sizes_or_indices, dim=dim)
         self.current_dims.merge(what, to=to, index=output_index)
         output_index = self.current_dims.index(to)
-        wrap_flow = bg.WrapFlow(merge_flow, indices=input_indices, out_indices=(output_index,))
+        wrap_flow = WrapFlow(merge_flow, indices=input_indices, out_indices=(output_index,))
         self.layers.append(wrap_flow)
         return to
 
@@ -252,7 +350,7 @@ class BoltzmannGeneratorBuilder:
         ic_fields = [bonds, angles, torsions]
 
         # fix origin and rotation
-        if isinstance(coordinate_transform, bg.GlobalInternalCoordinateTransformation):
+        if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation):
             ic_fields.extend([origin, rotation])
             if fixed_origin_and_rotation:
                 self.add_set_constant(origin, torch.zeros(1, 3, **self.ctx))
@@ -272,8 +370,8 @@ class BoltzmannGeneratorBuilder:
             )
 
         indices = [self.current_dims.index(ic) for ic in ic_fields]
-        wrap_around_ics = bg.WrapFlow(
-            bg.InverseFlow(coordinate_transform),
+        wrap_around_ics = WrapFlow(
+            InverseFlow(coordinate_transform),
             indices=indices,
             out_indices=(self.current_dims.index(bonds),)
         )
@@ -285,8 +383,8 @@ class BoltzmannGeneratorBuilder:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
         for field in cdfs:
             if field in self.current_dims:
-                icdf_flow = bg.InverseFlow(bg.CDFTransform(cdfs[field]))
-                self.layers.append(bg.WrapFlow(icdf_flow, (self.current_dims.index(field),)))
+                icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
+                self.layers.append(WrapFlow(icdf_flow, (self.current_dims.index(field),)))
             else:
                 warnings.warn(f"Field {field} not in current dims. CDF is ignored.")
 
