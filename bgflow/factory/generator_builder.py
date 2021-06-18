@@ -5,6 +5,7 @@ import copy
 
 import numpy as np
 import torch
+import logging
 from ..nn.flow.sequential import SequentialFlow
 from ..nn.flow.coupling import SetConstantFlow
 from ..nn.flow.transformer.spline import ConditionalSplineTransformer
@@ -26,6 +27,9 @@ from .icmarginals import InternalCoordinateMarginals
 #from ..utils.ff import lookup_bonds
 
 __all__ = ["BoltzmannGeneratorBuilder"]
+
+
+logger = logging.getLogger('bgflow')
 
 
 def _tuple(thing):
@@ -124,13 +128,18 @@ class BoltzmannGeneratorBuilder:
             dim = self.prior_dims[AUGMENTED]
             self.targets[AUGMENTED] = NormalDistribution(dim, torch.zeros(dim, **self.ctx))
 
-    def build_generator(self, zero_parameters=False):
+        dimstring = "; ".join(f"{field.name}: {self.prior_dims[field]}"  for field in prior_dims)
+        logger.info(f"BG Builder  :::  ({dimstring})")
+
+    def build_generator(self, zero_parameters=False, check_target=True):
         """Build the Boltzmann Generator. The layers are cleared after building.
 
         Parameters
         ----------
         zero_parameters : bool, optional
             Whether the flow should be initialized with all trainable parameters set to zero.
+        check_target : bool, optional
+            Whether a warning is printed if not all output tensors have target energies.
 
         Returns
         -------
@@ -141,7 +150,7 @@ class BoltzmannGeneratorBuilder:
         generator = BoltzmannGenerator(
             prior=self.build_prior(),
             flow=self.build_flow(zero_parameters=zero_parameters),
-            target=self.build_target()
+            target=self.build_target(check_target=check_target)
         )
         self.clear()
         return generator
@@ -191,8 +200,13 @@ class BoltzmannGeneratorBuilder:
         else:
             return priors[0]
 
-    def build_target(self):
+    def build_target(self, check_target=False):
         """Build the target energy.
+
+        Parameters
+        ----------
+        check_target : bool, optional
+            Whether a warning is printed if not all output tensors have target energies.
 
         Returns
         -------
@@ -203,7 +217,7 @@ class BoltzmannGeneratorBuilder:
         for field in self.current_dims:
             if field in self.targets:
                 targets.append(self.targets[field])
-            else:
+            elif check_target:
                 warnings.warn(f"No target energy for {field}.", UserWarning)
 
         if len(targets) > 1:
@@ -216,6 +230,7 @@ class BoltzmannGeneratorBuilder:
     def clear(self):
         """Remove all transform layers."""
         self.layers = []
+        logger.info(f"--------------- cleared builder ----------------")
         self.current_dims = self.prior_dims.copy()
 
     def add_condition(self, what, on=tuple(), **kwargs):
@@ -229,7 +244,7 @@ class BoltzmannGeneratorBuilder:
         on : Sequence[TensorInfo]
             The tensor on which the transformation is conditioned.
         **kwargs : Keyword arguments
-            The other keyword arguments
+            Additional keyword arguments for the conditioner factory.
 
         Notes
         -----
@@ -274,6 +289,11 @@ class BoltzmannGeneratorBuilder:
             transformed_indices=[self.current_dims.index(f) for f in what],
             cond_indices=[self.current_dims.index(f) for f in on]
         ).to(**self.ctx)
+        logger.info(
+            f"  + Coupling Layer: "
+            f"({', '.join([field.name for field in on])}) "
+            f"-> ({', '.join([field.name for field in what])})"
+        )
         self.layers.append(coupling)
 
     def add_set_constant(self, what, tensor):
@@ -292,6 +312,7 @@ class BoltzmannGeneratorBuilder:
             indices=[self.current_dims.index(what)],
             values=[tensor]
         )
+        logger.info(f"  + Set Constant: {what}")
         self.layers.append(fix_flow)
 
     def add_transform(self, layer, what=None):
@@ -314,6 +335,7 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.split(what, into, sizes, dim=dim)
         output_indices = [self.current_dims.index(el) for el in into]
         wrap_flow = WrapFlow(split_flow, indices=(input_index,), out_indices=output_indices)
+        logger.info(f"  + Split: {what.name} -> ({', '.join([field.name for field in into])})")
         self.layers.append(wrap_flow)
         return tuple(into)
 
@@ -332,6 +354,7 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.merge(what, to=to, index=output_index)
         output_index = self.current_dims.index(to)
         wrap_flow = WrapFlow(merge_flow, indices=input_indices, out_indices=(output_index,))
+        logger.info(f"  + Merge: ({', '.join([field.name for field in what])}) -> {[to.name]}")
         self.layers.append(wrap_flow)
         return to
 
