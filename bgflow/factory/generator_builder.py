@@ -308,11 +308,12 @@ class BoltzmannGeneratorBuilder:
                 raise ValueError(f"Cannot set {what} constant; field was already deleted or replaced.")
             else:
                 self.current_dims[what] = tuple(tensor.shape)
+        index = self.current_dims.index(what)
         fix_flow = SetConstantFlow(
-            indices=[self.current_dims.index(what)],
+            indices=[index],
             values=[tensor]
         )
-        logger.info(f"  + Set Constant: {what}")
+        logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
 
     def add_transform(self, layer, what=None):

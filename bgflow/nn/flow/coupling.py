@@ -223,7 +223,7 @@ class WrapFlow(Flow):
 
 
 class SetConstantFlow(Flow):
-    """A flow that sets some inputs constant in the forward direction and ignores them in the inverse.
+    """A flow that sets some inputs constant in the forward direction and removes them in the inverse.
 
     Parameters
     ----------
