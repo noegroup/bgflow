@@ -51,9 +51,10 @@ class SequentialFlow(Flow):
         if inverse:
             blocks = reversed(blocks)
         for block in blocks:
-            *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             logger.debug(f"Input shapes {[x.shape for x in xs]}")
+            *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             logger.debug(f"Flow block (inverse={inverse}):  {block}")
+            logger.debug(f"Output shapes {[x.shape for x in xs]}")
             dlogp += ddlogp
         return (*xs, dlogp)
 
