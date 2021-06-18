@@ -1,6 +1,9 @@
+import logging
 import torch
 
 from .base import Flow
+
+logger = logging.getLogger('bgflow')
 
 
 class SequentialFlow(Flow):
@@ -49,6 +52,8 @@ class SequentialFlow(Flow):
             blocks = reversed(blocks)
         for block in blocks:
             *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
+            logger.debug(f"Input shapes {[x.shape for x in xs]}")
+            logger.debug(f"Flow block (inverse={inverse}):  {block}")
             dlogp += ddlogp
         return (*xs, dlogp)
 

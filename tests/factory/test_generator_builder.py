@@ -9,10 +9,8 @@ from bgflow.nn.flow.crd_transform.ic import (
 )
 from bgflow import (
     BoltzmannGeneratorBuilder, BONDS, ANGLES, TORSIONS, FIXED, AUGMENTED, TensorInfo,
-    make_distribution, make_transformer, make_conditioners, ShapeDictionary, InternalCoordinateMarginals
+    ShapeDictionary, InternalCoordinateMarginals
 )
-# TODO: change this!
-#from bgmol import ZMatrixFactory, build_fake_topology
 
 
 def test_builder_api(ala2, ctx):
@@ -108,13 +106,13 @@ def test_builder_split_merge(ctx):
     split3 = TensorInfo("SPLIT_3")
     builder.add_split(ANGLES, (split1, split2, split3), (6, 2, 12))
     builder.add_condition(split1, on=split2)
-    generator = builder.build_generator(zero_parameters=True)
+    generator = builder.build_generator(zero_parameters=True, check_target=False)
     samples = generator.sample(11)
     assert len(samples) == 5
     assert all(samples[i].shape == (11,j) for i, j in enumerate([10,6,2,12,13]))
 
     # check split + add_merge (with string arguments)
-    builder.clear()
+    assert builder.layers == []
     s1, split_2, s3 = builder.add_split(ANGLES, (split1, "split2", split3), (6, 2, 12))
     assert s1 == split1
     assert s3 == split3
@@ -125,7 +123,7 @@ def test_builder_split_merge(ctx):
     assert angles.name == "angles"
     assert angles.is_circular == ANGLES.is_circular
     assert list(builder.current_dims) == [BONDS, angles, TORSIONS]
-    generator = builder.build_generator(zero_parameters=True)
+    generator = builder.build_generator(zero_parameters=True, check_target=False)
     samples = generator._prior.sample(11)
     assert all(torch.all(s > torch.zeros_like(s)) for s in samples)
     assert all(torch.all(s < torch.ones_like(s)) for s in samples)
@@ -134,16 +132,16 @@ def test_builder_split_merge(ctx):
     assert all(torch.allclose(s, o, atol=0.01, rtol=0.0) for s, o in zip(samples, output))
 
 
-@pytest.mark.skip()  # TODO
 def test_builder_multiple_crd(ala2, ctx):
+    bgmol = pytest.importorskip("bgmol")
     # all-atom trafo
-    z_matrix, fixed = ZMatrixFactory(ala2.system.mdtraj_topology, cartesian=[6, 8, 10, 14, 16]).build_naive()
+    z_matrix, fixed = bgmol.ZMatrixFactory(ala2.system.mdtraj_topology, cartesian=[6, 8, 10, 14, 16]).build_naive()
     crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed)
     shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
 
     # cg trafo
-    cg_top, _ = build_fake_topology(5)
-    cg_z_matrix, _ = ZMatrixFactory(cg_top).build_naive()
+    cg_top, _ = bgmol.build_fake_topology(5)
+    cg_z_matrix, _ = bgmol.ZMatrixFactory(cg_top).build_naive()
     cg_crd_transform = GlobalInternalCoordinateTransformation(cg_z_matrix)
     cg_shape_info = ShapeDictionary.from_coordinate_transform(cg_crd_transform)
     CG_BONDS = cg_shape_info.replace(BONDS, "CG_BONDS")
