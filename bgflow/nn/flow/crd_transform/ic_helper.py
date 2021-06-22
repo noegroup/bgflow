@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import warnings
 
@@ -5,70 +6,77 @@ from bgflow.utils.autograd import brute_force_jacobian
 
 
 # permutations used in the xyz->ic matrix determinant computation
-_INIT_ICS_DET_PERMUTATIONS = torch.LongTensor([
-    (0, 1, 2, 3, 6, 7, 4, 5, 8),
-    (0, 1, 2, 3, 6, 8, 4, 5, 7),
-    (0, 1, 2, 3, 7, 6, 4, 5, 8),
-    (0, 1, 2, 3, 7, 8, 4, 5, 6),
-    (0, 1, 2, 3, 8, 6, 4, 5, 7),
-    (0, 1, 2, 3, 8, 7, 4, 5, 6),
-    (0, 1, 2, 4, 6, 7, 3, 5, 8),
-    (0, 1, 2, 4, 6, 8, 3, 5, 7),
-    (0, 1, 2, 4, 7, 6, 3, 5, 8),
-    (0, 1, 2, 4, 7, 8, 3, 5, 6),
-    (0, 1, 2, 4, 8, 6, 3, 5, 7),
-    (0, 1, 2, 4, 8, 7, 3, 5, 6),
-    (0, 1, 2, 5, 6, 7, 3, 4, 8),
-    (0, 1, 2, 5, 6, 7, 4, 3, 8),
-    (0, 1, 2, 5, 6, 8, 3, 4, 7),
-    (0, 1, 2, 5, 6, 8, 4, 3, 7),
-    (0, 1, 2, 5, 7, 6, 3, 4, 8),
-    (0, 1, 2, 5, 7, 6, 4, 3, 8),
-    (0, 1, 2, 5, 7, 8, 3, 4, 6),
-    (0, 1, 2, 5, 7, 8, 4, 3, 6),
-    (0, 1, 2, 5, 8, 6, 3, 4, 7),
-    (0, 1, 2, 5, 8, 6, 4, 3, 7),
-    (0, 1, 2, 5, 8, 7, 3, 4, 6),
-    (0, 1, 2, 5, 8, 7, 4, 3, 6)
-])
+_INIT_XYZ2ICS_DET_PERMUTATIONS = torch.LongTensor(
+    [
+        (0, 1, 2, 3, 6, 7, 4, 5, 8),
+        (0, 1, 2, 3, 6, 8, 4, 5, 7),
+        (0, 1, 2, 3, 7, 6, 4, 5, 8),
+        (0, 1, 2, 3, 7, 8, 4, 5, 6),
+        (0, 1, 2, 3, 8, 6, 4, 5, 7),
+        (0, 1, 2, 3, 8, 7, 4, 5, 6),
+        (0, 1, 2, 4, 6, 7, 3, 5, 8),
+        (0, 1, 2, 4, 6, 8, 3, 5, 7),
+        (0, 1, 2, 4, 7, 6, 3, 5, 8),
+        (0, 1, 2, 4, 7, 8, 3, 5, 6),
+        (0, 1, 2, 4, 8, 6, 3, 5, 7),
+        (0, 1, 2, 4, 8, 7, 3, 5, 6),
+        (0, 1, 2, 5, 6, 7, 3, 4, 8),
+        (0, 1, 2, 5, 6, 7, 4, 3, 8),
+        (0, 1, 2, 5, 6, 8, 3, 4, 7),
+        (0, 1, 2, 5, 6, 8, 4, 3, 7),
+        (0, 1, 2, 5, 7, 6, 3, 4, 8),
+        (0, 1, 2, 5, 7, 6, 4, 3, 8),
+        (0, 1, 2, 5, 7, 8, 3, 4, 6),
+        (0, 1, 2, 5, 7, 8, 4, 3, 6),
+        (0, 1, 2, 5, 8, 6, 3, 4, 7),
+        (0, 1, 2, 5, 8, 6, 4, 3, 7),
+        (0, 1, 2, 5, 8, 7, 3, 4, 6),
+        (0, 1, 2, 5, 8, 7, 4, 3, 6),
+    ]
+)
 
 
 # signs used in the xyz->ic matrix determinant computation
-_INIT_ICS_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1])
+_INIT_XYZ2ICS_DET_PERMUTATION_SIGNS = torch.FloatTensor(
+    [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1]
+)
 
 
 # permutations used in the ic->xyz matrix determinant computation
-_INIT_XYZ_DET_PERMUTATIONS = torch.LongTensor([
-    (0, 1, 2, 3, 6, 7, 4, 5, 8),
-    (0, 1, 2, 3, 6, 7, 4, 8, 5),
-    (0, 1, 2, 3, 6, 7, 5, 4, 8),
-    (0, 1, 2, 3, 6, 7, 5, 8, 4),
-    (0, 1, 2, 3, 6, 7, 8, 4, 5),
-    (0, 1, 2, 3, 6, 7, 8, 5, 4),
-    (0, 1, 2, 6, 3, 7, 4, 5, 8),
-    (0, 1, 2, 6, 3, 7, 4, 8, 5),
-    (0, 1, 2, 6, 3, 7, 5, 4, 8),
-    (0, 1, 2, 6, 3, 7, 5, 8, 4),
-    (0, 1, 2, 6, 3, 7, 8, 4, 5),
-    (0, 1, 2, 6, 3, 7, 8, 5, 4),
-    (0, 1, 2, 6, 7, 3, 4, 5, 8),
-    (0, 1, 2, 6, 7, 3, 4, 8, 5),
-    (0, 1, 2, 6, 7, 3, 5, 4, 8),
-    (0, 1, 2, 6, 7, 3, 5, 8, 4),
-    (0, 1, 2, 6, 7, 3, 8, 4, 5),
-    (0, 1, 2, 6, 7, 3, 8, 5, 4),
-    (0, 1, 2, 7, 6, 3, 4, 5, 8),
-    (0, 1, 2, 7, 6, 3, 4, 8, 5),
-    (0, 1, 2, 7, 6, 3, 5, 4, 8),
-    (0, 1, 2, 7, 6, 3, 5, 8, 4),
-    (0, 1, 2, 7, 6, 3, 8, 4, 5),
-    (0, 1, 2, 7, 6, 3, 8, 5, 4)
-])
+_INIT_ICS2XYZ_DET_PERMUTATIONS = torch.LongTensor(
+    [
+        (0, 1, 2, 3, 6, 7, 4, 5, 8),
+        (0, 1, 2, 3, 6, 7, 4, 8, 5),
+        (0, 1, 2, 3, 6, 7, 5, 4, 8),
+        (0, 1, 2, 3, 6, 7, 5, 8, 4),
+        (0, 1, 2, 3, 6, 7, 8, 4, 5),
+        (0, 1, 2, 3, 6, 7, 8, 5, 4),
+        (0, 1, 2, 6, 3, 7, 4, 5, 8),
+        (0, 1, 2, 6, 3, 7, 4, 8, 5),
+        (0, 1, 2, 6, 3, 7, 5, 4, 8),
+        (0, 1, 2, 6, 3, 7, 5, 8, 4),
+        (0, 1, 2, 6, 3, 7, 8, 4, 5),
+        (0, 1, 2, 6, 3, 7, 8, 5, 4),
+        (0, 1, 2, 6, 7, 3, 4, 5, 8),
+        (0, 1, 2, 6, 7, 3, 4, 8, 5),
+        (0, 1, 2, 6, 7, 3, 5, 4, 8),
+        (0, 1, 2, 6, 7, 3, 5, 8, 4),
+        (0, 1, 2, 6, 7, 3, 8, 4, 5),
+        (0, 1, 2, 6, 7, 3, 8, 5, 4),
+        (0, 1, 2, 7, 6, 3, 4, 5, 8),
+        (0, 1, 2, 7, 6, 3, 4, 8, 5),
+        (0, 1, 2, 7, 6, 3, 5, 4, 8),
+        (0, 1, 2, 7, 6, 3, 5, 8, 4),
+        (0, 1, 2, 7, 6, 3, 8, 4, 5),
+        (0, 1, 2, 7, 6, 3, 8, 5, 4),
+    ]
+)
 
 
 # signs used in the ic->xyz matrix determinant computation
-_INIT_XYZ_DET_PERMUTATION_SIGNS = torch.FloatTensor([1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1])
-
+_INIT_ICS2XYZ_DET_PERMUTATION_SIGNS = torch.FloatTensor(
+    [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]
+)
 
 
 def outer(x, y):
@@ -133,7 +141,9 @@ def tripod(p1, p2, p3, eps=1e-7, raise_warnings=True, enforce_boundaries=True):
 
 def orientation(p1, p2, p3, eps=1e-7, raise_warnings=True, enforce_boundaries=True):
     """ computes unique orthogonal basis transform for input points """
-    return torch.stack(tripod(p1, p2, p3, eps, raise_warnings, enforce_boundaries), dim=-1)
+    return torch.stack(
+        tripod(p1, p2, p3, eps, raise_warnings, enforce_boundaries), dim=-1
+    )
 
 
 def dist_deriv(x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
@@ -189,10 +199,10 @@ def angle_deriv(x1, x2, x3, eps=1e-7, enforce_boundaries=True, raise_warnings=Tr
     J = rn32[..., None, :] @ J
 
     if raise_warnings:
-        if torch.any((cos_angle < -1. + eps) & (cos_angle > 1. - eps)):
+        if torch.any((cos_angle < -1.0 + eps) & (cos_angle > 1.0 - eps)):
             warnings.warn("singular radians in angle computation")
     if enforce_boundaries:
-        cos_angle = cos_angle.clamp(-1. + eps, 1. - eps)
+        cos_angle = cos_angle.clamp(-1.0 + eps, 1.0 - eps)
 
     a = torch.acos(cos_angle)
 
@@ -201,7 +211,9 @@ def angle_deriv(x1, x2, x3, eps=1e-7, enforce_boundaries=True, raise_warnings=Tr
     return a, J[..., 0, :]
 
 
-def torsion_deriv(x1, x2, x3, x4, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+def torsion_deriv(
+    x1, x2, x3, x4, eps=1e-7, enforce_boundaries=True, raise_warnings=True
+):
     """
         computes torsion angle between input points together with
         the Jacobian wrt to `x1`.
@@ -290,11 +302,11 @@ def _permutation_parity(perm):
     c = 1
     while len(not_visited) > 0:
         if i in not_visited:
-            not_visited.remove(i)      
-        else:       
+            not_visited.remove(i)
+        else:
             c += 1
             i = not_visited.pop()
-        i = perm[i]            
+        i = perm[i]
     return (-1) ** (n - c)
 
 
@@ -311,28 +323,31 @@ def _determinant_from_permutations(mat, permutations, signs):
         uses it to compute the determinant of it.
     """
     n = mat.shape[-1]
-    return (mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs).sum(dim=-1)
-    
-    
+    return (
+        mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs
+    ).sum(dim=-1)
+
+
 def _to_euler_angles(x, y, z):
     """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles 
         output values are in [0, pi]
     """
-    x, y, z = basis.chunk
-    alpha = torch.acos(- z[..., 1] / (1. - z[..., 2].pow(2)).sqrt())
+    alpha = torch.atan2(z[..., 0], -z[..., 1])
     beta = torch.acos(z[..., 2])
-    gamma = torch.acos(y[..., 2] / (1. - z[..., 2].pow(2)).sqrt())
+    gamma = torch.atan2(x[..., 2], y[..., 2])
     return alpha, beta, gamma
 
 
 def _rotmat3x3(theta, axis):
     """ computes the matrix corresponding to a 2D rotation around `axis` in 3D """
-    r = torch.eye(3, dtype=theta.dtype, device=theta.device).repeat(*theta.shape[:-1], 1, 1)    
+    r = torch.eye(3, dtype=theta.dtype, device=theta.device).repeat(
+        *theta.shape[:-1], 1, 1
+    )
     axes = [i for i in range(3) if i != axis]
-    r[..., axes[0], axes[0]] = torch.cos(theta)
-    r[..., axes[0], axes[1]] = torch.sin(theta)
-    r[..., axes[1], axes[0]] = -torch.sin(theta)
-    r[..., axes[1], axes[1]] = torch.cos(theta)
+    r[..., axes[0], axes[0]] = torch.cos(theta).squeeze(-1)
+    r[..., axes[0], axes[1]] = -torch.sin(theta).squeeze(-1)
+    r[..., axes[1], axes[0]] = torch.sin(theta).squeeze(-1)
+    r[..., axes[1], axes[1]] = torch.cos(theta).squeeze(-1)
     return r
 
 
@@ -346,7 +361,127 @@ def _from_euler_angles(alpha, beta, gamma):
     return xrot @ yrot @ zrot
 
 
-def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
+# noqa: C901
+def ic2xyz_deriv(
+    p1, p2, p3, d14, a124, t1234, eps=1e-7, enforce_boundaries=True, raise_warnings=True
+):
+    """ computes the xyz coordinates from internal coordinates
+        relative to points `p1`, `p2`, `p3` together with its
+        jacobian with respect to `p1`.
+    """
+
+    v1 = p1 - p2
+    v2 = p1 - p3
+
+    n = torch.cross(v1, v2, dim=-1)
+    nn = torch.cross(v1, n, dim=-1)
+
+    n_norm = torch.norm(n, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(n_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        n_norm = n_norm.clamp_min(eps)
+
+    n_normalized = n / n_norm
+
+    nn_norm = torch.norm(nn, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(nn_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        nn_norm = nn_norm.clamp_min(eps)
+
+    nn_normalized = nn / nn_norm
+
+    n_scaled = n_normalized * -torch.sin(t1234)
+    nn_scaled = nn_normalized * torch.cos(t1234)
+
+    v3 = n_scaled + nn_scaled
+    v3_norm = torch.norm(v3, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(v3_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        v3_norm = v3_norm.clamp_min(eps)
+
+    v3_normalized = v3 / v3_norm
+    v3_scaled = v3_normalized * d14 * torch.sin(a124)
+
+    v1_norm = torch.norm(v1, dim=-1, keepdim=True)
+
+    if raise_warnings:
+        if torch.any(v1_norm < eps):
+            warnings.warn("singular norm in xyz reconstruction")
+    if enforce_boundaries:
+        v1_norm = v1_norm.clamp_min(eps)
+
+    v1_normalized = v1 / v1_norm
+    v1_scaled = v1_normalized * d14 * torch.cos(a124)
+
+    position = p1 + v3_scaled - v1_scaled
+
+    J_d = v3_normalized * torch.sin(a124) - v1_normalized * torch.cos(a124)
+    J_a = v3_normalized * d14 * torch.cos(a124) + v1_normalized * d14 * torch.sin(a124)
+
+    J_t1 = (d14 * torch.sin(a124))[..., None]
+    J_t2 = (
+        1.0
+        / v3_norm[..., None]
+        * (torch.eye(3)[None, :].to(p1) - outer(v3_normalized, v3_normalized))
+    )
+
+    J_n_scaled = n_normalized * -torch.cos(t1234)
+    J_nn_scaled = nn_normalized * -torch.sin(t1234)
+    J_t3 = (J_n_scaled + J_nn_scaled)[..., None]
+
+    J_t = (J_t1 * J_t2) @ J_t3
+
+    J = torch.stack([J_d, J_a, J_t[..., 0]], dim=-1)
+
+    return position, J
+
+
+def ic2xy0_deriv(
+    p1, p2, d14, a124, eps=1e-7, enforce_boundaries=True, raise_warnings=True
+):
+    """ computes the xy coordinates (z set to 0) for the given
+        internal coordinates together with the Jacobian
+        with respect to `p1`.
+    """
+
+    t1234 = torch.Tensor([[0.5 * np.pi]]).to(p1)
+    p3 = torch.Tensor([[0, -1, 0]]).to(p1)
+    xyz, J = ic2xyz_deriv(
+        p1,
+        p2,
+        p3,
+        d14,
+        a124,
+        t1234,
+        eps=eps,
+        enforce_boundaries=enforce_boundaries,
+        raise_warnings=raise_warnings,
+    )
+    J = J[..., [0, 1, 2], :][..., [0, 1]]
+    return xyz, J
+
+
+def init_ics2xyz(
+    x0,
+    d01,
+    d12,
+    a012,
+    alpha,
+    beta,
+    gamma,
+    eps=1e-7,
+    enforce_boundaries=True,
+    raise_warnings=True,
+):
     """ computes the first three points given initial ICs and the position of the first point 
         
         Parameters:
@@ -365,16 +500,18 @@ def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_bound
         x2: third point
         dlogp: density change
     """
-    
-     # enable grad to use autograd for jacobian computation
+
+    # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
-        
-        # needed for autograd backward pass        
+
+        # needed for autograd backward pass
         # we flatten the x0, the ics and the euler angles into a 9-dimensional state vector
-        xs = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1).requires_grad_(True)
+        xs = torch.cat(
+            [x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1
+        ).requires_grad_(True)
         x0 = xs[..., :3].unsqueeze(-2)
         d01, d12, a012, alpha, beta, gamma = xs[..., 3:].chunk(6, dim=-1)
-        
+
         n_batch = d01.shape[0]
         dlogp = 0
 
@@ -386,40 +523,45 @@ def init_ics2xyz(x0, d01, d12, a012, alpha, beta, gamma, eps=1e-7, enforce_bound
         p1[..., 2] = d01
 
         # third point placed wrt to p0 and p1
-        p2, J2 = ic2xy0_deriv(
+        p2, _ = ic2xy0_deriv(
             p1,
             p0,
             d12[:, None],
             a012[:, None],
             eps=eps,
             enforce_boundaries=enforce_boundaries,
-            raise_warnings=raise_warnings
+            raise_warnings=raise_warnings,
         )
 
         # compute rotation matrix from euler angles
         R = _from_euler_angles(alpha, beta, gamma)
-    
+
         # bring back to original reference frame
         x1 = torch.einsum("bnd, bed -> bne", p1, R) + x0
         x2 = torch.einsum("bnd, bed -> bne", p2, R) + x0
-        
+
         # now flatten the three output points into a 9 dimensional state vector
         ys = torch.cat([x0.squeeze(-2), x1.squeeze(-2), x2.squeeze(-2)], dim=-1)
-        
+
         # compute the 9x9 jacobian using bruteforce autograd
         J = brute_force_jacobian(ys, xs)
-        
+
         # we can compute the determinant of this jacobian
         # by summing only the 24 non-vanishing permuations
-        dlogp = _determinant_from_permutations(
-            J,
-            _INIT_XYZ_DET_PERMUTATIONS,
-            _INIT_XYZ_DET_PERMUTATION_SIGNS.to(J)
-        ).abs().log().unsqueeze(-1)
+        dlogp = (
+            _determinant_from_permutations(
+                J,
+                _INIT_ICS2XYZ_DET_PERMUTATIONS,
+                _INIT_ICS2XYZ_DET_PERMUTATION_SIGNS.to(J),
+            )
+            .abs()
+            .log()
+            .unsqueeze(-1)
+        )
 
         return x0, x1, x2, dlogp
 
-    
+
 def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
     """ computes the initial ICs and the position of the first poin given first three points
         
@@ -440,55 +582,69 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
         gamma: third euler angle (in [0, pi])
         dlogp: density change
     """
-    
+
     # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
-        
-        # needed for autograd backward pass        
+
+        # needed for autograd backward pass
         # we flatten the three input into a 9-dimensional state vector
         xs = torch.cat([x0, x1, x2], dim=-1).requires_grad_(True)
         x0, x1, x2 = xs.chunk(3, dim=-1)
-        
+
         # compute ICs as usual
         d01, _ = dist_deriv(
-            x0, x1,
-            eps=eps, 
-            enforce_boundaries=enforce_boundaries, 
-            raise_warnings=raise_warnings
+            x0,
+            x1,
+            eps=eps,
+            enforce_boundaries=enforce_boundaries,
+            raise_warnings=raise_warnings,
         )
-        d12, _ = dist_deriv(x1, x2,
-            eps=eps, 
-            enforce_boundaries=enforce_boundaries, 
-            raise_warnings=raise_warnings
+        d12, _ = dist_deriv(
+            x1,
+            x2,
+            eps=eps,
+            enforce_boundaries=enforce_boundaries,
+            raise_warnings=raise_warnings,
         )
-        a012, _ = angle_deriv(x0, x1, x2,
-            eps=eps, 
-            enforce_boundaries=enforce_boundaries, 
-            raise_warnings=raise_warnings
+        a012, _ = angle_deriv(
+            x0,
+            x1,
+            x2,
+            eps=eps,
+            enforce_boundaries=enforce_boundaries,
+            raise_warnings=raise_warnings,
         )
 
         # build a basis made of the first three points
-        basis = tripod(x0, x1, x2,
-            eps=eps, 
-            enforce_boundaries=enforce_boundaries, 
-            raise_warnings=raise_warnings
+        basis = tripod(
+            x0,
+            x1,
+            x2,
+            eps=eps,
+            enforce_boundaries=enforce_boundaries,
+            raise_warnings=raise_warnings,
         )
-        
+
         # and compute the euler angles given this basis (range is [0, pi])
         alpha, beta, gamma = _to_euler_angles(*basis)
-        
+
         # now we flatten the outputs (x0, ics, euler angles) into a 9-dim output vec
-        ys = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1)        
-        
+        ys = torch.cat([x0.squeeze(-2), d01, d12, a012, alpha, beta, gamma], dim=-1)
+
         # compute the 9x9 jacobian via autograd
         J = brute_force_jacobian(ys, xs)
-        
+
         # we can compute the determinant of this jacobian
         # by summing only the 24 non-vanishing permuations
-        dlogp = _determinant_from_permutations(
-            J,
-            _INIT_ICS_DET_PERMUTATIONS,
-            _INIT_ICS_DET_PERMUTATION_SIGNS.to(J)
-        ).abs().log().unsqueeze(-1)
-    
+        dlogp = (
+            _determinant_from_permutations(
+                J,
+                _INIT_XYZ2ICS_DET_PERMUTATIONS,
+                _INIT_XYZ2ICS_DET_PERMUTATION_SIGNS.to(J),
+            )
+            .abs()
+            .log()
+            .unsqueeze(-1)
+        )
+
     return x0, d01, d12, a012, alpha, beta, gamma, dlogp
