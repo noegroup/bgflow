@@ -70,7 +70,7 @@ class DiffEqFlow(Flow):
         assert (all(x.shape[0] == xs[0].shape[0] for x in xs[1:]))
         n_batch = xs[0].shape[0]
         logp_init = torch.zeros(n_batch, 1).to(xs[0])
-        state = [*xs, logp_init]
+        state = (*xs, logp_init)
         ts = torch.linspace(0.0, self._t_max, self._n_time_steps).to(xs[0])
         kwargs = {**self._kwargs, **kwargs}
         if not self._use_checkpoints:
