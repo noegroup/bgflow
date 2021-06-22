@@ -52,11 +52,9 @@ def filter_grid(f, grid):
     ridx = (lidx + 1).clamp_max(len(grid) - 1)
     left = grid.gather(0, lidx)
     right = grid.gather(0, ridx)
-    fleft = fgrid.gather(0, lidx)
-    dfleft = dfgrid.expand_as(fgrid).gather(0, lidx)
     return (
         torch.linspace(0, 1, len(grid), dtype=grid.dtype, device=grid.device).view(-1, 1, 1) * (right - left) + left,
-        (left[0], right[0], fleft[0], dfleft[0]), 
+        (left[0], right[0]), 
     )
 
 
@@ -65,7 +63,7 @@ def find_interval(f, grid, threshold=1e-4, max_iters=100, verbose=False, raise_e
         print(f"starting grid search with max_iters={max_iters}, threshold={threshold:.4}")
     converged = False
     for it in range(max_iters):
-        (grid, (left, right, fleft, dfleft)) = filter_grid(f, grid)
+        (grid, (left, right)) = filter_grid(f, grid)
         if torch.all(grid[-1] - grid[0] < threshold):
             converged=True
             break
@@ -77,7 +75,7 @@ def find_interval(f, grid, threshold=1e-4, max_iters=100, verbose=False, raise_e
             raise ValueError(msg)
         else:
             warnings.warn(msg)
-    dfleft = f(left)[-1]
+    fleft, dfleft = f(left)
     return left, right, fleft, dfleft
 
 
