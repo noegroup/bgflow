@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - "main"
-      - "gh-workflow"
   pull_request:
     branches:
       - "main"
@@ -16,13 +15,13 @@ on:
 
 
 jobs:
-  test_with_openmm:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: [3.7, 3.8, 3.9]
+        os: [ubuntu-latest]
+        python-version: [3.9]
 
     steps:
 

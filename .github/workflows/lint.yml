@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - "main"
-      - "gh-workflow"
   pull_request:
     branches:
       - "main"
