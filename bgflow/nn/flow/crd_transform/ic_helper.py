@@ -647,13 +647,13 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
         ys, J = get_jacobian(_callback, xs)
         
         x0, d01, d12, a012, alpha, beta, gamma = ys.split_with_sizes([3, 1, 1, 1, 1, 1, 1], dim=-1)
-#         x0 = x0.unsqueeze(1)
         d01 = d01.squeeze(-1)
         d12 = d12.squeeze(-1)
         a012 = a012.squeeze(-1)
         alpha = alpha.squeeze(-1)
         beta = beta.squeeze(-1)
         gamma = gamma.squeeze(-1)
+        
 
         # we can compute the determinant of this jacobian
         # by summing only the 24 non-vanishing permuations

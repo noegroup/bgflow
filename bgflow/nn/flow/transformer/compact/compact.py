@@ -261,13 +261,15 @@ class AffineSigmoidComponents(torch.nn.Module):
         log_sigma_bound=torch.tensor(4.),
         periodic=True,
         zero_boundary_left=False,
-        zero_boundary_right=False
+        zero_boundary_right=False,
+        min_density_init_offset=torch.tensor(3.),
     ):
         super().__init__()
         self._conditional_ramp = conditional_ramp
         self._param_net = compute_params
         self.register_buffer("_min_density_lower_bound", min_density)
         self.register_buffer("_log_sigma_bound", log_sigma_bound)
+        self.register_buffer("_min_density_init_offset", min_density_init_offset)
         
         self._periodic = periodic
         self._zero_boundary_left = zero_boundary_left
@@ -305,6 +307,7 @@ class AffineSigmoidComponents(torch.nn.Module):
         # min density in [lb, 1]
         lower_bound = self._min_density_lower_bound.expand_as(min_density)
         if not (self._zero_boundary_right or self._zero_boundary_left):
+            min_density = min_density + self._min_density_init_offset
             lower_bound = lower_bound + min_density.sigmoid() * (1. - self._min_density_lower_bound)
 
         lower_bound = lower_bound.view(*out.shape, -1)
