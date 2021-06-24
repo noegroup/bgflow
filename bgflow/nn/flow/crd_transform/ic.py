@@ -193,9 +193,9 @@ class ReferenceSystemTransformation(Flow):
         if self._normalize_angles:
             a012, dlogp_a = normalize_angles(a012)
             dlogp += dlogp_a
-
         if self._normalize_angles:
             alpha, dlogp_alpha = normalize_torsions(alpha)
+
             dlogp += dlogp_alpha
             beta, dlogp_beta = normalize_angles(beta)
             dlogp += dlogp_beta
