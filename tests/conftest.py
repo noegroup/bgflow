@@ -31,7 +31,7 @@ def ctx(dtype, device):
     return {"dtype": dtype, "device": device}
 
 
-@pytest.yield_fixture(params=[torch.enable_grad, torch.no_grad])
+@pytest.fixture(params=[torch.enable_grad, torch.no_grad])
 def with_grad_and_no_grad(request):
     """Run a test with and without torch grad enabled"""
     with request.param():

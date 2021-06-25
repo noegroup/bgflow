@@ -8,8 +8,10 @@ from bgflow.utils import brute_force_jacobian_trace
 
 @pytest.mark.parametrize("n_particles", [2, 3])
 @pytest.mark.parametrize("n_dimensions", [2, 3])
-def test_kernel_dynamics(n_particles, n_dimensions):
+@pytest.mark.parametrize("use_checkpoints", [True, False])
+def test_kernel_dynamics(n_particles, n_dimensions, use_checkpoints):
     # Build flow with kernel dynamics and run initial config.
+
     dim = n_particles * n_dimensions
     n_samples = 100
     prior = NormalDistribution(dim)
@@ -28,28 +30,36 @@ def test_kernel_dynamics(n_particles, n_dimensions):
     flow = DiffEqFlow(
         dynamics=kernel_dynamics
     )
-    try:
+
+    if not use_checkpoints:
+        pytest.importorskip("torchdiffeq")
+
         samples, dlogp = flow(latent)
-    except ImportError:
-        pytest.skip("Test requires torchdiffeq.")
+        latent2, ndlogp = flow.forward(samples, inverse=True)
 
-    assert samples.shape == torch.Size([n_samples, dim])
-    assert dlogp.shape == torch.Size([n_samples, 1])
+        assert samples.shape == torch.Size([n_samples, dim])
+        assert dlogp.shape == torch.Size([n_samples, 1])
+        #assert (latent - latent2).abs().mean() < 0.002
+        #assert (latent - samples).abs().mean() > 0.01
+        #assert (dlogp + ndlogp).abs().mean() < 0.002
 
-    flow._use_checkpoints = True
-    options = {
-        "Nt": 20,
-        "method": "RK4"
-    }
-    flow._kwargs = options
+    if use_checkpoints:
+        pytest.importorskip("anode")
+        flow._use_checkpoints = True
+        options = {
+            "Nt": 20,
+            "method": "RK4"
+        }
+        flow._kwargs = options
 
-    try:
         samples, dlogp = flow(latent)
-    except ImportError:
-        pytest.skip("Test requires anode.")
+        latent2, ndlogp = flow.forward(samples, inverse=True)
 
-    assert samples.shape == torch.Size([n_samples, dim])
-    assert dlogp.shape == torch.Size([n_samples, 1])
+        assert samples.shape == torch.Size([n_samples, dim])
+        assert dlogp.shape == torch.Size([n_samples, 1])
+        #assert (latent - latent2).abs().mean() < 0.002
+        #assert (latent - samples).abs().mean() > 0.01
+        #assert (dlogp + ndlogp).abs().mean() < 0.002
 
 
 @pytest.mark.parametrize("n_particles", [2, 3])
