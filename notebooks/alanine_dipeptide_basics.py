@@ -19,17 +19,6 @@
 # 
 # We instruct jupyter to reload any imports automatically and define the device and datatype, on which we want to perform the computations.
 
-# In[1]:
-
-
-get_ipython().run_line_magic('load_ext', 'autoreload')
-
-
-# In[2]:
-
-
-get_ipython().run_line_magic('autoreload', '2')
-
 
 # In[3]:
 
@@ -421,19 +410,6 @@ if main:
     plot_energies(axes[1], samples, target_energy, test_data)
 
     del samples
-
-
-# With nglview installed, we can also take a look at the samples.
-
-# In[ ]:
-
-
-try:
-    import nglview as nv
-    widget = nv.show_mdtraj(trajectory)
-except:
-    widget = None
-widget
 
 
 # ## Conclusions

@@ -8,8 +8,9 @@ from bgflow.nn.flow.sequential import SequentialFlow
 def test_invertible_pppp():
     flow = InvertiblePPPP(2, penalty_parameter=0.1)
     x = torch.tensor([[3.1, -2.0]])
-    flow.u[:] = torch.tensor([0.4, -0.3])
-    flow.v[:] = torch.tensor([0.1, 0.2])
+    with torch.no_grad():
+        flow.u[:] = torch.tensor([0.4, -0.3])
+        flow.v[:] = torch.tensor([0.1, 0.2])
     y, logdet = flow.forward(x)
 
     x2, logdetinv = flow.forward(y, inverse=True)
