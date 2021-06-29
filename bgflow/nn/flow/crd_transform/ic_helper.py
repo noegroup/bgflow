@@ -328,10 +328,14 @@ def _determinant_from_permutations(mat, permutations, signs):
 
 def _to_euler_angles(x, y, z):
     """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles 
-        output values are in [0, pi]
+        output values are 
+        alpha in [-pi, pi]
+        beta in [0, pi]
+        gamma in [-pi, pi]
     """
     alpha = torch.atan2(z[..., 0], -z[..., 1])
-    beta = torch.acos(z[..., 2])
+    beta = z[..., 2]
+#     beta = torch.acos(z[..., 2])
     gamma = torch.atan2(x[..., 2], y[..., 2])
     return alpha, beta, gamma
 
@@ -351,8 +355,12 @@ def _rotmat3x3(theta, axis):
 
 def _from_euler_angles(alpha, beta, gamma):
     """ converts proper euler angles in x-y-z representation into the corresponding rotation matrix
-        input values are in [0, pi]
+        input values are 
+        alpha in [-pi, pi]
+        beta in [0, pi]
+        gamma in [-pi, pi]
     """
+    beta = beta.acos()
     xrot = _rotmat3x3(alpha, axis=2)
     yrot = _rotmat3x3(beta, axis=0)
     zrot = _rotmat3x3(gamma, axis=2)

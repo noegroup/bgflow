@@ -262,7 +262,7 @@ class AffineSigmoidComponents(torch.nn.Module):
         periodic=True,
         zero_boundary_left=False,
         zero_boundary_right=False,
-        min_density_init_offset=torch.tensor(3.),
+        min_density_init_offset=torch.tensor(0.),
     ):
         super().__init__()
         self._conditional_ramp = conditional_ramp
