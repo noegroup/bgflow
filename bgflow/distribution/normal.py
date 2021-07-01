@@ -85,25 +85,27 @@ class TruncatedNormalDistribution(Energy, Sampler):
     Truncated normal distribution (normal distribution restricted to the interval [lower_bound, upper_bound]
     of dim many independent variables. Used to model molecular angles and bonds.
 
-    Parameters:
-        dim : int
-            Dimension of the distribution.
-        mu : float or tensor of floats of shape (dim, )
-            Mean of the untruncated normal distribution.
-        sigma : float or tensor of floats of shape (dim, )
-            Standard deviation of the untruncated normal distribution.
-        lower_bound : float, -np.infty, or tensor of floats of shape (dim, )
-            Lower truncation bound.
-        upper_bound : float, np.infty, or tensor of floats of shape (dim, )
-            Upper truncation bound.
-        assert_range : bool
-            Whether to raise an error when `energy` is called on input that falls out of bounds.
-            Otherwise the energy is set to infinity.
-        sampling_method : str
-            If "icdf", sample by passing a uniform sample through the inverse cdf.
-            If "rejection", sample by rejecting normal distributed samples that fall out of bounds.
+    Parameters
+    ----------
+    dim : int
+        Dimension of the distribution.
+    mu : float or tensor of floats of shape (dim, )
+        Mean of the untruncated normal distribution.
+    sigma : float or tensor of floats of shape (dim, )
+        Standard deviation of the untruncated normal distribution.
+    lower_bound : float, -np.infty, or tensor of floats of shape (dim, )
+        Lower truncation bound.
+    upper_bound : float, np.infty, or tensor of floats of shape (dim, )
+        Upper truncation bound.
+    assert_range : bool
+        Whether to raise an error when `energy` is called on input that falls out of bounds.
+        Otherwise the energy is set to infinity.
+    sampling_method : str
+        If "icdf", sample by passing a uniform sample through the inverse cdf.
+        If "rejection", sample by rejecting normal distributed samples that fall out of bounds.
+    is_learnable : bool
+        Whether sigma and mu are learnable parameters.
     """
-
     def __init__(
         self,
         mu,
@@ -112,6 +114,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
         upper_bound=torch.tensor(np.infty),
         assert_range=True,
         sampling_method="icdf",
+        is_learnable=False
     ):
         for t in [mu, sigma, lower_bound, upper_bound]:
             assert type(t) is torch.Tensor
@@ -120,8 +123,12 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
         super().__init__(dim=mu.shape)
 
-        self.register_buffer("_mu", mu)
-        self.register_buffer("_sigma", sigma.to(mu))
+        if is_learnable:
+            self._mu = torch.nn.Parameter(mu)
+            self._logsigma = torch.nn.Parameter(torch.log(sigma.to(mu)))
+        else:
+            self.register_buffer("_mu", mu)
+            self.register_buffer("_logsigma", torch.log(sigma.to(mu)))
         self.register_buffer("_upper_bound", upper_bound.to(mu))
         self.register_buffer("_lower_bound", lower_bound.to(mu))
         self.assert_range = assert_range
@@ -138,6 +145,10 @@ class TruncatedNormalDistribution(Energy, Sampler):
             self.register_buffer("_cdf_upper_bound", self._standard_normal.cdf(beta))
         else:
             raise ValueError(f'Unknown sampling method "{sampling_method}"')
+
+    @property
+    def _sigma(self):
+        return torch.exp(self._logsigma)
 
     def _sample(self, n_samples):
         return self._sample_with_temperature(n_samples, temperature=1)
