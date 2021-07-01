@@ -106,7 +106,6 @@ class TruncatedNormalDistribution(Energy, Sampler):
     is_learnable : bool
         Whether sigma and mu are learnable parameters.
     """
-
     def __init__(
         self,
         mu,
@@ -126,10 +125,10 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
         if is_learnable:
             self._mu = torch.nn.Parameter(mu)
-            self._sigma = torch.nn.Parameter(sigma.to(mu))
+            self._logsigma = torch.nn.Parameter(torch.log(sigma.to(mu)))
         else:
             self.register_buffer("_mu", mu)
-            self.register_buffer("_sigma", sigma.to(mu))
+            self.register_buffer("_logsigma", torch.log(sigma.to(mu)))
         self.register_buffer("_upper_bound", upper_bound.to(mu))
         self.register_buffer("_lower_bound", lower_bound.to(mu))
         self.assert_range = assert_range
@@ -146,6 +145,10 @@ class TruncatedNormalDistribution(Energy, Sampler):
             self.register_buffer("_cdf_upper_bound", self._standard_normal.cdf(beta))
         else:
             raise ValueError(f'Unknown sampling method "{sampling_method}"')
+
+    @property
+    def _sigma(self):
+        return torch.exp(self._logsigma)
 
     def _sample(self, n_samples):
         return self._sample_with_temperature(n_samples, temperature=1)
