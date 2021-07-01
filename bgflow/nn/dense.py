@@ -8,7 +8,7 @@ __all__ = ["DenseNet", "MeanFreeDenseNet", "SirenDenseNet"]
 
 
 class DenseNet(torch.nn.Module):
-    def __init__(self, n_units, activation=None, weight_scale=1.0, bias_scale=0.0):
+    def __init__(self, n_units, activation=None, weight_scale=1.0, bias_scale=0.0, dropout=0.):
         """
             Simple multi-layer perceptron.
 
@@ -30,6 +30,8 @@ class DenseNet(torch.nn.Module):
 
         layers = []
         for i, (dim_in, dim_out) in enumerate(zip(dims_in, dims_out)):
+            if dropout > 0.:
+                layers.append(torch.nn.Dropout(p=dropout, inplace=True))
             layers.append(torch.nn.Linear(dim_in, dim_out))
             layers[-1].weight.data *= weight_scale
             if bias_scale > 0.0:
