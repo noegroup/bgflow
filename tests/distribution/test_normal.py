@@ -46,7 +46,8 @@ def test_energy(device, dtype):
 
 @pytest.mark.parametrize("assert_range", [True, False])
 @pytest.mark.parametrize("sampling_method", ["icdf", "rejection"])
-def test_truncated_normal_distribution_tensors(device, dtype, assert_range, sampling_method):
+@pytest.mark.parametrize("is_learnable", [True, False])
+def test_truncated_normal_distribution_tensors(device, dtype, assert_range, sampling_method, is_learnable):
     """Test with tensor parameters."""
     dim = 5
     tn = TruncatedNormalDistribution(
@@ -56,7 +57,12 @@ def test_truncated_normal_distribution_tensors(device, dtype, assert_range, samp
         upper_bound=4 * torch.ones(dim,),
         assert_range=assert_range,
         sampling_method=sampling_method,
+        is_learnable=is_learnable
     ).to(device, dtype)
+    if is_learnable:
+        assert len(list(tn.parameters())) > 0
+    else:
+        assert len(list(tn.parameters())) == 0
     n_samples = 10
     samples = tn.sample(n_samples)
     assert samples.shape == (n_samples, dim)
