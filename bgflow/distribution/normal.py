@@ -141,8 +141,8 @@ class TruncatedNormalDistribution(Energy, Sampler):
             self._sample_impl = self._icdf_sampling
             alpha = (self._lower_bound - self._mu) / self._sigma
             beta = (self._upper_bound - self._mu) / self._sigma
-            self.register_buffer("_cdf_lower_bound", self._standard_normal.cdf(alpha))
-            self.register_buffer("_cdf_upper_bound", self._standard_normal.cdf(beta))
+            self.register_buffer("_cdf_lower_bound", self._standard_normal.cdf(alpha.detach()))
+            self.register_buffer("_cdf_upper_bound", self._standard_normal.cdf(beta.detach()))
         else:
             raise ValueError(f'Unknown sampling method "{sampling_method}"')
 

@@ -1,7 +1,11 @@
 
+import pytest
 import torch
-from bgflow import DistributionTransferFlow, ConstrainGaussianFlow
-from torch.distributions import Normal, Independent
+from bgflow import (
+    DistributionTransferFlow, ConstrainGaussianFlow,
+    CDFTransform, InverseFlow, TruncatedNormalDistribution
+)
+from torch.distributions import Normal
 
 
 def test_distribution_transfer(ctx):
@@ -43,5 +47,20 @@ def test_constrain_slightly_pertubed(ctx):
     assert torch.allclose(x2, y, atol=1e-4, rtol=0.0)
     assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-4, rtol=0.0)
 
+
+def test_cdf_transform(ctx):
+    input = torch.arange(0.1, 1.0, 0.1)[:,None]
+    input.requires_grad = True
+    truncated_normal = TruncatedNormalDistribution(
+        mu=torch.tensor([0.5], **ctx),
+        upper_bound=torch.tensor([1.0], **ctx),
+        is_learnable=True
+    )
+    flow = InverseFlow(CDFTransform((truncated_normal)))
+    output, dlogp = flow.forward(input)
+    assert output.mean().item() == pytest.approx(0.5)
+    # try computing the grad
+    output.mean().backward(create_graph=True)
+    dlogp.mean().backward()
 
 
