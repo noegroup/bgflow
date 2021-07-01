@@ -1,0 +1,15 @@
+name: test
+channels:
+  - conda-forge
+  - pytorch
+
+dependencies:
+  - python
+  - pip
+
+  - pytest
+  - numpy
+
+  - openmm
+  - openmmtools
+  - pytorch

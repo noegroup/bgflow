@@ -73,7 +73,7 @@ class KroneckerProductFlow(Flow):
         power = 2
         for new_inv_det, factor in zip(inv_dets[1:], inv_factors[1:]):
             inv_det = inv_det.pow(2) * new_inv_det.pow(power)
-            M = kronecker(M, factor)
+            M = _kronecker(M, factor)
             power = power * 2
         dlogp = torch.zeros(n_batch, 1).to(x)
         dlogp = dlogp + inv_det.abs().log().sum(dim=-1, keepdim=True)
