@@ -1,5 +1,9 @@
 import torch
 
+import einops
+from collections import namedtuple
+
+
 
 def brute_force_jacobian_trace(y, x):
     """
@@ -100,3 +104,22 @@ def batch_jacobian(y, x):
     jac = torch.stack(jac, dim=1)
 
     return jac
+
+
+Jacobian = namedtuple("Jacobian", ["y", "jac"])
+
+
+def get_jacobian(fun, x):
+    shape = x.shape[:-1]
+    d = x.shape[-1]
+    x = x.view(-1, d)
+    n = x.shape[0]
+    z = einops.repeat(x, "n j -> (n i) j", i=d)
+    z.requires_grad_(True)
+    y = fun(z)
+    out_grad = torch.eye(d, device=x.device, dtype=x.dtype).tile(n, 1)
+    j = torch.autograd.grad(y, z, out_grad, create_graph=True, retain_graph=True)[0].view(*shape, d, d)
+    return Jacobian(
+        y=einops.rearrange(y, "(n i) j -> n i j", i=d)[:, 0, :].view(*shape, -1),
+        jac=j
+    )

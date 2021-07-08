@@ -193,12 +193,12 @@ class ReferenceSystemTransformation(Flow):
         if self._normalize_angles:
             a012, dlogp_a = normalize_angles(a012)
             dlogp += dlogp_a
-
         if self._normalize_angles:
             alpha, dlogp_alpha = normalize_torsions(alpha)
+
             dlogp += dlogp_alpha
-            beta, dlogp_beta = normalize_angles(beta)
-            dlogp += dlogp_beta
+#             beta, dlogp_beta = normalize_angles(beta)
+#             dlogp += dlogp_beta
             gamma, dlogp_gamma = normalize_torsions(gamma)
             dlogp += dlogp_gamma
         orientation = torch.cat([alpha, beta, gamma], dim=-1)
@@ -235,8 +235,8 @@ class ReferenceSystemTransformation(Flow):
         if self._normalize_angles:
             alpha, dlogp_alpha = unnormalize_torsions(alpha)
             dlogp += dlogp_alpha
-            beta, dlogp_beta = unnormalize_angles(beta)
-            dlogp += dlogp_beta
+#             beta, dlogp_beta = unnormalize_angles(beta)
+#             dlogp += dlogp_beta
             gamma, dlogp_gamma = unnormalize_torsions(gamma)
             dlogp += dlogp_gamma
 
