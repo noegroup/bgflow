@@ -1,5 +1,6 @@
 
 import pytest
+import numpy as np
 import torch
 import bgflow as bg
 from bgflow.nn.flow.crd_transform.ic import (
@@ -36,9 +37,18 @@ def test_builder_api(ala2, ctx):
     generator.kldiv(10)
 
 
-@pytest.mark.skip() # TODO
 def test_builder_augmentation_and_global(ala2, ctx):
-    z_matrix, _ = ZMatrixFactory(ala2.system.mdtraj_topology).build_naive()
+    z_matrix = ala2.system.z_matrix
+    z_matrix = np.row_stack([
+        z_matrix,
+        np.array([
+            [9, 8, 6, 14],
+            [10, 8, 14, 6],
+            [6, 8, 14, -1],
+            [8, 14, -1, -1],
+            [14, -1, -1, -1]
+        ])
+    ])
     crd_transform = GlobalInternalCoordinateTransformation(z_matrix)
     shape_info = ShapeDictionary.from_coordinate_transform(crd_transform, dim_augmented=10)
     builder = BoltzmannGeneratorBuilder(shape_info, target=ala2.system.energy_model, **ctx)
@@ -130,6 +140,7 @@ def test_builder_split_merge(ctx):
     *output, dlogp = generator._flow.forward(*samples)
     assert all(s.shape == o.shape for s, o in zip(samples, output))
     assert all(torch.allclose(s, o, atol=0.01, rtol=0.0) for s, o in zip(samples, output))
+
 
 
 def test_builder_multiple_crd(ala2, ctx):

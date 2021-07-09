@@ -46,7 +46,7 @@ FIXED = TensorInfo("FIXED", False)
 #: Default tensor info for global origin in global coordinate transform
 ORIGIN = TensorInfo("ORIGIN", False)
 #: Default tensor info for global rotation in global coordinate transform
-ROTATION = TensorInfo("ROTATION", False)
+ROTATION = TensorInfo("ROTATION", False)  # TODO: at some point this has to be a different (SO3)
 #: Default tensor info for augmented dimensions
 AUGMENTED = TensorInfo("AUGMENTED", False)
 #: Default tensor info for the target space (e.g., Cartesian atom positions)
@@ -89,7 +89,7 @@ class ShapeDictionary(OrderedDict):
             shape_info[AUGMENTED] = (dim_augmented, )
         if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation):
             shape_info[ORIGIN] = (1, 3)
-            shape_info[ROTATION] = (1, 3, 3)
+            shape_info[ROTATION] = (3,)
         return shape_info
 
     def split(self, key: TensorInfo, into: Sequence[TensorInfo], sizes: Sequence[int], dim: int = -1) -> None:

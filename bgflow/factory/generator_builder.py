@@ -378,7 +378,7 @@ class BoltzmannGeneratorBuilder:
             ic_fields.extend([origin, rotation])
             if fixed_origin_and_rotation:
                 self.add_set_constant(origin, torch.zeros(1, 3, **self.ctx))
-                self.add_set_constant(rotation, torch.eye(3, **self.ctx).unsqueeze(0))
+                self.add_set_constant(rotation, torch.tensor([0.5, 0.5, 0.5], **self.ctx))
         else:
             ic_fields.append(fixed)
 
@@ -397,7 +397,7 @@ class BoltzmannGeneratorBuilder:
         wrap_around_ics = WrapFlow(
             InverseFlow(coordinate_transform),
             indices=indices,
-            out_indices=(self.current_dims.index(bonds),)
+            out_indices=(self.current_dims.index(bonds),)  # first index of the input
         )
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
