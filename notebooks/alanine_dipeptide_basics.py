@@ -412,19 +412,6 @@ if main:
     del samples
 
 
-# With nglview installed, we can also take a look at the samples.
-
-# In[ ]:
-
-
-try:
-    import nglview as nv
-    widget = nv.show_mdtraj(trajectory)
-except:
-    widget = None
-widget
-
-
 # ## Conclusions
 # 
 # This tutorial has introduced the most basic concepts and implementations underlying Boltzmann generators and `bgflow`. That said, the trained networks did not do a particularly good job in reproducing the molecular Boltzmann distribution. Specifically, they only modeled the major modes of the $\phi$ angle and still produced many samples with unreasonably large energies. Let's look at a few shortcomings of the present architecture:
