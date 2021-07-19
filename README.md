@@ -126,6 +126,7 @@ pytest
 ***
 ## [Dependencies](#dependencies)
 * Mandatory
+  * [einops](https://github.com/arogozhnikov/einops/)
   * [pytorch](https://github.com/pytorch/pytorch)
   * [numpy](https://github.com/numpy/numpy)
   * [matplotlib](https://github.com/matplotlib/matplotlib)

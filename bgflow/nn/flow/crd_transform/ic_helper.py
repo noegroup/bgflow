@@ -523,7 +523,6 @@ def init_ics2xyz(
             d01, d12, a012, alpha, beta, gamma = xs[..., 3:].chunk(6, dim=-1)
 
             n_batch = d01.shape[0]
-            dlogp = 0
 
             # first point placed in origin
             p0 = torch.zeros(n_batch, 1, 3, device=d01.device, dtype=d01.dtype)

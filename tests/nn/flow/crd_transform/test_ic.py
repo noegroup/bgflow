@@ -315,7 +315,7 @@ def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
             gamma = torch.rand(N_SAMPLES, device=device, dtype=dtype)
             if not normalize_angles:
                 alpha = alpha * 2 * np.pi - np.pi
-                beta = beta * np.pi
+                beta = 2 * beta - 1
                 gamma = gamma * 2 * np.pi - np.pi
             orientation = torch.stack([alpha, beta, gamma], dim=-1)
 
@@ -384,7 +384,7 @@ def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
             gamma = torch.rand(N_SAMPLES, device=device, dtype=dtype)
             if not normalize_angles:
                 alpha = alpha * 2 * np.pi - np.pi
-                beta = beta * np.pi
+                beta = 2 * beta - 1
                 gamma = gamma * 2 * np.pi - np.pi
             orientation = torch.stack([alpha, beta, gamma], dim=-1)
 
@@ -393,7 +393,7 @@ def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
             gamma_noise = torch.rand(N_SAMPLES, device=device, dtype=dtype)
             if not normalize_angles:
                 alpha_noise = alpha_noise * 2 * np.pi - np.pi
-                beta_noise = beta_noise * np.pi
+                beta_noise = 2 * beta_noise - 1
                 gamma_noise = gamma_noise * 2 * np.pi - np.pi
             orientation_noise = torch.stack(
                 [alpha_noise, beta_noise, gamma_noise], dim=-1
