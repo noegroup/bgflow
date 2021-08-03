@@ -2,7 +2,7 @@ import torch
 
 import einops
 from collections import namedtuple
-from collections.abc import Iterable
+from typing import Iterable
 
 
 def brute_force_jacobian_trace(y, x):
