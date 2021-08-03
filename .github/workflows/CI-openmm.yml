@@ -41,6 +41,7 @@ jobs:
       - name: Install pip dependencies
         shell: bash -l {0}
         run: |
+          pip install einops
           pip install nflows
 
       - name: Install package
