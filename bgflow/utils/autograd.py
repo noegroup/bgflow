@@ -1,5 +1,9 @@
 import torch
 
+import einops
+from collections import namedtuple
+from collections.abc import Iterable
+
 
 def brute_force_jacobian_trace(y, x):
     """
@@ -62,7 +66,6 @@ def brute_force_jacobian(y, x):
     TODO
     """
     output_dim = y.shape[-1]
-    input_dim = x.shape[-1]
     rows = []
     for i in range(output_dim):
         row = torch.autograd.grad(
@@ -72,8 +75,8 @@ def brute_force_jacobian(y, x):
             create_graph=True,
             retain_graph=True,
         )[0]
-        rows.append(row.view(-1, 1, input_dim))
-    jac = torch.cat(rows, dim=-2)
+        rows.append(row)
+    jac = torch.stack(rows, dim=-2)
     return jac
 
 
@@ -101,3 +104,74 @@ def batch_jacobian(y, x):
     jac = torch.stack(jac, dim=1)
 
     return jac
+
+
+Jacobian = namedtuple("Jacobian", ["y", "jac"])
+
+
+def get_jacobian(fun, x):
+    """
+    Computes the jacobian of `fun` wrt to `x`.
+
+    This evaluates the jacobian via batch parallelization in one step having armotized cost of O(1) rather O(d).
+
+    However, comes at a memory cost of O(d) and thus will only work for low d (d < 1000s).
+
+    Parameters:
+    -----------
+    fun: callable
+        function from which the jacobian is to be computed
+    x: torch.Tensor
+        input tensor for which the jacobian is to be computed
+
+    Returns:
+    --------
+    jac: Jacobian
+        Named tuple containing members `y` and `jac`.
+        `y` is the function value  of `fun` evaluated at `x`
+        `jac` is the jacobian matrix of `fun` evaluated at `x`
+    """
+    shape = x.shape[:-1]
+    d = x.shape[-1]
+    x = x.view(-1, d)
+    n = x.shape[0]
+    z = einops.repeat(x, "n j -> (n i) j", i=d)
+    z.requires_grad_(True)
+    y = fun(z)
+    out_grad = torch.eye(d, device=x.device, dtype=x.dtype).tile(n, 1)
+    j = torch.autograd.grad(y, z, out_grad, create_graph=True, retain_graph=True)[0].view(*shape, d, d)
+    return Jacobian(
+        y=einops.rearrange(y, "(n i) j -> n i j", i=d)[:, 0, :].view(*shape, -1),
+        jac=j
+    )
+
+
+class requires_grad(torch.enable_grad):
+    """
+    This environment guarantees, that all `nodes` have gradients within the scope
+    and can be called used as arguments for PyTorch's autograd engine.
+
+    It furthermore takes care for cleaning up, namely setting all nodes back to
+    their original gradient state.
+
+    Parameters:
+    -----------
+    nodes: Iterable[torch.Tensor]
+        iterable of PyTorch nodes that should be wrapped by this environment
+    """
+
+    def __init__(self, *nodes: Iterable[torch.Tensor]):
+        self._nodes = nodes
+        self._grad_state = None
+
+    def __enter__(self):
+        super().__enter__()
+        self._grad_states = []
+        for node in self._nodes:
+            self._grad_states.append(node.requires_grad)
+            node.requires_grad_(True)
+
+    def __exit__(self, *args, **kwargs):
+        for node, state in zip(self._nodes, self._grad_states):
+            node.requires_grad_(state)
+        super().__exit__(*args, **kwargs)
