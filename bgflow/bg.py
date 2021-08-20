@@ -13,14 +13,14 @@ def unnormalized_kl_div(prior, flow, target, n_samples, temperature=1.0):
 
 
 def unormalized_nll(prior, flow, *x, temperature=1.0):
-    *z, dlogp = flow(*x, inverse=True, temperature=temperature)
-    return prior.energy(*z, temperature=temperature) - dlogp
+    *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
+    return prior.energy(*z, temperature=temperature) - neg_dlogp
 
 
 def log_weights(*x, prior, flow, target, temperature=1.0):
-    *z, dlogp = flow(*x, inverse=True, temperature=temperature)
+    *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
     return log_weights_given_latent(
-        x, z, dlogp, prior, flow, target, temperature=temperature
+        x, z, -neg_dlogp, prior, flow, target, temperature=temperature
     )
 
 
