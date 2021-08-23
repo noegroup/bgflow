@@ -310,32 +310,33 @@ def _permutation_parity(perm):
 
 
 def _determinant_from_permutations(mat, permutations, signs):
-    """ The determinant of a NxN matrix A is 
-            
-            \det A = \sum_{\sigma} \sign{\sigma} \prod_{i} A[i, \sigma[i]]
-        
-        where the sum is over all possible permutation \sigma of {1, ..., N}
-        
+    """ The determinant of a NxN matrix A is
+
+        \\det A = \\sum_{\\sigma} \\sign{\\sigma} \\prod_{i} A[i, \\sigma[i]]
+
+        where the sum is over all possible permutation \\sigma of {1, ..., N}
+
         If we know the non-vanishing permutations and their signs, we can compute it explicitly.
-        
         The function takes a matrix, all non-vanishing permutations with corresponding signs and
         uses it to compute the determinant of it.
     """
     n = mat.shape[-1]
-    sliced = mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs
+    sliced = (
+        mat[..., torch.arange(n, device=mat.device), permutations].prod(dim=-1) * signs
+    )
     return sliced.view(sliced.shape[0], -1).sum(dim=-1, keepdim=True)
 
 
 def _to_euler_angles(x, y, z):
-    """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles 
-        output values are 
+    """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles
+        output values are
         alpha in [-pi, pi]
         beta in [0, pi]
         gamma in [-pi, pi]
     """
     alpha = torch.atan2(z[..., 0], -z[..., 1])
     beta = z[..., 2]
-#     beta = torch.acos(z[..., 2])
+    #     beta = torch.acos(z[..., 2])
     gamma = torch.atan2(x[..., 2], y[..., 2])
     return alpha, beta, gamma
 
@@ -355,9 +356,9 @@ def _rotmat3x3(theta, axis):
 
 def _from_euler_angles(alpha, beta, gamma):
     """ converts proper euler angles in x-y-z representation into the corresponding rotation matrix
-        input values are 
+        input values are
         alpha in [-pi, pi]
-        beta in [0, pi]
+        beta in [-1, 1]
         gamma in [-pi, pi]
     """
     beta = beta.acos()
@@ -488,18 +489,17 @@ def init_ics2xyz(
     enforce_boundaries=True,
     raise_warnings=True,
 ):
-    """ computes the first three points given initial ICs and the position of the first point 
-        
+    """ computes the first three points given initial ICs and the position of the first point
         Parameters:
         -----------
         x0: first point
         d01: distance between x0 and x1
         d12: distance between x1 and x2
         a021: angle between (x2 - x0) and (x1 - x0)
-        alpha: first euler angle (in [0, pi])
-        beta: second euler angle (in [0, pi])
-        gamma: third euler angle (in [0, pi])
-        
+        alpha: first euler angle (in [-pi, pi])
+        beta: second euler angle (in [-1, 1])
+        gamma: third euler angle (in [-pi, pi])
+
         Returns:
         x0: first point
         x1: second point
@@ -509,8 +509,6 @@ def init_ics2xyz(
 
     # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
-
-
 
         # needed for autograd backward pass
         # we flatten the x0, the ics and the euler angles into a 9-dimensional state vector
@@ -556,7 +554,7 @@ def init_ics2xyz(
 
         # compute the 9x9 jacobian using bruteforce autograd
         ys, J = get_jacobian(_callback, xs)
-        
+
         x0, x1, x2 = ys.split_with_sizes([3, 3, 3], dim=-1)
         x0 = x0.unsqueeze(1)
         x1 = x1.unsqueeze(1)
@@ -578,29 +576,29 @@ def init_ics2xyz(
 
 
 def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=True):
-    """ computes the initial ICs and the position of the first poin given first three points
-        
+    """ computes the initial ICs and the position of the first point given first three points
+
         Parameters:
-        -----------        
+        -----------
         x0: first point
         x1: second point
         x2: third point
-        
+
         Returns:
         --------
         x0: first point
         d01: distance between x0 and x1
         d12: distance between x1 and x2
         a021: angle between (x2 - x0) and (x1 - x0)
-        alpha: first euler angle (in [0, pi])
-        beta: second euler angle (in [0, pi])
-        gamma: third euler angle (in [0, pi])
+        alpha: first euler angle (in [-pi, pi])
+        beta: second euler angle (in [-1, 1])
+        gamma: third euler angle (in [-pi, pi])
         dlogp: density change
     """
 
     # enable grad to use autograd for jacobian computation
     with torch.enable_grad():
-        
+
         def _callback(xs):
             x0, x1, x2 = xs.chunk(3, dim=-1)
 
@@ -639,28 +637,35 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
             )
 
             # and compute the euler angles given this basis (range is [0, pi])
-            alpha, beta, gamma = _to_euler_angles(*basis)            
+            alpha, beta, gamma = _to_euler_angles(*basis)
 
             # now we flatten the outputs (x0, ics, euler angles) into a 9-dim output vec
-            ys = torch.cat([x0.squeeze(-2), torch.stack([d01, d12, a012, alpha, beta, gamma], dim=-1)], dim=-1)
-            
+            ys = torch.cat(
+                [
+                    x0.squeeze(-2),
+                    torch.stack([d01, d12, a012, alpha, beta, gamma], dim=-1),
+                ],
+                dim=-1,
+            )
+
             return ys
 
         # needed for autograd backward pass
         # we flatten the three input into a 9-dimensional state vector
         xs = torch.cat([x0, x1, x2], dim=-1).requires_grad_(True)
-        
+
         # compute the 9x9 jacobian via autograd
         ys, J = get_jacobian(_callback, xs)
-        
-        x0, d01, d12, a012, alpha, beta, gamma = ys.split_with_sizes([3, 1, 1, 1, 1, 1, 1], dim=-1)
+
+        x0, d01, d12, a012, alpha, beta, gamma = ys.split_with_sizes(
+            [3, 1, 1, 1, 1, 1, 1], dim=-1
+        )
         d01 = d01.squeeze(-1)
         d12 = d12.squeeze(-1)
         a012 = a012.squeeze(-1)
         alpha = alpha.squeeze(-1)
         beta = beta.squeeze(-1)
         gamma = gamma.squeeze(-1)
-        
 
         # we can compute the determinant of this jacobian
         # by summing only the 24 non-vanishing permuations

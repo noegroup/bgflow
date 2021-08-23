@@ -197,13 +197,14 @@ class ReferenceSystemTransformation(Flow):
             alpha, dlogp_alpha = normalize_torsions(alpha)
 
             dlogp += dlogp_alpha
-#             beta, dlogp_beta = normalize_angles(beta)
-#             dlogp += dlogp_beta
+            #             beta, dlogp_beta = normalize_angles(beta)
+            #             dlogp += dlogp_beta
             gamma, dlogp_gamma = normalize_torsions(gamma)
             dlogp += dlogp_gamma
         orientation = torch.cat([alpha, beta, gamma], dim=-1)
 
         return (x0, orientation, d01, d12, a012, dlogp)
+
 
     def _inverse(self, x0, orientation, d01, d12, a012, *args, **kwargs):
         """
@@ -212,18 +213,20 @@ class ReferenceSystemTransformation(Flow):
         x0: torch.Tensor
             origin of the system
         orientation: torch.Tensor
-            if orientation is "basis" returns [3,3] matrix 
             if orientation is "euler" returns tuple with three Euler angles (alpha, beta, gamma)
-                their range are in [0, pi] if unnormalized and [0, 1] if normalized
+            if unnormalized ranges are
+                alpha: [0, pi]
+                beta:  [-1, 1]
+                gamma: [0, pi]
+            if normalized all are in [0, 1]
         d01: torch.Tensor
         d12: torch.Tensor
         a012: torch.Tensor
 
         Returns:
-        --------        
+        --------
         x0, x1, x2: torch.Tensor
             xyz coordinates of the first three points
-            
         dlogp: torch.Tensor
             log det jacobian of the transformation
         """
@@ -235,8 +238,8 @@ class ReferenceSystemTransformation(Flow):
         if self._normalize_angles:
             alpha, dlogp_alpha = unnormalize_torsions(alpha)
             dlogp += dlogp_alpha
-#             beta, dlogp_beta = unnormalize_angles(beta)
-#             dlogp += dlogp_beta
+            #             beta, dlogp_beta = unnormalize_angles(beta)
+            #             dlogp += dlogp_beta
             gamma, dlogp_gamma = unnormalize_torsions(gamma)
             dlogp += dlogp_gamma
 
@@ -583,14 +586,14 @@ class GlobalInternalCoordinateTransformation(Flow):
     def bond_indices(self):
         fix = self._rel_ic.fixed_atoms
         return np.row_stack(
-            [np.array([[fix[1], fix[0]], [fix[2], fix[1]]]), self._rel_ic.bond_indices,]
+            [np.array([[fix[1], fix[0]], [fix[2], fix[1]]]), self._rel_ic.bond_indices]
         )
 
     @property
     def angle_indices(self):
         fix = self._rel_ic.fixed_atoms
         return np.row_stack(
-            [np.array([[fix[2], fix[1], fix[0]]]), self._rel_ic.angle_indices,]
+            [np.array([[fix[2], fix[1], fix[0]]]), self._rel_ic.angle_indices]
         )
 
     @property
@@ -646,7 +649,7 @@ class GlobalInternalCoordinateTransformation(Flow):
             has shape [batch, 1, 3]
         R: torch.Tensor
             global rotation of the system - 3-vector of Euler angles
-            see ReferenceSystemTransformation for more details. 
+            see ReferenceSystemTransformation for more details.
         dlogp: torch.Tensor
             log det jacobian of the transformation
         """
