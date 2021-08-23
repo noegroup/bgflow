@@ -42,6 +42,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install nflows
+          pip install einops
 
       - name: Install package
         shell: bash -l {0}

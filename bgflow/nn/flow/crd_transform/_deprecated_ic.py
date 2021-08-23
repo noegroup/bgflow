@@ -370,7 +370,7 @@ class MixedCoordinateTransform(Flow):
             "Please use bgflow.MixedCoordinateTransformation instead. "
             "Note that the new implementation has a different API and is defined in reverse order, "
             "i.e., crd_transform.forward: Cartesian -> ICs.",
-            DeprecationWarning
+            DeprecationWarning,
         )
         super().__init__()
 
@@ -682,7 +682,7 @@ class InternalCoordinatesTransformation(Flow):
             "Please use the classes from bgflow.nn.flow.crd_transform.ic instead. "
             "Note that the new implementations have different APIs and are defined in reverse order, "
             "i.e., crd_transform.forward: Cartesian -> ICs.",
-            DeprecationWarning
+            DeprecationWarning,
         )
         super().__init__()
         self.dim = Z_indices.shape[0] * 3
