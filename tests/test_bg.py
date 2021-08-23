@@ -88,9 +88,13 @@ def test_bg_metrics(ctx, is_flow_exact):
             atol=1e-4
         )
         effsize = effective_sample_size(logw)
-        assert is_flow_exact == math.isclose(effsize, len(logw), rel_tol=1e-5, abs_tol=1e-4)
+        assert is_flow_exact == torch.allclose(
+            effsize, torch.tensor(10., **ctx), atol=1e-4
+        )
         seff = sampling_efficiency(logw)
-        assert is_flow_exact == math.isclose(seff, 1, rel_tol=1e-5, abs_tol=1e-4)
+        assert is_flow_exact == torch.allclose(
+            seff, torch.ones_like(seff), atol=1e-4
+        )
 
     ## nll (gradient)
     opt = torch.optim.Adam(flow.parameters(), lr=1e-3)
