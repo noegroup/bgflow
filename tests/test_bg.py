@@ -9,7 +9,7 @@ from bgflow.distribution import TorchDistribution
 from bgflow.nn.flow.base import Flow
 from bgflow.bg import (
     BoltzmannGenerator, unnormalized_kl_div, unormalized_nll,
-    log_weights, log_weights_given_latent
+    log_weights, log_weights_given_latent, sampling_efficiency, effective_sample_size
 )
 
 
@@ -86,6 +86,14 @@ def test_bg_metrics(ctx, is_flow_exact):
             logw,
             gen.log_weights_given_latent(x, z, dlogp),
             atol=1e-4
+        )
+        effsize = effective_sample_size(logw)
+        assert is_flow_exact == torch.allclose(
+            effsize, torch.tensor(10., **ctx), atol=1e-4
+        )
+        seff = sampling_efficiency(logw)
+        assert is_flow_exact == torch.allclose(
+            seff, torch.ones_like(seff), atol=1e-4
         )
 
     ## nll (gradient)

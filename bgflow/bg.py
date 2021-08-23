@@ -17,14 +17,14 @@ def unormalized_nll(prior, flow, *x, temperature=1.0):
     return prior.energy(*z, temperature=temperature) - neg_dlogp
 
 
-def log_weights(*x, prior, flow, target, temperature=1.0):
+def log_weights(*x, prior, flow, target, temperature=1.0, normalize=True):
     *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
     return log_weights_given_latent(
-        x, z, -neg_dlogp, prior, target, temperature=temperature
+        x, z, -neg_dlogp, prior, target, temperature=temperature, normalize=normalize
     )
 
 
-def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0):
+def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normalize=True):
     if isinstance(x, torch.Tensor):
         x = (x,)
     if isinstance(z, torch.Tensor):
@@ -35,8 +35,19 @@ def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0):
         - target.energy(*x, temperature=temperature)
     )
     logw = logw - logw.max()
-    logw = logw - torch.logsumexp(logw, dim=0)
+    if normalize:
+        logw = logw - torch.logsumexp(logw, dim=0)
     return logw.view(-1)
+
+
+def effective_sample_size(log_weights):
+    """Effective sample size; log weights don't have to be normalized"""
+    return torch.exp(torch.logsumexp(log_weights, dim=0)**2 - torch.logsumexp(2*log_weights, dim=0))
+
+
+def sampling_efficiency(log_weights):
+    """Effective sample size / actual sample size; log weights don't have to be normalized"""
+    return effective_sample_size(log_weights)/len(log_weights)
 
 
 class BoltzmannGenerator(Energy, Sampler):
