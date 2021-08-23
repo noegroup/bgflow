@@ -40,12 +40,12 @@ def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normal
 
 
 def effective_sample_size(log_weights):
-    """Kish effective sample size"""
+    """Kish effective sample size; log weights don't have to be normalized"""
     return torch.exp(2*torch.logsumexp(log_weights, dim=0) - torch.logsumexp(2*log_weights, dim=0)).item()
 
 
 def sampling_efficiency(log_weights):
-    """Kish effective sample size / sample size"""
+    """Kish effective sample size / sample size; log weights don't have to be normalized"""
     return effective_sample_size(log_weights) / len(log_weights)
 
 
