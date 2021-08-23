@@ -5,6 +5,12 @@ from collections import namedtuple
 from typing import Iterable
 
 
+__all__ = [
+    "brute_force_jacobian_trace", "brute_force_jacobian",
+    "batch_jacobian", "get_jacobian", "requires_grad"
+]
+
+
 def brute_force_jacobian_trace(y, x):
     """
     Computes the trace of the jacobian matrix `dy/dx` by
