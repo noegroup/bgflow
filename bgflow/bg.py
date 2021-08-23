@@ -13,18 +13,18 @@ def unnormalized_kl_div(prior, flow, target, n_samples, temperature=1.0):
 
 
 def unormalized_nll(prior, flow, *x, temperature=1.0):
-    *z, dlogp = flow(*x, inverse=True, temperature=temperature)
-    return prior.energy(*z, temperature=temperature) - dlogp
+    *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
+    return prior.energy(*z, temperature=temperature) - neg_dlogp
 
 
-def log_weights(*x, prior, flow, target, temperature=1.0):
-    *z, dlogp = flow(*x, inverse=True, temperature=temperature)
+def log_weights(*x, prior, flow, target, temperature=1.0, normalize=True):
+    *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
     return log_weights_given_latent(
-        x, z, dlogp, prior, flow, target, temperature=temperature
+        x, z, -neg_dlogp, prior, target, temperature=temperature, normalize=normalize
     )
 
 
-def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=1.0):
+def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normalize=True):
     if isinstance(x, torch.Tensor):
         x = (x,)
     if isinstance(z, torch.Tensor):
@@ -34,9 +34,19 @@ def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=1.0):
         + dlogp
         - target.energy(*x, temperature=temperature)
     )
-    logw = logw - logw.max()
-    logw = logw - torch.logsumexp(logw, dim=0)
+    if normalize:
+        logw = logw - torch.logsumexp(logw, dim=0)
     return logw.view(-1)
+
+
+def effective_sample_size(log_weights):
+    """Kish effective sample size; log weights don't have to be normalized"""
+    return torch.exp(2*torch.logsumexp(log_weights, dim=0) - torch.logsumexp(2*log_weights, dim=0))
+
+
+def sampling_efficiency(log_weights):
+    """Kish effective sample size / sample size; log weights don't have to be normalized"""
+    return effective_sample_size(log_weights) / len(log_weights)
 
 
 class BoltzmannGenerator(Energy, Sampler):
@@ -112,18 +122,19 @@ class BoltzmannGenerator(Energy, Sampler):
             self._prior, self._flow, self._target, n_samples, temperature=temperature
         )
 
-    def log_weights(self, *x, temperature=1.0):
+    def log_weights(self, *x, temperature=1.0, normalize=True):
         return log_weights(
             *x,
             prior=self._prior,
             flow=self._flow,
             target=self._target,
-            temperature=temperature
+            temperature=temperature,
+            normalize=normalize
         )
 
-    def log_weights_given_latent(self, x, z, dlogp, temperature=1.0):
+    def log_weights_given_latent(self, x, z, dlogp, temperature=1.0, normalize=True):
         return log_weights_given_latent(
-            x, z, dlogp, self._prior, self._flow, self._target, temperature=temperature
+            x, z, dlogp, self._prior, self._target, temperature=temperature, normalize=normalize
         )
 
     def trigger(self, function_name):
