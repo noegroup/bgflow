@@ -20,11 +20,11 @@ def unormalized_nll(prior, flow, *x, temperature=1.0):
 def log_weights(*x, prior, flow, target, temperature=1.0):
     *z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
     return log_weights_given_latent(
-        x, z, -neg_dlogp, prior, flow, target, temperature=temperature
+        x, z, -neg_dlogp, prior, target, temperature=temperature
     )
 
 
-def log_weights_given_latent(x, z, dlogp, prior, flow, target, temperature=1.0):
+def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0):
     if isinstance(x, torch.Tensor):
         x = (x,)
     if isinstance(z, torch.Tensor):
@@ -123,7 +123,7 @@ class BoltzmannGenerator(Energy, Sampler):
 
     def log_weights_given_latent(self, x, z, dlogp, temperature=1.0):
         return log_weights_given_latent(
-            x, z, dlogp, self._prior, self._flow, self._target, temperature=temperature
+            x, z, dlogp, self._prior, self._target, temperature=temperature
         )
 
     def trigger(self, function_name):
