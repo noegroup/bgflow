@@ -61,7 +61,12 @@ class ShapeDictionary(OrderedDict):
         super().__init__()
 
     @staticmethod
-    def from_coordinate_transform(coordinate_transform, dim_augmented: int = 0):
+    def from_coordinate_transform(
+            coordinate_transform,
+            dim_augmented: int = 0,
+            n_constraints: int = 0,
+            remove_origin_and_rotation: bool = True
+    ):
         """Static constructor. Create shape dictionary from a coordinate transform.
 
         Parameters
@@ -70,6 +75,8 @@ class ShapeDictionary(OrderedDict):
             A coordinate transform, i.e. an instance of one of the classes in bgflow/nn/flow/crd_transform
         dim_augmented : int, optional
             For augmented normalizing flows; the number of augmented dimensions.
+        n_constraints : int, optional
+            Number of constrained bonds.
 
         Returns
         -------
@@ -78,7 +85,7 @@ class ShapeDictionary(OrderedDict):
         """
         shape_info = ShapeDictionary()
         if coordinate_transform.dim_angles > 0:
-            shape_info[BONDS] = (coordinate_transform.dim_bonds, )
+            shape_info[BONDS] = (coordinate_transform.dim_bonds - n_constraints, )
         if coordinate_transform.dim_angles > 0:
             shape_info[ANGLES] = (coordinate_transform.dim_angles, )
         if coordinate_transform.dim_torsions > 0:
@@ -87,7 +94,7 @@ class ShapeDictionary(OrderedDict):
             shape_info[FIXED] = (coordinate_transform.dim_fixed, )
         if dim_augmented > 0:
             shape_info[AUGMENTED] = (dim_augmented, )
-        if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation):
+        if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation) and not remove_origin_and_rotation:
             shape_info[ORIGIN] = (1, 3)
             shape_info[ROTATION] = (3,)
         return shape_info

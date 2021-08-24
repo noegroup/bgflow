@@ -87,6 +87,16 @@ def ala2():
             [20, 18, 16, 19],
             [21, 18, 16, 19]
         ])
+    system.global_z_matrix = np.row_stack([
+        system.z_matrix,
+        np.array([
+            [9, 8, 6, 14],
+            [10, 8, 14, 6],
+            [6, 8, 14, -1],
+            [8, 14, -1, -1],
+            [14, -1, -1, -1]
+        ])
+    ])
     dataset = SimpleNamespace()
     dataset.system = system
     # super-short simulation

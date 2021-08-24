@@ -80,8 +80,6 @@ class BoltzmannGeneratorBuilder:
         according to the flow transformations that are added.
     layers : list of torch.nn.Module
         A list of flow transformations.
-    constants : list of TensorInfo
-        A list of tensors that are not sampled from the prior but set constant.
     # TODO
 
 
@@ -113,13 +111,11 @@ class BoltzmannGeneratorBuilder:
         self.prior_dims = prior_dims
         self.current_dims = self.prior_dims.copy()
         self.layers = []
-        self.constants = []
         # transformer and prior factories  (use defaults everwhere)
         self.transformer_type = dict()
         self.transformer_kwargs = dict()
         self.prior_type = dict()
         self.prior_kwargs = dict()
-        self._constrained_bonds = dict()
         # default targets
         self.targets = dict()
         if target is not None:
@@ -184,8 +180,6 @@ class BoltzmannGeneratorBuilder:
         """
         priors = []
         for field in self.prior_dims:
-            if field in self.constants:
-                continue
             prior_type = self.prior_type.get(field, self.default_prior_type)
             prior_kwargs = self.prior_kwargs.get(field, self.default_prior_kwargs)
             prior = make_distribution(
@@ -298,11 +292,8 @@ class BoltzmannGeneratorBuilder:
 
     def add_set_constant(self, what, tensor):
         if what in self.current_dims:
-            if what in self.prior_dims:
-                self.constants.append(what)
-            else:
-                if self.current_dims[what] != tuple(tensor.shape):
-                    raise ValueError(f"Constant tensor {tensor} must have shape {self.current_dims[what]}")
+            if self.current_dims[what] != tuple(tensor.shape):
+                raise ValueError(f"Constant tensor {tensor} must have shape {self.current_dims[what]}")
         else:
             if what in self.prior_dims:
                 raise ValueError(f"Cannot set {what} constant; field was already deleted or replaced.")
@@ -311,7 +302,7 @@ class BoltzmannGeneratorBuilder:
         index = self.current_dims.index(what)
         fix_flow = SetConstantFlow(
             indices=[index],
-            values=[tensor]
+            values=[tensor.to(**self.ctx)]
         )
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
@@ -382,17 +373,6 @@ class BoltzmannGeneratorBuilder:
         else:
             ic_fields.append(fixed)
 
-        # merge constrained bonds
-        if bonds in self._constrained_bonds:
-            constrained_bond_indices, unconstrained_bond_indices, constrained_lengths = self._constrained_bonds[bonds]
-            constrained_bonds = TensorInfo(f"{bonds.name}_constrained", bonds.is_circular)
-            self.add_set_constant(constrained_bonds, constrained_lengths)
-            self.add_merge(
-                (bonds, constrained_bonds),
-                to=bonds,
-                sizes_or_indices=(unconstrained_bond_indices, constrained_bond_indices)
-            )
-
         indices = [self.current_dims.index(ic) for ic in ic_fields]
         wrap_around_ics = WrapFlow(
             InverseFlow(coordinate_transform),
@@ -412,30 +392,42 @@ class BoltzmannGeneratorBuilder:
             else:
                 warnings.warn(f"Field {field} not in current dims. CDF is ignored.")
 
-    def set_constrained_bonds(self, system, coordinate_transform, bonds=BONDS):
-        # parse constraints
-        lengths, force_constants = lookup_bonds(system, coordinate_transform.bond_indices, temperature=1.0)
-        constrained_bond_indices = []
-        constrained_bond_lengths = []
-        for i, (length, force_constant) in enumerate(zip(lengths, force_constants)):
-            if np.isinf(force_constant):
-                constrained_bond_indices.append(i)
-                constrained_bond_lengths.append(length)
-        unconstrained_bond_indices = np.setdiff1d(np.arange(self.prior_dims[bonds][-1]), constrained_bond_indices)
+    def add_merge_constrained_bonds(
+            self,
+            constrained_bond_indices,
+            constrained_bond_lengths,
+            bonds=BONDS
+    ):
+        """Set constrained bond lengths constant.
 
-        # impose
-        if len(constrained_bond_indices) > 0:
-            self._constrained_bonds[bonds] = (
-                constrained_bond_indices,
-                unconstrained_bond_indices.tolist(),
-                torch.tensor(constrained_bond_lengths, **self.ctx)
+        Parameters
+        ----------
+        constrained_bond_indices : np.ndarray
+            Indices of the constrained bonds (rows in the Z-matrix).
+        constrained_bond_lengths : np.ndarray or torch.Tensor
+            Lenghts of the constrained bonds (in nm)
+        bonds : bgflow.TensorInfo, optional
+            The field corresponding to the unconstrained bonds.
+        """
+        assert bonds in self.current_dims
+        assert len(constrained_bond_indices) == len(constrained_bond_lengths)
+        if len(constrained_bond_indices) == 0:
+            warnings.warn(
+                "add_merge_constrained_bonds was skipped, "
+                "because no bond indices were specified.",
+                UserWarning
             )
-            if len(self.layers) > 0:
-                warnings.warn(
-                    "Changing prior dimensions on a builder that has layers. "
-                    "This may break the layers that have already been added.",
-                    UserWarning
-                )
-            self.prior_dims[bonds] = (self.prior_dims[bonds][-1] - len(constrained_bond_indices), )
-            self.current_dims[bonds] = self.prior_dims[bonds]
+            return
+        n_bonds = len(constrained_bond_indices) + self.current_dims[bonds][-1]
+        constrained_bond_indices = np.array(constrained_bond_indices)
+        unconstrained_bond_indices = np.setdiff1d(np.arange(n_bonds), constrained_bond_indices)
+        if not isinstance(constrained_bond_lengths, torch.Tensor):
+            constrained_bond_lengths = torch.tensor(constrained_bond_lengths, **self.ctx)
+        constrained_bonds = TensorInfo(f"{bonds.name}_constrained", bonds.is_circular)
+        self.add_set_constant(constrained_bonds, constrained_bond_lengths)
+        self.add_merge(
+            (bonds, constrained_bonds),
+            to=bonds,
+            sizes_or_indices=(unconstrained_bond_indices, constrained_bond_indices)
+        )
 

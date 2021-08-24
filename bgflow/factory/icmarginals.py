@@ -125,6 +125,6 @@ class InternalCoordinateMarginals(dict):
         edges
 
 
-
+        
 
 

@@ -38,18 +38,7 @@ def test_builder_api(ala2, ctx):
 
 
 def test_builder_augmentation_and_global(ala2, ctx):
-    z_matrix = ala2.system.z_matrix
-    z_matrix = np.row_stack([
-        z_matrix,
-        np.array([
-            [9, 8, 6, 14],
-            [10, 8, 14, 6],
-            [6, 8, 14, -1],
-            [8, 14, -1, -1],
-            [14, -1, -1, -1]
-        ])
-    ])
-    crd_transform = GlobalInternalCoordinateTransformation(z_matrix)
+    crd_transform = GlobalInternalCoordinateTransformation(ala2.system.global_z_matrix)
     shape_info = ShapeDictionary.from_coordinate_transform(crd_transform, dim_augmented=10)
     builder = BoltzmannGeneratorBuilder(shape_info, target=ala2.system.energy_model, **ctx)
     for i in range(4):
@@ -142,7 +131,6 @@ def test_builder_split_merge(ctx):
     assert all(torch.allclose(s, o, atol=0.01, rtol=0.0) for s, o in zip(samples, output))
 
 
-
 def test_builder_multiple_crd(ala2, ctx):
     bgmol = pytest.importorskip("bgmol")
     # all-atom trafo
@@ -188,25 +176,33 @@ def test_builder_multiple_crd(ala2, ctx):
     generator.kldiv(10)
 
 
-# TODO
-@pytest.mark.skip()
 def test_builder_bond_constraints(ala2, ctx):
-    z_matrix, _ = ZMatrixFactory(ala2.system.mdtraj_topology).build_naive()
-    crd_transform = GlobalInternalCoordinateTransformation(z_matrix)
-    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform, dim_augmented=10)
-
+    import logging
+    logger = logging.getLogger('bgflow')
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(
+        logging.StreamHandler()
+    )
+    crd_transform = GlobalInternalCoordinateTransformation(ala2.system.global_z_matrix)
+    shape_info = ShapeDictionary.from_coordinate_transform(
+        crd_transform,
+        dim_augmented=0,
+        n_constraints=2,
+        remove_origin_and_rotation=True
+    )
     builder = BoltzmannGeneratorBuilder(shape_info, target=ala2.system.energy_model, **ctx)
-    assert builder.prior_dims[BONDS] == (21, )
-    constrained_bonds = builder.set_constrained_bonds(ala2.system.system, crd_transform)
-    assert builder.prior_dims[BONDS] == (9, )
-    assert builder.current_dims[BONDS] == (9,)
-    assert constrained_bonds not in builder.prior_dims
+    constrained_bond_indices = [0, 1]
+    constrained_bond_lengths = [0.1, 0.1]
+    assert builder.current_dims[BONDS] == (19, )
+    assert builder.prior_dims[BONDS] == (19, )
     builder.add_condition(BONDS, on=(ANGLES, TORSIONS))
     builder.add_map_to_ic_domains()
+    builder.add_merge_constrained_bonds(constrained_bond_indices, constrained_bond_lengths)
+    assert builder.current_dims[BONDS] == (21, )
     builder.add_map_to_cartesian(crd_transform)
     generator = builder.build_generator()
     # play forward and backward
     samples = generator.sample(2)
-    assert len(samples) == 2
-    generator.energy(*samples)
+    assert samples.shape == (2, 66)
+    generator.energy(samples)
     generator.kldiv(10)
