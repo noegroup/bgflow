@@ -3,6 +3,12 @@ import torch
 from .distribution.energy import Energy
 from .distribution.sampling import Sampler
 
+__all__ = [
+    "BoltzmannGenerator", "unnormalized_kl_div", "unormalized_nll",
+    "sampling_efficiency", "effective_sample_size", "log_weights",
+    "log_weights_given_latent"
+]
+
 
 def unnormalized_kl_div(prior, flow, target, n_samples, temperature=1.0):
     z = prior.sample(n_samples, temperature=temperature)
