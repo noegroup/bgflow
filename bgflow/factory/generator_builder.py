@@ -307,11 +307,34 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
 
-    def add_transform(self, layer, what=None):
-        if what is None:
-            self.layers.append(layer)
+    def add_transform(self, flow, what=None, inverse=False):
+        """Add a flow layer.
+        The layer must not change the dimensions of the
+        tensors that it is being applied to.
+
+        Parameters
+        ----------
+        flow : bgflow.Flow
+            The flow transform that is applied to all inputs or a selection of inputs.
+        what : Sequence[bflow.TensorInfo], optional
+            The fields that the flow is applied to.
+            If None, apply the flow to all fields in current_dims.
+        inverse : bool, optional
+            If True, add the inverse flow.
+        """
+        if inverse:
+            flow = InverseFlow(flow)
+        if what is not None:
+            # wrap flow
+            input_indices = [self.current_dims.index(el) for el in what]
+            output_indices = input_indices
+            flow = WrapFlow(flow, input_indices, output_indices)
         else:
-            return NotImplemented
+            what = list(self.current_dims.keys())
+        logger.info(f"  + Transform: ({', '.join([field.name for field in what])}) "
+                    f"-> ({', '.join([field.name for field in what])})")
+        self.layers.append(flow)
+
 
     def add_split(self, what, into, sizes_or_indices, dim=-1):
         into = list(into)
@@ -336,8 +359,8 @@ class BoltzmannGeneratorBuilder:
             to = TensorInfo(name=to, is_circular=what[0].is_circular)
         if not all(w.is_circular == to.is_circular for w in what):
             raise ValueError(
-                "Merging non-circular with circular tensors is dangerous. "
-                "Found discrepancies in f{what} and f{to}."
+                f"Merging non-circular with circular tensors is dangerous and therefore disabled. "
+                f"Found discrepancies in f{what} and f{to}."
             )
         input_indices = [self.current_dims.index(el) for el in what]
         if sizes_or_indices is None:
@@ -392,42 +415,42 @@ class BoltzmannGeneratorBuilder:
             else:
                 warnings.warn(f"Field {field} not in current dims. CDF is ignored.")
 
-    def add_merge_constrained_bonds(
+    def add_merge_constraints(
             self,
-            constrained_bond_indices,
-            constrained_bond_lengths,
-            bonds=BONDS
+            constrained_indices,
+            constrained_values,
+            field=BONDS
     ):
-        """Set constrained bond lengths constant.
+        """Augment a tensor by constants elements.
 
         Parameters
         ----------
-        constrained_bond_indices : np.ndarray
-            Indices of the constrained bonds (rows in the Z-matrix).
-        constrained_bond_lengths : np.ndarray or torch.Tensor
-            Lenghts of the constrained bonds (in nm)
-        bonds : bgflow.TensorInfo, optional
-            The field corresponding to the unconstrained bonds.
+        constrained_indices : np.ndarray
+            Indices of the constrained elements in the resulting tensor.
+        constrained_values : np.ndarray or torch.Tensor
+            Constant values to be inserted at the indices.
+        field : bgflow.TensorInfo, optional
+            The field into which the constants are merged.
         """
-        assert bonds in self.current_dims
-        assert len(constrained_bond_indices) == len(constrained_bond_lengths)
-        if len(constrained_bond_indices) == 0:
+        assert field in self.current_dims
+        assert len(constrained_indices) == len(constrained_values)
+        if len(constrained_indices) == 0:
             warnings.warn(
-                "add_merge_constrained_bonds was skipped, "
+                "add_merge_constraints was skipped, "
                 "because no bond indices were specified.",
                 UserWarning
             )
             return
-        n_bonds = len(constrained_bond_indices) + self.current_dims[bonds][-1]
-        constrained_bond_indices = np.array(constrained_bond_indices)
-        unconstrained_bond_indices = np.setdiff1d(np.arange(n_bonds), constrained_bond_indices)
-        if not isinstance(constrained_bond_lengths, torch.Tensor):
-            constrained_bond_lengths = torch.tensor(constrained_bond_lengths, **self.ctx)
-        constrained_bonds = TensorInfo(f"{bonds.name}_constrained", bonds.is_circular)
-        self.add_set_constant(constrained_bonds, constrained_bond_lengths)
+        n_bonds = len(constrained_indices) + self.current_dims[field][-1]
+        constrained_indices = np.array(constrained_indices)
+        unconstrained_indices = np.setdiff1d(np.arange(n_bonds), constrained_indices)
+        if not isinstance(constrained_values, torch.Tensor):
+            constrained_values = torch.tensor(constrained_values, **self.ctx)
+        field_constrained = TensorInfo(f"{field.name}_constrained", field.is_circular)
+        self.add_set_constant(field_constrained, constrained_values)
         self.add_merge(
-            (bonds, constrained_bonds),
-            to=bonds,
-            sizes_or_indices=(unconstrained_bond_indices, constrained_bond_indices)
+            (field, field_constrained),
+            to=field,
+            sizes_or_indices=(unconstrained_indices, constrained_indices)
         )
 

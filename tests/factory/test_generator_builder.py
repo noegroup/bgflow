@@ -10,7 +10,8 @@ from bgflow.nn.flow.crd_transform.ic import (
 )
 from bgflow import (
     BoltzmannGeneratorBuilder, BONDS, ANGLES, TORSIONS, FIXED, AUGMENTED, TensorInfo,
-    ShapeDictionary, InternalCoordinateMarginals
+    ShapeDictionary, InternalCoordinateMarginals, CouplingFlow, AffineTransformer, DenseNet,
+    CDFTransform, TruncatedNormalDistribution, ProductDistribution, NormalDistribution
 )
 
 
@@ -92,6 +93,34 @@ def test_builder_custom(ala2, ctx):
     builder.add_map_to_ic_domains(marginal_cdf)
     builder.add_map_to_cartesian(crd_transform)
     builder.build_generator()
+
+
+def test_builder_add_transform(ctx):
+    shape_info = ShapeDictionary()
+    shape_info[BONDS] = (10, )
+    shape_info[ANGLES] = (20, )
+    builder = BoltzmannGeneratorBuilder(shape_info, **ctx)
+    # transform some fields
+    builder.add_transform(
+        CDFTransform(
+            TruncatedNormalDistribution(torch.zeros(10, **ctx), lower_bound=-torch.tensor(np.infty)),
+        ),
+        what=[BONDS],
+        inverse=True
+    )
+    # transform all fields
+    builder.add_transform(
+        CouplingFlow(
+            AffineTransformer(
+                DenseNet([10, 20]), DenseNet([10, 20])
+            )
+        )
+    )
+    builder.targets[BONDS] = NormalDistribution(10, torch.zeros(10, **ctx))
+    builder.targets[ANGLES] = NormalDistribution(20, torch.zeros(20, **ctx))
+    generator = builder.build_generator().to(**ctx)
+    generator.sample(10)
+    generator.kldiv(10)
 
 
 def test_builder_split_merge(ctx):
@@ -197,7 +226,7 @@ def test_builder_bond_constraints(ala2, ctx):
     assert builder.prior_dims[BONDS] == (19, )
     builder.add_condition(BONDS, on=(ANGLES, TORSIONS))
     builder.add_map_to_ic_domains()
-    builder.add_merge_constrained_bonds(constrained_bond_indices, constrained_bond_lengths)
+    builder.add_merge_constraints(constrained_bond_indices, constrained_bond_lengths)
     assert builder.current_dims[BONDS] == (21, )
     builder.add_map_to_cartesian(crd_transform)
     generator = builder.build_generator()
