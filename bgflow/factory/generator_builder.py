@@ -2,6 +2,7 @@
 
 import warnings
 import copy
+from typing import Mapping, Sequence
 
 import numpy as np
 import torch
@@ -80,6 +81,8 @@ class BoltzmannGeneratorBuilder:
         according to the flow transformations that are added.
     layers : list of torch.nn.Module
         A list of flow transformations.
+    param_groups : Mapping[str, list[torch.nn.Parameter]]
+        Parameter groups indexed by group names.
     # TODO
 
 
@@ -123,7 +126,7 @@ class BoltzmannGeneratorBuilder:
         if AUGMENTED in self.prior_dims:
             dim = self.prior_dims[AUGMENTED]
             self.targets[AUGMENTED] = NormalDistribution(dim, torch.zeros(dim, **self.ctx))
-
+        self.param_groups = dict()
         dimstring = "; ".join(f"{field.name}: {self.prior_dims[field]}"  for field in prior_dims)
         logger.info(f"BG Builder  :::  ({dimstring})")
 
@@ -227,7 +230,7 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"--------------- cleared builder ----------------")
         self.current_dims = self.prior_dims.copy()
 
-    def add_condition(self, what, on=tuple(), **kwargs):
+    def add_condition(self, what, on=tuple(), param_groups=tuple(), **kwargs):
         """Add a coupling layer, i.e. a transformation of the tensor `what`
         that is conditioned on the tensors `on`.
 
@@ -288,7 +291,7 @@ class BoltzmannGeneratorBuilder:
             f"({', '.join([field.name for field in on])}) "
             f"-> ({', '.join([field.name for field in what])})"
         )
-        self.layers.append(coupling)
+        self.add_layer(coupling, param_groups=param_groups)
 
     def add_set_constant(self, what, tensor):
         if what in self.current_dims:
@@ -307,7 +310,7 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
 
-    def add_transform(self, flow, what=None, inverse=False):
+    def add_layer(self, flow, what=None, inverse=False, param_groups=tuple()):
         """Add a flow layer.
         The layer must not change the dimensions of the
         tensors that it is being applied to.
@@ -321,6 +324,8 @@ class BoltzmannGeneratorBuilder:
             If None, apply the flow to all fields in current_dims.
         inverse : bool, optional
             If True, add the inverse flow.
+        param_groups : Sequence[str]
+            A list of group names.
         """
         if inverse:
             flow = InverseFlow(flow)
@@ -331,8 +336,7 @@ class BoltzmannGeneratorBuilder:
             flow = WrapFlow(flow, input_indices, output_indices)
         else:
             what = list(self.current_dims.keys())
-        logger.info(f"  + Transform: ({', '.join([field.name for field in what])}) "
-                    f"-> ({', '.join([field.name for field in what])})")
+        self._add_to_param_groups(flow.parameters(), param_groups)
         self.layers.append(flow)
 
 
@@ -453,4 +457,13 @@ class BoltzmannGeneratorBuilder:
             to=field,
             sizes_or_indices=(unconstrained_indices, constrained_indices)
         )
+
+    def _add_to_param_groups(self, parameters, param_groups):
+        parameters = list(parameters)
+        for group in param_groups:
+            if group not in self.param_groups:
+                self.param_groups[group] = []
+            self.param_groups[group].extend(parameters)
+
+
 

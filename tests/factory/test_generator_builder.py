@@ -95,30 +95,34 @@ def test_builder_custom(ala2, ctx):
     builder.build_generator()
 
 
-def test_builder_add_transform(ctx):
+def test_builder_add_layer_and_param_groups(ctx):
     shape_info = ShapeDictionary()
     shape_info[BONDS] = (10, )
     shape_info[ANGLES] = (20, )
     builder = BoltzmannGeneratorBuilder(shape_info, **ctx)
     # transform some fields
-    builder.add_transform(
+    builder.add_layer(
         CDFTransform(
             TruncatedNormalDistribution(torch.zeros(10, **ctx), lower_bound=-torch.tensor(np.infty)),
         ),
         what=[BONDS],
-        inverse=True
+        inverse=True,
+        param_groups=("group1", )
     )
     # transform all fields
-    builder.add_transform(
+    builder.add_layer(
         CouplingFlow(
             AffineTransformer(
                 DenseNet([10, 20]), DenseNet([10, 20])
             )
-        )
+        ),
+        param_groups=("group1", "group2")
     )
     builder.targets[BONDS] = NormalDistribution(10, torch.zeros(10, **ctx))
     builder.targets[ANGLES] = NormalDistribution(20, torch.zeros(20, **ctx))
     generator = builder.build_generator().to(**ctx)
+    assert builder.param_groups["group1"] == list(generator.parameters())
+    assert builder.param_groups["group2"] == list(generator._flow._blocks[1].parameters())
     generator.sample(10)
     generator.kldiv(10)
 
@@ -235,3 +239,4 @@ def test_builder_bond_constraints(ala2, ctx):
     assert samples.shape == (2, 66)
     generator.energy(samples)
     generator.kldiv(10)
+
