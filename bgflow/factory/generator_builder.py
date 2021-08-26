@@ -348,7 +348,7 @@ class BoltzmannGeneratorBuilder:
         input_index = self.current_dims.index(what)
         split_flow = SplitFlow(*sizes_or_indices, dim=dim)
         if split_flow._sizes is None:
-            sizes = (len(size) for size in sizes_or_indices)
+            sizes = [len(size) for size in sizes_or_indices]
         else:
             sizes = sizes_or_indices
         self.current_dims.split(what, into, sizes, dim=dim)
