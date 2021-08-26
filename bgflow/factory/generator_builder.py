@@ -409,20 +409,20 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
-    def add_map_to_ic_domains(self, cdfs=dict(), return_layer=False):
+    def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False):
         if len(cdfs) == 0:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
         new_layers = []
         for field in cdfs:
             if field in self.current_dims:
                 icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
-                new_layers.append(WrapFlow(icdf_flow, (self.current_dims.index(field),)))
+                flow = WrapFlow(icdf_flow, (self.current_dims.index(field),))
+                self.layers.append(flow)
+                new_layers.append(icdf_flow)
             else:
                 warnings.warn(f"Field {field} not in current dims. CDF is ignored.")
-        flow = SequentialFlow(new_layers)
-        self.layers.extend(flow)
-        if return_layer:
-            return flow
+        if return_layers:
+            return new_layers
 
     def add_merge_constraints(
             self,
