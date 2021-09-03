@@ -21,14 +21,13 @@ class PeriodicTabulatedTransform(Flow):
             slopes at support points, shape (n_degrees_of_freedom, n_bin_edges)
         """
         super().__init__()
-        self._support_points = support_points.clone()
-        self._support_values = support_values.clone()
+        self.register_buffer("_support_points", support_points)
+        self.register_buffer("_support_values", support_values)
+        self.register_buffer("_slopes", torch.clamp(slopes, 1e-6, 1e6))
         widths = support_points[..., 1:] - support_points[..., :-1]
         assert torch.all(widths >= 0.0), ValueError("support points must be ascending in last dimension")
         heights = support_values[..., 1:] - support_values[..., :-1]
         assert torch.all(heights >= 0.0), ValueError("support values must be ascending in last dimension")
-        self._slopes = torch.clamp(slopes, 1e-6, 1e6)
-        # assert torch.all(self._slopes > 0.0), ValueError("slopes must me positive ")
 
     def _forward(self, x: torch.Tensor):
         # shift into primary interval
