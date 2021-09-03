@@ -415,7 +415,10 @@ class BoltzmannGeneratorBuilder:
         new_layers = []
         for field in cdfs:
             if field in self.current_dims:
-                icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
+                if isinstance(cdfs[field], bgflow.Flow):
+                    icdf_flow = cdfs[field]
+                else:
+                    icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
                 flow = WrapFlow(icdf_flow, (self.current_dims.index(field),))
                 self.layers.append(flow)
                 new_layers.append(icdf_flow)
