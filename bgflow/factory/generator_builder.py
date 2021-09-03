@@ -14,6 +14,7 @@ from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow
 from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
+from ..nn.flow.base import Flow
 from ..distribution.distribution import UniformDistribution
 from ..distribution.normal import NormalDistribution
 from ..distribution.product import ProductDistribution, ProductEnergy
@@ -415,7 +416,7 @@ class BoltzmannGeneratorBuilder:
         new_layers = []
         for field in cdfs:
             if field in self.current_dims:
-                if isinstance(cdfs[field], bgflow.Flow):
+                if isinstance(cdfs[field], Flow):
                     icdf_flow = cdfs[field]
                 else:
                     icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
