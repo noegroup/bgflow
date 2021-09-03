@@ -1,6 +1,6 @@
 import torch
 from bgflow.nn.flow.base import Flow
-
+import torch.nn.functional as F
 
 
 class PeriodicTabulatedTransform(Flow):
@@ -52,12 +52,20 @@ class PeriodicTabulatedTransform(Flow):
         return y.clamp(self._support_points.min(), self._support_points.max()), dlogp.sum(dim=-1, keepdim=True)
 
 
+DEFAULT_MIN_BIN_WIDTH = 1e-3
+DEFAULT_MIN_BIN_HEIGHT = 1e-3
+DEFAULT_MIN_DERIVATIVE = 1e-3
+
+
 def rq_spline(
         inputs,
         supportx,
         supporty,
         derivatives,
         inverse=False,
+        min_bin_width=1e-4,#DEFAULT_MIN_BIN_WIDTH,
+        min_bin_height=1e-4,#=1e-8,#DEFAULT_MIN_BIN_HEIGHT,
+        min_derivative=1e-4,#DEFAULT_MIN_DERIVATIVE,
 ):
     """Rational Quadratic Spline
     Parameters
@@ -84,8 +92,8 @@ def rq_spline(
     [1] C. Durkan, A. Bekasov, I. Murray, G. Papamakarios, Neural Spline Flows, (2019). http://arxiv.org/abs/1906.04032
     """
     assert torch.all(derivatives > 0)
-    assert torch.all(supportx[..., :-1] < supportx[..., 1:])
-    assert torch.all(supporty[..., :-1] < supporty[..., 1:])
+    assert torch.all(supportx[..., :-1] <= supportx[..., 1:])
+    assert torch.all(supporty[..., :-1] <= supporty[..., 1:])
     if inverse:
         assert torch.all(inputs >= supporty.min(dim=-1)[0])
         assert torch.all(inputs <= supporty.max(dim=-1)[0])
@@ -93,13 +101,28 @@ def rq_spline(
         assert torch.all(inputs >= supportx.min(dim=-1)[0])
         assert torch.all(inputs <= supportx.max(dim=-1)[0])
 
+    num_bins = supportx.shape[-1] - 1
     widths = supportx[..., 1:] - supportx[..., :-1]
+    widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
+    supportx = (
+        supportx.min(dim=-1, keepdim=True)[0]
+        + F.pad(torch.cumsum(widths, dim=-1), pad=(1, 0), mode="constant", value=0.0)
+    )
+
     heights = supporty[..., 1:] - supporty[..., :-1]
+    heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
+    supporty = (
+        supporty.min(dim=-1, keepdim=True)[0]
+        + F.pad(torch.cumsum(heights, dim=-1), pad=(1, 0), mode="constant", value=0.0)
+    )
+
+    derivatives = min_derivative + derivatives
 
     if inverse:
         bin_idx = searchsorted(supporty, inputs)
     else:
         bin_idx = searchsorted(supportx, inputs)
+    bin_idx[bin_idx == num_bins] = 0  #
 
     input_supportx = select_item(supportx, bin_idx)
     input_bin_widths = select_item(widths, bin_idx)
