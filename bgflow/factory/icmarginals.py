@@ -5,6 +5,7 @@ import torch
 from .tensor_info import BONDS, ANGLES, TORSIONS, FIXED, AUGMENTED
 from ..distribution.normal import TruncatedNormalDistribution
 from ..distribution.distribution import SloppyUniform
+from ..nn.flow.inverted import InverseFlow
 #from ..utils.ff import lookup_bonds, lookup_angles
 
 __all__ = ["InternalCoordinateMarginals"]
@@ -95,6 +96,11 @@ class InternalCoordinateMarginals(dict):
             self[angles] = bgmol.angle_marginal_estimate(
                 system, coordinate_transform, temperature, **self.ctx
             )
+        if torsions in self.current_dims:
+            cdf = bgmol.torsion_marginal_cdf_estimate(
+                system, coordinate_transform, temperature, **self.ctx
+            )
+            self[torsions] = InverseFlow(cdf)
 
     def inform_with_data(
             self,

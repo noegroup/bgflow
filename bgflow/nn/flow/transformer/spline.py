@@ -1,3 +1,4 @@
+import warnings
 import nflows.transforms.base
 import torch
 
@@ -123,7 +124,7 @@ class ConditionalSplineTransformer(Transformer):
             z, dlogp = rqs(y)
         except nflows.transforms.base.InputOutsideDomain:
             exceeded_left = (y - self._left).min()
-            exceeded_left = (y - self._right).max()
+            exceeded_right = (y - self._right).max()
             warnings.warn(
                 f"InputOutsideDomain: min {exceeded_left.item()}; "
                 f"max {self._right} + {exceeded_right.item()}",
@@ -152,7 +153,7 @@ class ConditionalSplineTransformer(Transformer):
             z, dlogp = rqs(y)
         except nflows.transforms.base.InputOutsideDomain:
             exceeded_left = (y - self._left).min()
-            exceeded_left = (y - self._right).max()
+            exceeded_right = (y - self._right).max()
             warnings.warn(
                 f"InputOutsideDomain: min {exceeded_left.item()}; "
                 f"max {self._right} + {exceeded_right.item()}",

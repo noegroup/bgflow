@@ -1,119 +1,170 @@
 import torch
+from bgflow.nn.flow.base import Flow
 
 
-# TODO: write docstrings
-# TODO: numerically unstable! check reference implementation!
+
+class PeriodicTabulatedTransform(Flow):
+    def __init__(
+            self,
+            support_points: torch.Tensor,
+            support_values: torch.Tensor,
+            slopes: torch.Tensor,
+    ):
+        """
+        Parameters
+        ----------
+        support_points: torch.Tensor
+            ascending support points on x axis; shape (n_degrees_of_freedom, n_bin_edges)
+        support_values: torch.Tensor
+            ascending support points on y axis; shape (n_degrees_of_freedom, n_bin_edges)
+        slopes: torch.Tensor
+            slopes at support points, shape (n_degrees_of_freedom, n_bin_edges)
+        """
+        super().__init__()
+        self._support_points = support_points.clone()
+        self._support_values = support_values.clone()
+        widths = support_points[..., 1:] - support_points[..., :-1]
+        assert torch.all(widths >= 0.0), ValueError("support points must be ascending in last dimension")
+        heights = support_values[..., 1:] - support_values[..., :-1]
+        assert torch.all(heights >= 0.0), ValueError("support values must be ascending in last dimension")
+        self._slopes = torch.clamp(slopes, 1e-6, 1e6)
+        # assert torch.all(self._slopes > 0.0), ValueError("slopes must me positive ")
+
+    def _forward(self, x: torch.Tensor):
+        # shift into primary interval
+        left = torch.min(self._support_points, dim=-1)[0]
+        right = torch.max(self._support_points, dim=-1)[0]
+        # x = torch.remainder(x - left, right - left) + left
+        assert (x >= left).all()
+        assert (x <= right).all()
+        # evaluate spline
+        y, dlogp = rq_spline(x, self._support_points, self._support_values, self._slopes)
+        return y.clamp(self._support_values.min(), self._support_values.max()), dlogp.sum(dim=-1, keepdim=True)
+
+    def _inverse(self, x: torch.Tensor, *args, **kwargs):
+        # shift into primary interval
+        bottom = torch.min(self._support_values, dim=-1)[0]
+        top = torch.max(self._support_values, dim=-1)[0]
+        # x = torch.remainder(x - bottom, top - bottom) + bottom
+        assert (x >= bottom).all()
+        assert (x <= top).all()
+        # evaluate spline
+        y, dlogp = rq_spline(x, self._support_points, self._support_values, self._slopes, inverse=True)
+        return y.clamp(self._support_points.min(), self._support_points.max()), dlogp.sum(dim=-1, keepdim=True)
 
 
-def _compute_bin_filter(x, grid):
+def rq_spline(
+        inputs,
+        supportx,
+        supporty,
+        derivatives,
+        inverse=False,
+):
+    """Rational Quadratic Spline
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        input tensor; shape (..., n_distributions), where ... represents batch dimensions
+        The input for each distribution has to be within the range of its support points.
+    supportx : torch.Tensor
+        support points on the x axis; shape (n_distributions, n_points_per_distribution)
+        The points for each distribution have to be monotonically increasing.
+    supporty : torch.Tensor
+        support values on the y axis; shape (n_distributions, n_points_per_distribution)
+        The points for each distribution have to be monotonically increasing.
+    derivatives : torch.Tensor
+        derivatives at the support points (have to be strictly positive)
+    Returns
+    -------
+    outputs : torch.Tensor
+        The transformed input. Same shape as input.
+    logdet : torch.Tensor
+        Elementwise (!) logarithmic determinant of the jacobian, log |det J(x)|. Same shape as input.
+    References
+    ----------
+    [1] C. Durkan, A. Bekasov, I. Murray, G. Papamakarios, Neural Spline Flows, (2019). http://arxiv.org/abs/1906.04032
     """
-        x: [n_batch, n_dim]
-        grid: [n_batch, n_dim, n_grid]
-        
-        returns
-            bin_filter: [n_batch, n_dim, n_grid + 2]
-    """
+    assert torch.all(derivatives > 0)
+    assert torch.all(supportx[..., :-1] < supportx[..., 1:])
+    assert torch.all(supporty[..., :-1] < supporty[..., 1:])
+    if inverse:
+        assert torch.all(inputs >= supporty.min(dim=-1)[0])
+        assert torch.all(inputs <= supporty.max(dim=-1)[0])
+    else:
+        assert torch.all(inputs >= supportx.min(dim=-1)[0])
+        assert torch.all(inputs <= supportx.max(dim=-1)[0])
 
-    x = x.unsqueeze(-1)
-    #     grid = grid.unsqueeze(0)
-
-    is_in = (x >= grid[..., :-1]) & (x < grid[..., 1:])
-    is_left = x < grid[..., [0]]
-    is_right = x >= grid[..., [-1]]
-
-    bin_filter = torch.cat([is_left, is_in, is_right], dim=-1).to(x)
-
-    return bin_filter
-
-
-def _compute_dx(x, grid):
-    """
-        x: [n_batch, n_dim]
-        grid: [n_batch, n_dim, n_grid]
-        
-        returns
-            dx: [n_batch, n_dim, n_grid]
-    """
-
-    x = x.unsqueeze(-1)
-    #     grid = grid.unsqueeze(0)
-
-    dx = x - grid
-    dx = torch.cat([dx[..., [0]], dx], dim=-1)
-
-    return dx
-
-
-def _compute_slope(cdf, grid, eps=1e-7):
-    n_batch = cdf.shape[0]
-    n_dim = cdf.shape[1]
-    slope = (cdf[..., 1:] - cdf[..., :-1]) / (grid[..., 1:] - grid[..., :-1] + eps)
-    slope = torch.cat(
-        [torch.ones(n_batch, n_dim, 1), slope, torch.ones(n_batch, n_dim, 1)], dim=-1
-    )
-    return slope
-
-
-def _compute_transform(dx, cdf, slope, bin_filter):
-    n_batch = cdf.shape[0]
-    n_dim = cdf.shape[1]
-    cdf = torch.cat([torch.zeros(n_batch, n_dim, 1), cdf], dim=-1)
-
-    y = ((cdf + dx * slope) * bin_filter).sum(dim=-1)
-    logdet = (slope * bin_filter).sum(dim=-1).log().sum(dim=-1, keepdim=True)
-
-    return y, logdet
-
-
-def _compute_cdf(pdf):
-    n_batch = pdf.shape[0]
-    n_dim = pdf.shape[1]
-    cdf = torch.cumsum(pdf, dim=-1)
-    cdf = torch.cat([torch.zeros(n_batch, n_dim, 1), cdf], dim=-1)
-    return cdf
-
-
-def _spline(x, unnormed_pdf, grid=None, inverse=False):
-    if len(unnormed_pdf.shape) < 3:
-        unnormed_pdf = unnormed_pdf.unsqueeze(0)
-
-    n_batch = unnormed_pdf.shape[0]
-    n_dim = unnormed_pdf.shape[1]
-    n_grid = unnormed_pdf.shape[2]
-    
-    unnormed_pdf = unnormed_pdf.to(x)
-    pdf = torch.softmax(unnormed_pdf, dim=-1)
-    cdf = _compute_cdf(pdf)
-
-    if grid is None:
-        grid = torch.linspace(0, 1, n_grid + 1).repeat(n_batch, n_dim, 1)
-    grid = grid.to(x)
+    widths = supportx[..., 1:] - supportx[..., :-1]
+    heights = supporty[..., 1:] - supporty[..., :-1]
 
     if inverse:
-        cdf, grid = grid, cdf
+        bin_idx = searchsorted(supporty, inputs)
+    else:
+        bin_idx = searchsorted(supportx, inputs)
 
-    bin_filter = _compute_bin_filter(x, grid)
-    dx = _compute_dx(x, grid)
-    slope = _compute_slope(cdf, grid)
+    input_supportx = select_item(supportx, bin_idx)
+    input_bin_widths = select_item(widths, bin_idx)
 
-    y, logdet = _compute_transform(dx, cdf, slope, bin_filter)
+    input_supporty = select_item(supporty, bin_idx)
+    delta = heights / widths
+    input_delta = select_item(delta, bin_idx)
 
-    return y, logdet
+    input_derivatives = select_item(derivatives, bin_idx)
+    input_derivatives_plus_one = select_item(derivatives, bin_idx + 1)
+
+    input_heights = select_item(heights, bin_idx)
+
+    if inverse:
+        a = (((inputs - input_supporty) * (input_derivatives
+                                           + input_derivatives_plus_one
+                                           - 2 * input_delta)
+              + input_heights * (input_delta - input_derivatives)))
+        b = (input_heights * input_derivatives
+             - (inputs - input_supporty) * (input_derivatives
+                                            + input_derivatives_plus_one
+                                            - 2 * input_delta))
+        c = - input_delta * (inputs - input_supporty)
+
+        discriminant = b.pow(2) - 4 * a * c
+        assert (discriminant >= 0).all()
+
+        root = (2 * c) / (-b - torch.sqrt(discriminant))
+        outputs = root * input_bin_widths + input_supportx
+
+        theta_one_minus_theta = root * (1 - root)
+        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
+                                     * theta_one_minus_theta)
+        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * root.pow(2)
+                                                     + 2 * input_delta * theta_one_minus_theta
+                                                     + input_derivatives * (1 - root).pow(2))
+        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+
+        return outputs, -logabsdet
+    else:
+        theta = (inputs - input_supportx) / input_bin_widths
+        theta_one_minus_theta = theta * (1 - theta)
+
+        numerator = input_heights * (input_delta * theta.pow(2)
+                                     + input_derivatives * theta_one_minus_theta)
+        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
+                                     * theta_one_minus_theta)
+        outputs = input_supporty + numerator / denominator
+
+        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * theta.pow(2)
+                                                     + 2 * input_delta * theta_one_minus_theta
+                                                     + input_derivatives * (1 - theta).pow(2))
+        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+
+        return outputs, logabsdet
 
 
-class LinearSplineFlow(torch.nn.Module):
-    def __init__(self, n_points, n_dims, min_val=-1.0, max_val=1.0):
-        super().__init__()
-        self._n_points = n_points
-        self._n_dims = n_dims
+def searchsorted(bin_locations, inputs, eps=1e-6):
+    bin_locations[..., -1] += eps
+    return torch.sum(
+        inputs[..., None] >= bin_locations,
+        dim=-1
+    ) - 1
 
-        self._pdf = torch.nn.Parameter(torch.Tensor(1, n_dims, self._n_points).zero_())
 
-        self._min_val = min_val
-        self._max_val = max_val
-
-    def forward(self, x, inverse=False):
-        x = (x - self._min_val) / (self._max_val - self._min_val)
-        y, logdet = _spline(x, self._pdf, grid=None, inverse=inverse)
-        y = y * (self._max_val - self._min_val) + self._min_val
-        return y, logdet
+def select_item(items, index):
+    return items[..., index].diagonal(dim1=0, dim2=-1)
