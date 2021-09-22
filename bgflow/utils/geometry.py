@@ -101,3 +101,16 @@ def distances_from_vectors(r, eps=1e-6):
         Tensor of shape `[n_batch, n_particles, n_other_particles]`.
     """
     return (r.pow(2).sum(dim=-1) + eps).sqrt()
+
+def remove_mean(samples, n_particles, n_dimensions):
+    shape = samples.shape
+    if isinstance(samples, torch.Tensor):
+        samples = samples.view(-1, n_particles, n_dimensions)
+        samples = samples - torch.mean(samples, dim=1, keepdim=True)
+        samples = samples.view(*shape)
+    else:
+        samples = samples.reshape(-1, n_particles, n_dimensions)
+        samples = samples - samples.mean(axis=1, keepdims=True)
+        samples = samples.reshape(*shape)
+    return samples
+

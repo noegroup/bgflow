@@ -1,4 +1,4 @@
-from .train import IndexBatchIterator 
+from .train import IndexBatchIterator, LossReporter
 from .shape import tile
 from .types import (
     is_list_or_tuple,
@@ -8,7 +8,8 @@ from .autograd import *
 
 from .geometry import (
     distance_vectors,
-    distances_from_vectors
+    distances_from_vectors,
+    remove_mean
 )
 from .rbf_kernels import (
     kernelize_with_rbf,

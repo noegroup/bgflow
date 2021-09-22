@@ -5,7 +5,7 @@ from .energy.base import Energy
 from .sampling.base import Sampler
 
 
-__all__ = ["NormalDistribution", "TruncatedNormalDistribution"]
+__all__ = ["NormalDistribution", "TruncatedNormalDistribution", "MeanFreeNormalDistribution"]
 
 
 def _is_symmetric_matrix(m):
@@ -236,3 +236,26 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def __len__(self):
         return self._dim
+
+class MeanFreeNormalDistribution(Energy, Sampler):
+    """ Mean-free normal distribution. """
+    def __init__(self, dim, n_particles, std=1.):
+        super().__init__(dim)
+        self._dim = dim
+        self._n_particles = n_particles
+        self._spacial_dims = dim // n_particles
+        self._std = std
+    
+    def _energy(self, x):
+        x = self._remove_mean(x)
+        return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) / self._std ** 2
+
+    def sample(self, n_samples, temperature=1.):
+        x = torch.Tensor(n_samples, self._n_particles, self._spacial_dims).normal_(mean= 0, std=self._std)
+        return self._remove_mean(x)
+
+    def _remove_mean(self, x):
+        #return x
+        x = x.view(-1, self._n_particles, self._spacial_dims)
+        x = x - torch.mean(x, dim=1, keepdim=True)
+        return x.view(-1, self.dim).cuda()
