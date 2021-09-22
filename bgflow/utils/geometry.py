@@ -102,7 +102,22 @@ def distances_from_vectors(r, eps=1e-6):
     """
     return (r.pow(2).sum(dim=-1) + eps).sqrt()
 
+
 def remove_mean(samples, n_particles, n_dimensions):
+    """
+    Makes a configuration of many particle system mean-free.
+
+    Parameters
+    ----------
+    samples : PyTorch tensor
+        Positions of n_particles in n_dimensions.
+
+    Returns
+    -------
+    samples : PyTorch tensor
+        Mean-free positions of n_particles in n_dimensions.
+    """
+
     shape = samples.shape
     if isinstance(samples, torch.Tensor):
         samples = samples.view(-1, n_particles, n_dimensions)
@@ -113,4 +128,3 @@ def remove_mean(samples, n_particles, n_dimensions):
         samples = samples - samples.mean(axis=1, keepdims=True)
         samples = samples.reshape(*shape)
     return samples
-
