@@ -6,7 +6,8 @@ from .autograd import *
 from .geometry import (
     distance_vectors,
     distances_from_vectors,
-    remove_mean
+    remove_mean,
+    compute_distances
 )
 from .rbf_kernels import (
     kernelize_with_rbf,

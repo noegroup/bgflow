@@ -11,7 +11,7 @@ def distance_vectors(x, remove_diagonal=True):
 
     Parameters
     ----------
-    x : PyTorch tensor
+    x : torch.tensor
         Tensor of shape `[n_batch, n_particles, n_dimensions]`
         containing input points.
     remove_diagonal : boolean
@@ -20,7 +20,7 @@ def distance_vectors(x, remove_diagonal=True):
 
     Returns
     -------
-    r : PyTorch tensor
+    r : torch.tensor
         Matrix of all distance vectors r.
         If `remove_diagonal=True` this is a tensor of shape
             `[n_batch, n_particles, n_particles, n_dimensions]`.
@@ -49,10 +49,10 @@ def distance_vectors_v2(x, y, remove_diagonal=True):
 
     Parameters
     ----------
-    x : PyTorch tensor
+    x : torch.tensor
         Tensor of shape `[n_batch, n_particles, n_dimensions]`
         containing input points.
-    y : PyTorch tensor
+    y : torch.tensor
         Tensor of shape `[n_batch, n_particles, n_dimensions]`
         containing input points.
     remove_diagonal : boolean
@@ -61,12 +61,12 @@ def distance_vectors_v2(x, y, remove_diagonal=True):
 
     Returns
     -------
-    r : PyTorch tensor
+    r : torch.tensor
         Matrix of all distance vectors r.
         If `remove_diagonal=True` this is a tensor of shape
-            `[n_batch, n_particles, n_particles, n_dimensions]`.
-        Otherwise this is a tensor of shape
             `[n_batch, n_particles, n_particles - 1, n_dimensions]`.
+        Otherwise this is a tensor of shape
+            `[n_batch, n_particles, n_particles, n_dimensions]`.
 
     Examples
     --------
@@ -88,7 +88,7 @@ def distances_from_vectors(r, eps=1e-6):
     
     Parameters
     ----------
-    r : PyTorch tensor
+    r : torch.tensor
         Matrix of all distance vectors r.
         Tensor of shape `[n_batch, n_particles, n_other_particles, n_dimensions]`
     eps : Small real number.
@@ -96,11 +96,40 @@ def distances_from_vectors(r, eps=1e-6):
     
     Returns
     -------
-    d : PyTorch tensor
+    d : torch.tensor
         All-distance matrix d.
         Tensor of shape `[n_batch, n_particles, n_other_particles]`.
     """
     return (r.pow(2).sum(dim=-1) + eps).sqrt()
+
+
+def compute_distances(x, n_particles, n_dimensions, remove_duplicates=True):
+    """
+    Computes the all distances for a given particle configuration x.
+
+    Parameters
+    ----------
+    x : torch.tensor
+        Positions of n_particles in n_dimensions.
+    remove_duplicates : boolean
+        Flag indicating whether to remove duplicate distances
+        and distances be.
+        If False the all distance matrix is returned instead.
+
+    Returns
+    -------
+    distances : torch.tensor
+        All-distances between particles in a configuration
+        Tensor of shape `[n_batch, n_particles * (n_particles - 1)]` if remove_duplicates.
+        Otherwise `[n_batch, n_particles , n_particles]`
+    """
+    n_batch = x.shape[0]
+    x = x.reshape(-1, n_particles, n_dimensions)
+    distances = torch.cdist(x, x)
+    if remove_duplicates:
+        distances = distances[:, torch.triu(torch.ones((n_particles, n_particles)), diagonal=1) == 1]
+        distances = distances.reshape(-1, n_particles * (n_particles - 1))
+    return distances
 
 
 def remove_mean(samples, n_particles, n_dimensions):
@@ -109,12 +138,12 @@ def remove_mean(samples, n_particles, n_dimensions):
 
     Parameters
     ----------
-    samples : PyTorch tensor
+    samples : torch.tensor
         Positions of n_particles in n_dimensions.
 
     Returns
     -------
-    samples : PyTorch tensor
+    samples : torch.tensor
         Mean-free positions of n_particles in n_dimensions.
     """
 
