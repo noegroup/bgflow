@@ -120,7 +120,7 @@ def compute_distances(x, n_particles, n_dimensions, remove_duplicates=True):
     -------
     distances : torch.tensor
         All-distances between particles in a configuration
-        Tensor of shape `[n_batch, n_particles * (n_particles - 1)]` if remove_duplicates.
+        Tensor of shape `[n_batch, n_particles * (n_particles - 1) // 2]` if remove_duplicates.
         Otherwise `[n_batch, n_particles , n_particles]`
     """
     n_batch = x.shape[0]
@@ -128,7 +128,7 @@ def compute_distances(x, n_particles, n_dimensions, remove_duplicates=True):
     distances = torch.cdist(x, x)
     if remove_duplicates:
         distances = distances[:, torch.triu(torch.ones((n_particles, n_particles)), diagonal=1) == 1]
-        distances = distances.reshape(-1, n_particles * (n_particles - 1))
+        distances = distances.reshape(-1, n_particles * (n_particles - 1) // 2)
     return distances
 
 
