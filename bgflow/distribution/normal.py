@@ -252,7 +252,7 @@ class MeanFreeNormalDistribution(Energy, Sampler):
         self.register_buffer("_std", torch.as_tensor(std))
 
     def _energy(self, x):
-        x = self._remove_mean(x)
+        x = self._remove_mean(x).view(-1, self._dim)
         return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) / self._std ** 2
 
     def sample(self, n_samples, temperature=1.):
