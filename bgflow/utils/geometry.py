@@ -123,7 +123,6 @@ def compute_distances(x, n_particles, n_dimensions, remove_duplicates=True):
         Tensor of shape `[n_batch, n_particles * (n_particles - 1) // 2]` if remove_duplicates.
         Otherwise `[n_batch, n_particles , n_particles]`
     """
-    n_batch = x.shape[0]
     x = x.reshape(-1, n_particles, n_dimensions)
     distances = torch.cdist(x, x)
     if remove_duplicates:
