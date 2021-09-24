@@ -19,8 +19,11 @@ class MultiDoubleWellPotential(Energy):
         parameters of the potential
     """
 
-    def __init__(self, dim, n_particles, a, b, c, offset):
-        super().__init__(dim)
+    def __init__(self, dim, n_particles, a, b, c, offset, two_event_dims=True):
+        if two_event_dims:
+            super().__init__([n_particles, dim // n_particles])
+        else:
+            super().__init__(dim)
         self._dim = dim
         self._n_particles = n_particles
         self._n_dimensions = dim // n_particles
@@ -28,10 +31,6 @@ class MultiDoubleWellPotential(Energy):
         self._b = b
         self._c = c
         self._offset = offset
-
-    @property
-    def dim(self):
-        return self._dim
 
     def _energy(self, x):
         dists = compute_distances(x, self._n_particles, self._n_dimensions)
