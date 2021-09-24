@@ -21,8 +21,7 @@ def test_mean_free(ctx):
     samples = remove_mean(samples, 100, 3)
     mean_deviation = samples.mean(dim=(1, 2))
     threshold = 1e-5
-    return torch.all(mean_deviation.abs() < threshold)
-
+    assert torch.all(mean_deviation.abs() < threshold)
 
 @pytest.mark.parametrize("remove_duplicates", [True, False])
 def test_compute_distances(remove_duplicates, ctx):
