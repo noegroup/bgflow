@@ -33,6 +33,7 @@ class MultiDoubleWellPotential(Energy):
         self._offset = offset
 
     def _energy(self, x):
+        x = x.contiguous()
         dists = compute_distances(x, self._n_particles, self._n_dimensions)
         dists = dists - self._offset
 
