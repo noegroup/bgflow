@@ -1,9 +1,6 @@
 from .train import IndexBatchIterator 
 from .shape import tile
-from .types import (
-    is_list_or_tuple,
-    assert_numpy
-)
+from .types import *
 from .autograd import *
 
 from .geometry import (

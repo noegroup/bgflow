@@ -2,12 +2,12 @@ import torch
 
 from .distribution.energy import Energy
 from .distribution.sampling import Sampler
+from .utils.types import pack_tensor_in_tuple
 
 
 def unnormalized_kl_div(prior, flow, target, n_samples, temperature=1.0):
     z = prior.sample(n_samples, temperature=temperature)
-    if isinstance(z, torch.Tensor):
-        z = (z,)
+    z = pack_tensor_in_tuple(z)
     *x, dlogp = flow(*z, temperature=temperature)
     return target.energy(*x, temperature=temperature) - dlogp
 
@@ -25,10 +25,8 @@ def log_weights(*x, prior, flow, target, temperature=1.0, normalize=True):
 
 
 def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normalize=True):
-    if isinstance(x, torch.Tensor):
-        x = (x,)
-    if isinstance(z, torch.Tensor):
-        z = (z,)
+    x = pack_tensor_in_tuple(x)
+    z = pack_tensor_in_tuple(z)
     logw = (
         prior.energy(*z, temperature=temperature)
         + dlogp
@@ -88,8 +86,7 @@ class BoltzmannGenerator(Energy, Sampler):
         with_weights=False,
     ):
         z = self._prior.sample(n_samples, temperature=temperature)
-        if isinstance(z, torch.Tensor):
-            z = (z,)
+        z = pack_tensor_in_tuple(z)
         *results, dlogp = self._flow(*z, temperature=temperature)
         results = list(results)
 
