@@ -1,9 +1,12 @@
 import warnings
+from typing import Sequence
+
 import torch
 
 from ..energy import Energy
 from .base import Sampler
 from .iterative import SamplerStep, IterativeSampler, SamplerState
+from ..energy.openmm import OpenMMEnergy
 
 
 __all__ = [
@@ -55,6 +58,7 @@ class MCMCStep(SamplerStep):
     def _step(self, state):
         # compute current energies
         if state.energies is None:
+            # TODO: check if energies are up to date
             state.energies = self.target_energy.energy(*state.samples)[..., 0]
         # make a proposal
         proposed_samples, delta_log_prob = self.proposal.forward(state.samples)
@@ -70,7 +74,7 @@ class MCMCStep(SamplerStep):
         return state
 
 
-class ApplyPeriodicBoundaries(SamplerStep):
+class ApplyPeriodicBoundariesStep(SamplerStep):
     def __init__(self):
         super().__init__()
 
@@ -104,7 +108,7 @@ def _GaussianMCMCSampler(
     if box_constraint is not None:
         raise ValueError("Use box_min and box_max instead.")
     if box_min is not None and box_max is not None:
-        sampler_steps.append(ApplyPeriodicBoundaries())
+        sampler_steps.append(ApplyPeriodicBoundariesStep())
     return IterativeSampler(
         initial_state=state,
         sampler_steps=sampler_steps,
@@ -185,6 +189,54 @@ Instead try using:
     
     def _energy(self, x):
         return self._energy_function.energy(x)
+
+
+class OpenMMToolsStep(SamplerStep):
+    def __init__(self, multi_state_sampler, energies: Sequence[OpenMMEnergy], temperatures):
+        import openmmtools
+        self.multi_state_sampler = multi_state_sampler
+        systems = [energy._openmm_energy_bridge._openmm_system for energy in energies]
+        tstates = [
+            openmmtools.states.ThermodynamicState(system, temperature)
+            for system, temperature in zip(systems, temperatures)
+        ]
+        # TODO: Michele, do we need this?
+
+    def _step(self, state):
+        assert len(state.samples) == 1
+        ...
+
+
+class ReplicaExchangeStep(SamplerStep):
+    def __init__(self, energy, temperature_scalings):
+        super().__init__()
+        # TODO
+        self.energy = energy
+        self.temperature_scalings = temperature_scalings
+        self.is_odd_step = False
+
+    def _step(self, state):
+        if state.energies is None:
+            # TODO: check if energies are up to date
+            state.energies = self.energy(*state.samples)[..., None]
+        replica_index_lower = torch.arange(self.is_odd_step, state.energies.shape[-1] - 1, 2)
+        replica_index_higher = replica_index_lower + 1
+        lower_energies = state.energies[..., replica_index_higher]
+        higher_energies = state.energies[..., replica_index_higher]
+        lower_temperatures = self.temperature_scalings[replica_index_lower]
+        higher_temperatures = self.temperature_scalings[replica_index_higher]
+        accept = metropolis_accept(
+            current_energies=lower_energies/lower_temperatures + higher_energies/higher_temperatures,
+            proposed_energies=lower_energies/higher_temperatures + higher_energies/lower_temperatures,
+            proposal_delta_log_prob=0.0
+        )
+        # perform swaps
+        # TODO
+        # rescale velocities
+        if state.momenta is not None:
+            # TODO
+            pass
+        return state
 
 
 def metropolis_accept(

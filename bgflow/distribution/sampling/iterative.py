@@ -1,7 +1,7 @@
 
 import torch
 from .base import Sampler
-from ...utils.types import unpack_tensor_tuple, pack_tensor_in_list
+from ...utils.types import pack_tensor_in_list
 
 __all__ = ["SamplerState", "default_get_sample_hook", "IterativeSampler", "SamplerStep"]
 
@@ -86,10 +86,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
         for _ in self.progress_bar(range(n_burnin)):
             self.state = next(self)
 
-    def _sample_with_temperature(self, n_samples, temperature):
-        raise NotImplementedError()
-
-    def _sample(self, n_samples):
+    def _sample(self, n_samples, *args, **kwargs):
         samples = None
         for _ in self.progress_bar(range(n_samples)):
             self.state = next(self)
