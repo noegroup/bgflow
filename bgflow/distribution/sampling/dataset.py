@@ -11,8 +11,8 @@ __all__ = ["DataLoaderSampler", "DataSetSampler"]
 
 class _ToDeviceSampler(Sampler):
     """A sampler that can move data between devices and data types"""
-    def __init__(self, device, dtype, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, device, dtype, return_hook=lambda x: x, **kwargs):
+        super().__init__(return_hook=return_hook, **kwargs)
         # context dummy tensor to store the device and data type;
         # by specifying this here, the user can decide
         # if he/she wants to store the data on the gpu or cpu.
@@ -41,8 +41,8 @@ class DataLoaderSampler(_ToDeviceSampler):
     -----
     Only implemented for dataloader.batch_size == n_samples
     """
-    def __init__(self, dataloader, device, dtype):
-        super().__init__(device=device, dtype=dtype)
+    def __init__(self, dataloader, device, dtype, return_hook=lambda x: x):
+        super().__init__(device=device, dtype=dtype, return_hook=return_hook)
         self._dataloader = dataloader
         self._iterator = iter(self._dataloader)
 
@@ -72,10 +72,10 @@ class DataSetSampler(_ToDeviceSampler, torch.utils.data.Dataset):
     data : list[torch.Tensor]
         The data set from which to draw samples.
     """
-    def __init__(self, *data: torch.Tensor, shuffle=True, device=None, dtype=None):
+    def __init__(self, *data: torch.Tensor, shuffle=True, device=None, dtype=None, return_hook=lambda x: x):
         device = data[0].device if device is None else device
         dtype = data[0].dtype if dtype is None else dtype
-        super().__init__(device=device, dtype=dtype)
+        super().__init__(device=device, dtype=dtype, return_hook=return_hook)
         if not all(len(d) == len(data[0]) for d in data):
             raise ValueError("All data items must have the same length.")
 

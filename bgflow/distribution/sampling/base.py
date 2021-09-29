@@ -9,14 +9,16 @@ class Sampler(torch.nn.Module):
 
     Parameters
     ----------
-    select_fn : Callable, optional
+    return_hook : Callable, optional
         A function to postprocess the samples. This can (for example) be used to
         only return samples at a selected thermodynamic state of a replica exchange sampler.
+        The function takes a list of tensors and should return a list of tensors.
+        Each tensor contains a batch of samples.
     """
 
-    def __init__(self, select_fn=lambda x: x, **kwargs):
+    def __init__(self, return_hook=lambda x: x, **kwargs):
         super().__init__(**kwargs)
-        self.select_fn = select_fn
+        self.return_hook = return_hook
     
     def _sample_with_temperature(self, n_samples, temperature, *args, **kwargs):
         raise NotImplementedError()
@@ -47,7 +49,7 @@ class Sampler(torch.nn.Module):
         else:
             samples = self._sample(n_samples, *args, **kwargs)
         samples = pack_tensor_in_list(samples)
-        return unpack_tensor_tuple(self.select_fn(samples))
+        return unpack_tensor_tuple(self.return_hook(samples))
 
     def sample_to_cpu(self, n_samples, batch_size=64, *args,  **kwargs):
         """A utility method for creating many samples that might not fit into GPU memory."""
