@@ -1,6 +1,6 @@
 
-import gc
 import os
+import gc
 import numpy as np
 import torch
 from ...utils.types import unpack_tensor_tuple
@@ -117,12 +117,15 @@ class ReplayBufferHDF5Reporter:
     ----------
     filename : str
         Output filename ending on ".h5"
-    mode : str
-        The opening mode ("r" for read, "r+" for "read-write", etc.)
-    write_buffer_interval : int
+    mode : str, optional
+        The opening mode ("r" for read, "r+" for "read-write", etc.).
+        By default, the file will be opened in "r+" mode if it exists and in "w" mode if not.
+    write_buffer_interval : int, optional
         After each i-th step, the whole replay buffer is written to the file.
     """
-    def __init__(self, filename, mode="r+", write_buffer_interval=100):
+    def __init__(self, filename, mode=None, write_buffer_interval=100):
+        if mode is None:
+            mode = "r+" if os.path.isfile(filename) else "w"
         self.file = ReplayBufferHDF5File(filename, mode)
         if self.file.is_header_written:
             self.step = self.file.stats_size
@@ -197,7 +200,7 @@ class ReplayBufferHDF5File:
         A dictionary of stats.
 
     """
-    def __init__(self, filename, mode="r+"):
+    def __init__(self, filename, mode):
         import netCDF4 as nc
         self.filename = filename
         self.mode = mode

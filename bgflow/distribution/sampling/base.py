@@ -12,19 +12,11 @@ class Sampler(torch.nn.Module):
     select_fn : Callable, optional
         A function to postprocess the samples. This can (for example) be used to
         only return samples at a selected thermodynamic state of a replica exchange sampler.
-    device : torch.device.device
-        The device on which the sampled tensors should live.
-    dtype : torch.dtype
-        Data type of the sampled tensors.
     """
 
-    def __init__(self, select_fn=lambda x: x, device=None, dtype=None, **kwargs):
+    def __init__(self, select_fn=lambda x: x, **kwargs):
         super().__init__(**kwargs)
         self.select_fn = select_fn
-        # context dummy tensor to store the device and data type;
-        # by specifying this here, each subclass can decide for itself
-        # whether it wants to store the data on the gpu or cpu.
-        self.register_buffer("ctx", torch.tensor([], device=device, dtype=dtype))
     
     def _sample_with_temperature(self, n_samples, temperature, *args, **kwargs):
         raise NotImplementedError()
@@ -55,10 +47,9 @@ class Sampler(torch.nn.Module):
         else:
             samples = self._sample(n_samples, *args, **kwargs)
         samples = pack_tensor_in_list(samples)
-        samples = [sample.to(self.ctx) for sample in samples]
         return unpack_tensor_tuple(self.select_fn(samples))
 
-    def sample_to_cpu(self, n_samples, *args, batch_size=64, **kwargs):
+    def sample_to_cpu(self, n_samples, batch_size=64, *args,  **kwargs):
         """A utility method for creating many samples that might not fit into GPU memory."""
         with torch.no_grad():
             samples = self.sample(min(n_samples, batch_size), *args, **kwargs)

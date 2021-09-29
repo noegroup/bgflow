@@ -9,20 +9,40 @@ from typing import Sequence
 __all__ = ["DataLoaderSampler", "DataSetSampler"]
 
 
-class DataLoaderSampler(Sampler):
+class _ToDeviceSampler(Sampler):
+    """A sampler that can move data between devices and data types"""
+    def __init__(self, device, dtype, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # context dummy tensor to store the device and data type;
+        # by specifying this here, the user can decide
+        # if he/she wants to store the data on the gpu or cpu.
+        self.register_buffer("ctx", torch.tensor([], device=device, dtype=dtype))
+
+    def sample(self, *args, **kwargs):
+        samples = super().sample(*args, **kwargs)
+        samples = pack_tensor_in_list(samples)
+        samples = [s.to(self.ctx) for s in samples]
+        return unpack_tensor_tuple(samples)
+
+
+class DataLoaderSampler(_ToDeviceSampler):
     """A torch.DataLoader instance wrapped as a sampler.
 
     Parameters
     ----------
     dataloader : torch.utils.data.DataLoader
         The data loader instance.
+    device : torch.device.device
+        The device on which the sampled tensors should live.
+    dtype : torch.dtype
+        Data type of the sampled tensors.
 
     Notes
     -----
     Only implemented for dataloader.batch_size == n_samples
     """
-    def __init__(self, dataloader):
-        super().__init__()
+    def __init__(self, dataloader, device, dtype):
+        super().__init__(device=device, dtype=dtype)
         self._dataloader = dataloader
         self._iterator = iter(self._dataloader)
 
@@ -33,7 +53,7 @@ class DataLoaderSampler(Sampler):
         return unpack_tensor_tuple(samples)
 
 
-class DataSetSampler(Sampler, torch.utils.data.Dataset):
+class DataSetSampler(_ToDeviceSampler, torch.utils.data.Dataset):
     """Sample from data.
 
     Parameters
@@ -53,11 +73,12 @@ class DataSetSampler(Sampler, torch.utils.data.Dataset):
         The data set from which to draw samples.
     """
     def __init__(self, *data: torch.Tensor, shuffle=True, device=None, dtype=None):
-        super().__init__()
+        device = data[0].device if device is None else device
+        dtype = data[0].dtype if dtype is None else dtype
+        super().__init__(device=device, dtype=dtype)
         if not all(len(d) == len(data[0]) for d in data):
             raise ValueError("All data items must have the same length.")
 
-        self.register_buffer("_ctx", torch.tensor([], device=device, dtype=dtype))
         self.data = pack_tensor_in_list(data)
         self._current_index = 0
         if shuffle:
@@ -90,7 +111,6 @@ class DataSetSampler(Sampler, torch.utils.data.Dataset):
             remaining = pack_tensor_in_list(remaining)
             for i, other in enumerate(remaining):
                 samples[i] = torch.cat([samples[i], other], dim=0)
-        samples = [sample.to(self._ctx) for sample in samples]
         return unpack_tensor_tuple(samples)
 
     def reshuffle_(self):

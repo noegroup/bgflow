@@ -49,9 +49,9 @@ def test_resizing(ctx):
 def test_dataloader_sampler(ctx):
     loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(torch.randn(10, 2, 2, **ctx)),
-        batch_size=4
+        batch_size=4,
     )
-    sampler = DataLoaderSampler(loader)
+    sampler = DataLoaderSampler(loader, **ctx)
     assert sampler.sample(4).shape == (4, 2, 2)
 
     # test with batch_size != n_samples
