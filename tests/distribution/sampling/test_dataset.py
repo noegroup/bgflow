@@ -53,6 +53,3 @@ def test_dataloader_sampler(ctx):
     )
     sampler = DataLoaderSampler(loader, **ctx)
     assert sampler.sample(4).shape == (4, 2, 2)
-
-    # test with batch_size != n_samples
-    assert sampler.sample(6).shape == (6, 2, 2)
