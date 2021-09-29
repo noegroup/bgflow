@@ -43,15 +43,14 @@ class SequentialFlow(Flow):
             Total volume change as a result of the transformation.
             Corresponds to the log determinant of the Jacobian matrix.
         """
-        n_batch = xs[0].shape[0]
-        dlogp = torch.zeros(n_batch, 1).to(xs[0])
+        dlogp = 0.0
         blocks = self._blocks
         if inverse:
             blocks = reversed(blocks)
         for block in blocks:
             *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             dlogp += ddlogp
-        return (*xs, dlogp)
+        return *xs, dlogp
 
     def trigger(self, function_name):
         """

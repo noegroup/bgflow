@@ -1,6 +1,4 @@
 
-from collections import namedtuple
-from types import SimpleNamespace
 import torch
 from .base import Sampler
 from ...utils.types import unpack_tensor_tuple, pack_tensor_in_list
@@ -13,13 +11,22 @@ class SamplerState(dict):
     Contains samples, energies (optional), momenta (optional), forces (optional)
     along an arbitrary number of batch dimensions.
     """
-    def __init__(self, samples, energies=None, momenta=None, forces=None, box_vectors=None, **kwargs):
+    def __init__(
+            self,
+            samples,
+            energies=None,
+            momenta=None,
+            forces=None,
+            box_vector_min=None,
+            box_vector_max=None,
+            **kwargs
+    ):
         super().__init__(
             samples=pack_tensor_in_list(samples),
             energies=energies,
             momenta=pack_tensor_in_list(momenta),
             forces=pack_tensor_in_list(forces),
-            box_vectors=box_vectors,
+            box_vectors=[box_vector_min, box_vector_max],
             **kwargs
         )
 
@@ -45,6 +52,16 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
         which
     sampler_steps : Sequence[SamplerStep]
         A list of sampler_steps, which are applied
+    get_sample_hook : Callable, optional
+        A function that takes a sampler state and returns the samples
+    progress_bar : Callable, optional
+        A progress bar (e.g. tqdm.tqdm)
+    stride : int, optional
+        The number of steps to take between two samples.
+    n_burnin : int, optional
+        Number of steps to be taken before starting to sample.
+    max_iterations : int,optional
+        The maximum number of steps this sampler can take. None = infinitely many.
     """
     def __init__(
             self,
@@ -57,6 +74,8 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
             max_iterations=None
     ):
         super().__init__()
+        if isinstance(initial_state, torch.Tensor):
+            initial_state = SamplerState(samples=initial_state)
         self.state = initial_state
         self.sampler_steps = sampler_steps
         self.get_sample_hook = get_sample_hook
@@ -103,12 +122,6 @@ class SamplerStep(torch.nn.Module):
 
     Parameters
     ----------
-    target_energies: list or torch.nn.Module
-        The energies to sample from.
-
-    target_temperatures: torch.tensor
-        The temperatures to sample from.
-
     n_steps: int
         The number of steps taken per `forward` call.
     """

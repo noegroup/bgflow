@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from .base import Sampler
 from ...utils.types import unpack_tensor_tuple, pack_tensor_in_list
-from typing import Sequence
 
 
 __all__ = ["DataLoaderSampler", "DataSetSampler"]

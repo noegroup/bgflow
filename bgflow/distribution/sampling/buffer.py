@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from ...utils.types import unpack_tensor_tuple
 from .dataset import DataSetSampler
+from .mcmc import metropolis_accept
 
 
 __all__ = ["MetropolizedReplayBuffer", "ReplayBufferHDF5File", "ReplayBufferHDF5Reporter"]
@@ -71,15 +72,12 @@ class MetropolizedReplayBuffer(DataSetSampler):
         rand_indices = torch.randperm(len(self))[:len(proposals[0])]
         *rand_samples, rand_energies = [data[rand_indices].to(proposals[0]) for data in self.data]
         # Metropolis criterion
-        log_proposal_ratio = (
-                - self._proposal_energy.energy(*rand_samples)[:, 0]
-                + proposal_energies
+        accepted = metropolis_accept(  # SHAPES!
+            current_energies=rand_energies,
+            proposed_energies=energies,
+            proposal_delta_log_prob=-proposal_energies + self._proposal_energy.energy(*rand_samples)[:, 0]
+            # log g(x'|x) - log g(x|x') = log g(x') - log g(x) = -u(x') + u(x)
         )
-        log_acceptance_ratio = (1 / self.temperature_scaling) * (
-                - energies + rand_energies + log_proposal_ratio
-        )
-        log_rand = torch.log(torch.rand_like(log_acceptance_ratio))
-        accepted = log_acceptance_ratio >= log_rand
         if forced_update:
             accepted[:] = True
         # replace samples and energies in buffer
