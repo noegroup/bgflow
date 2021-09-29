@@ -2,9 +2,9 @@ import numpy as np
 import torch
 
 __all__ = [
-    "is_list_or_tuple", "assert_numpy",
+    "is_list_or_tuple", "assert_numpy", "as_numpy",
     "unpack_tensor_tuple", "pack_tensor_in_tuple",
-    "pack_tensor_in_list"
+    "pack_tensor_in_list",
 ]
 
 
@@ -23,6 +23,11 @@ def assert_numpy(x, arr_type=None):
     if arr_type is not None:
         x = x.astype(arr_type)
     return x
+
+
+def as_numpy(tensor):
+    """convert tensor to numpy"""
+    return torch.as_tensor(tensor).detach().cpu().numpy()
 
 
 def unpack_tensor_tuple(seq):
