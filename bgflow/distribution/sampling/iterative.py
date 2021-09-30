@@ -1,3 +1,4 @@
+import copy
 
 import torch
 from .base import Sampler
@@ -59,7 +60,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
     stride : int, optional
         The number of steps to take between two samples.
     n_burnin : int, optional
-        Number of steps to be taken before starting to sample.
+        Burnin phase; number of samples for equilibration before starting to return samples.
     max_iterations : int,optional
         The maximum number of steps this sampler can take. None = infinitely many.
     """
@@ -93,7 +94,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
             new_samples = self.get_sample_hook(self.state)
             if samples is None:
                 # add batch dim
-                samples = [x[None, ...] for x in new_samples]
+                samples = [copy.deepcopy(x[None, ...]) for x in new_samples]
             else:
                 for i, (x, new) in enumerate(zip(samples, new_samples)):
                     samples[i] = torch.cat((x, new[None, ...]), dim=0)
