@@ -59,24 +59,24 @@ class OpenMMStochasticFlow(Flow):
             self.inverse_openmm_bridge = openmm_bridge
 
     def _forward(self, *xs, **kwargs):
-        _, _, y, dlog = self.openmm_bridge.evaluate(
+        openmm_output = self.openmm_bridge.evaluate(
             xs[0],
             evaluate_force=False,
             evaluate_energy=False,
             evaluate_positions=True,
             evaluate_path_probability_ratio=True,
         )
-        return y, dlog
+        return openmm_output.new_positions, openmm_output.log_path_probability_ratio
 
     def _inverse(self, *xs, **kwargs):
-        _, _, y, dlog = self.inverse_openmm_bridge.evaluate(
+        openmm_output = self.inverse_openmm_bridge.evaluate(
             xs[0],
             evaluate_force=False,
             evaluate_energy=False,
             evaluate_positions=True,
             evaluate_path_probability_ratio=True,
         )
-        return y, dlog
+        return openmm_output.new_positions, openmm_output.log_path_probability_ratio
 
     @staticmethod
     def _check_bridge(bridge):
