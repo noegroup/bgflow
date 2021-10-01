@@ -6,13 +6,14 @@ from bgflow import TorchTransform, SequentialFlow, BentIdentity
 
 def test_torch_transform(ctx):
     """try using torch.Transform in combination with bgflow.Flow"""
+    torch.manual_seed(10)
     x = torch.torch.randn(10, 3, **ctx)
     flow = SequentialFlow([
         TorchTransform(IndependentTransform(SigmoidTransform(), 1)),
         TorchTransform(
                 AffineTransform(
                     loc=torch.randn(3, **ctx),
-                    scale=torch.randn(3, **ctx), event_dim=1
+                    scale=2.0+torch.rand(3, **ctx), event_dim=1
                 ),
         ),
         BentIdentity(),
@@ -21,5 +22,6 @@ def test_torch_transform(ctx):
     ])
     z, dlogp = flow.forward(x)
     y, neg_dlogp = flow.forward(z, inverse=True)
-    assert torch.allclose(x, y, atol=1e-5)
-    assert torch.allclose(dlogp, -neg_dlogp, atol=1e-5)
+    tol = 1e-7 if ctx["dtype"] is torch.float64 else 1e-5
+    assert torch.allclose(x, y, atol=tol)
+    assert torch.allclose(dlogp, -neg_dlogp, atol=tol)
