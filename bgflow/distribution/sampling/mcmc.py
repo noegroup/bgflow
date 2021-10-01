@@ -15,7 +15,41 @@ __all__ = [
 ]
 
 
+def metropolis_accept(
+        current_energies,
+        proposed_energies,
+        proposal_delta_log_prob
+):
+    """Metropolis criterion.
+
+    Parameters
+    ----------
+    current_energies : torch.Tensor
+        Dimensionless energy of the current state x.
+    proposed_energies : torch.Tensor
+        Dimensionless energy of the proposed state x'.
+    proposal_delta_log_prob : Union[torch.Tensor, float]
+        The difference in log probabilities between the forward and backward proposal.
+        This corresponds to    log g(x'|x) - log g(x|x'), where g is the proposal distribution.
+
+    Returns
+    -------
+    accept : torch.Tensor
+        A boolean tensor that is True for accepted proposals and False otherwise
+    """
+    # log p(x') - log p(x) - (log g(x'|x) - log g(x|x'))
+    log_prob = -(proposed_energies - current_energies) - proposal_delta_log_prob
+    log_acceptance_ratio = torch.min(
+        torch.zeros_like(proposed_energies),
+        log_prob,
+    )
+    log_random = torch.rand_like(log_acceptance_ratio).log()
+    accept = log_acceptance_ratio >= log_random
+    return accept
+
+
 class GaussianProposal(torch.nn.Module):
+    """Gaussian displacement with zero mean and standard deviation `noise_std`."""
     def __init__(self, noise_std=0.1):
         super().__init__()
         self._noise_std = noise_std
@@ -74,19 +108,6 @@ class MCMCStep(SamplerStep):
         return state
 
 
-class ApplyPeriodicBoundariesStep(SamplerStep):
-    def __init__(self):
-        super().__init__()
-
-    def _step(self, state):
-        if state.box_vectors is None:
-            raise ValueError("Sampler state has no box vectors.")
-        box_min, box_max = state.box_vectors
-        for i in range(len(state.samples)):
-            state.samples[i] = box_min + torch.fmod(state.samples[i], box_max - box_min)
-        return state
-
-
 def _GaussianMCMCSampler(
         energy,
         init_state=None,
@@ -95,9 +116,14 @@ def _GaussianMCMCSampler(
         n_stride=1,
         n_burnin=0,
         box_constraint=None,
-        box_min=None, box_max=None
+        box_vector_min=None,
+        box_vector_max=None
 ):
-    state = SamplerState(samples=init_state, box_vector_min=box_min, box_vector_max=box_max)
+    if isinstance(init_state, torch.Tensor):
+        init_state = SamplerState(samples=init_state)
+    init_state.box_vector_min = box_vector_min
+    init_state.box_vector_max = box_vector_max
+
     sampler_steps = [
         MCMCStep(
             energy,
@@ -106,11 +132,12 @@ def _GaussianMCMCSampler(
         ),
     ]
     if box_constraint is not None:
-        raise ValueError("Use box_min and box_max instead.")
-    if box_min is not None and box_max is not None:
+        raise ValueError("box_constraint is deprecated. Use box_vector_min and box_vector_max instead.")
+    if box_vector_min is not None and box_vector_max is not None:
         sampler_steps.append(ApplyPeriodicBoundariesStep())
+
     return IterativeSampler(
-        initial_state=state,
+        sampler_state=init_state,
         sampler_steps=sampler_steps,
         stride=n_stride,
         n_burnin=n_burnin
@@ -205,68 +232,3 @@ class OpenMMToolsStep(SamplerStep):
     def _step(self, state):
         assert len(state.samples) == 1
         ...
-
-
-class ReplicaExchangeStep(SamplerStep):
-    def __init__(self, energy, temperature_scalings):
-        super().__init__()
-        # TODO
-        self.energy = energy
-        self.temperature_scalings = temperature_scalings
-        self.is_odd_step = False
-
-    def _step(self, state):
-        if state.energies is None:
-            # TODO: check if energies are up to date
-            state.energies = self.energy(*state.samples)[..., None]
-        replica_index_lower = torch.arange(self.is_odd_step, state.energies.shape[-1] - 1, 2)
-        replica_index_higher = replica_index_lower + 1
-        lower_energies = state.energies[..., replica_index_higher]
-        higher_energies = state.energies[..., replica_index_higher]
-        lower_temperatures = self.temperature_scalings[replica_index_lower]
-        higher_temperatures = self.temperature_scalings[replica_index_higher]
-        accept = metropolis_accept(
-            current_energies=lower_energies/lower_temperatures + higher_energies/higher_temperatures,
-            proposed_energies=lower_energies/higher_temperatures + higher_energies/lower_temperatures,
-            proposal_delta_log_prob=0.0
-        )
-        # perform swaps
-        # TODO
-        # rescale velocities
-        if state.momenta is not None:
-            # TODO
-            pass
-        return state
-
-
-def metropolis_accept(
-        current_energies,
-        proposed_energies,
-        proposal_delta_log_prob
-):
-    """Metropolis criterion.
-
-    Parameters
-    ----------
-    current_energies : torch.Tensor
-        Dimensionless energy of the current state x.
-    proposed_energies : torch.Tensor
-        Dimensionless energy of the proposed state x'.
-    proposal_delta_log_prob : Union[torch.Tensor, float]
-        The difference in log probabilities between the forward and backward proposal.
-        This corresponds to    log g(x'|x) - log g(x|x'), where g is the proposal distribution.
-
-    Returns
-    -------
-    accept : torch.Tensor
-        A boolean tensor that is True for accepted proposals and False otherwise
-    """
-    # log p(x') - log p(x) - (log g(x'|x) - log g(x|x'))
-    log_prob = -(proposed_energies - current_energies) - proposal_delta_log_prob
-    log_acceptance_ratio = torch.min(
-        torch.zeros_like(proposed_energies),
-        log_prob,
-    )
-    log_random = torch.rand_like(log_acceptance_ratio).log()
-    accept = log_acceptance_ratio >= log_random
-    return accept

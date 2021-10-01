@@ -28,7 +28,7 @@ def test_mcmc(ctx, proposal, temperatures):
     # and just sample longer
     state = SamplerState(samples=0.0*torch.ones(512, 3, 4, **ctx))
     mcmc = IterativeSampler(
-        initial_state=state,
+        sampler_state=state,
         sampler_steps=[
             MCMCStep(
                 target,

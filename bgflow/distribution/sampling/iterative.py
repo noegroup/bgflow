@@ -9,25 +9,24 @@ __all__ = ["SamplerState", "default_get_sample_hook", "IterativeSampler", "Sampl
 
 class SamplerState(dict):
     """Batch of states of iterative samplers.
-    Contains samples, energies (optional), momenta (optional), forces (optional)
+    Contains samples, energies (optional), velocities (optional), forces (optional)
     along an arbitrary number of batch dimensions.
     """
     def __init__(
             self,
             samples,
             energies=None,
-            momenta=None,
+            velocities=None,
             forces=None,
-            box_vector_min=None,
-            box_vector_max=None,
+            box_vectors=None,
             **kwargs
     ):
         super().__init__(
             samples=pack_tensor_in_list(samples),
             energies=energies,
-            momenta=pack_tensor_in_list(momenta),
+            velocities=pack_tensor_in_list(velocities),
             forces=pack_tensor_in_list(forces),
-            box_vectors=[box_vector_min, box_vector_max],
+            box_vectors=pack_tensor_in_list(box_vectors),
             **kwargs
         )
 
@@ -35,7 +34,11 @@ class SamplerState(dict):
         return self.__getitem__(item)
 
     def __setattr__(self, item, value):
-        return self.__setitem__(item, value)
+        if item in self:
+            return self.__setitem__(item, value)
+        else:
+            # we can only access attributes that already exist
+            raise AttributeError(f"SamplerState has no attribute {item}.")
 
 
 def default_get_sample_hook(state: SamplerState):
@@ -48,11 +51,11 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
 
     Parameters
     ----------
-    initial_state : SamplerState
-        The initial state for the sampler. The sampler state has an attribute `Samples`
-        which
+    sampler_state : SamplerState
+        The sampler state that this sampler operates on.
+        The state will be modified in-place by the sampler.
     sampler_steps : Sequence[SamplerStep]
-        A list of sampler_steps, which are applied
+        A list of sampler steps, which are applied
     get_sample_hook : Callable, optional
         A function that takes a sampler state and returns the samples
     progress_bar : Callable, optional
@@ -66,7 +69,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
     """
     def __init__(
             self,
-            initial_state,
+            sampler_state,
             sampler_steps,
             get_sample_hook=default_get_sample_hook,
             progress_bar=lambda x: x,
@@ -75,9 +78,9 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
             max_iterations=None
     ):
         super().__init__()
-        if isinstance(initial_state, torch.Tensor):
-            initial_state = SamplerState(samples=initial_state)
-        self.state = initial_state
+        if isinstance(sampler_state, torch.Tensor):
+            sampler_state = SamplerState(samples=sampler_state)
+        self.state = sampler_state
         self.sampler_steps = sampler_steps
         self.get_sample_hook = get_sample_hook
         self.progress_bar = progress_bar
