@@ -104,7 +104,7 @@ class MetropolizedReplayBuffer(DataSetSampler):
 
     @property
     def samples(self):
-        return *self.data[:-1],
+        return (*self.data[:-1],)
 
 
 class ReplayBufferHDF5Reporter:
