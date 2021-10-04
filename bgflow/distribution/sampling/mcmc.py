@@ -1,7 +1,6 @@
 """Markov-Chain Monte Carlo iterative sampling."""
 
 import warnings
-import copy
 
 import torch
 
@@ -42,10 +41,11 @@ class LatentProposal(torch.nn.Module):
 
     def forward(self, state):
         proposed_state = state.copy()  # shallow copy
-        *proposed_state.samples, logdet_inverse = self.flow.forward(*state.samples, inverse=True, **self.flow_kwargs)
+        *proposed_state.samples, logdet_inverse = self.flow.forward(
+            *state.samples, inverse=True, **self.flow_kwargs
+        )
         proposed_state, delta_log_prob = self.base_proposal.forward(proposed_state)
         *proposed_state.samples, logdet_forward = self.flow.forward(*proposed_state.samples)
-        # TODO: check if this needs to be the other way round   vvvv
         # g(x|x') = g(x|z') = p_z (F_{zx}^{-1}(x)  | z') * log | det J_{zx}^{-1} (x) |
         # log g(x|x') = log p(z|z') + logabsdet J_{zx}^-1 (x)
         # log g(x'|x) = log p(z'|z) + logabsdet J_{zx}^-1 (x')
@@ -62,10 +62,9 @@ class MCMCStep(SamplerStep):
         self.target_temperatures = target_temperatures
         self.proposal = proposal
 
-    def _step(self, state):
+    def _step(self, state: SamplerState):
         # compute current energies
-        if state.energies is None:
-            # TODO: check if energies are up to date
+        if state.needs_update(check_energies=True, check_forces=False):
             state.energies = self.target_energy.energy(*state.samples)[..., 0]
         # make a proposal
         proposed_state, delta_log_prob = self.proposal.forward(state)
@@ -76,129 +75,56 @@ class MCMCStep(SamplerStep):
             proposed_energies=proposed_energies/self.target_temperatures,
             proposal_delta_log_prob=delta_log_prob
         )
-        state.energies = torch.where(accept, proposed_energies, state.energies)
         state.samples = [
             torch.where(accept[..., None], new, old)
             for new, old in zip(proposed_state.samples, state.samples)
         ]
+        state.energies = torch.where(accept, proposed_energies, state.energies)
         return state
 
 
-class ApplyPeriodicBoundariesStep(SamplerStep):
-    def __init__(self):
-        super().__init__()
-
-    def _step(self, state):
-        if state.box_vectors is None:
-            raise ValueError("Sampler state has no box vectors.")
-        box_min, box_max = state.box_vectors
-        for i in range(len(state.samples)):
-            state.samples[i] = box_min + torch.fmod(state.samples[i], box_max - box_min)
-        return state
-
-
-def _GaussianMCMCSampler(
-        energy,
-        init_state=None,
-        temperature=1.,
-        noise_std=.1,
-        n_stride=1,
-        n_burnin=0,
-        box_constraint=None,
-        box_min=None, box_max=None
-):
-    state = SamplerState(samples=init_state, box_vector_min=box_min, box_vector_max=box_max)
-    sampler_steps = [
-        MCMCStep(
-            energy,
-            proposal=GaussianProposal(noise_std=noise_std),
-            target_temperatures=temperature,
-        ),
-    ]
-    if box_constraint is not None:
-        raise ValueError("Use box_min and box_max instead.")
-    if box_min is not None and box_max is not None:
-        sampler_steps.append(ApplyPeriodicBoundariesStep())
-    return IterativeSampler(
-        initial_state=state,
-        sampler_steps=sampler_steps,
-        stride=n_stride,
-        n_burnin=n_burnin
-    )
-
-
-class GaussianMCMCSampler(Energy, Sampler):
+class GaussianMCMCSampler(IterativeSampler):
     def __init__(
-        self,
-        energy,
-        init_state=None,
-        temperature=1.,
-        noise_std=.1,
-        n_stride=1,
-        n_burnin=0,
-        box_constraint=None
+            self,
+            energy,
+            init_state=None,
+            temperature=1.,
+            noise_std=.1,
+            stride=1,
+            n_burnin=0,
+            box_constraint=None,
+            return_hook=None,
+            **kwargs
     ):
-        super().__init__(energy.dim)
-        warnings.warn(
-            """This implementation of the MC sampler is deprecated. 
-Instead try using:
->>> IterativeSampler(
->>>     init_state, [MCMCStep(energy)]
->>> ) 
-""",
-            DeprecationWarning
+        # first, some things to ensure backwards compatibility
+        # apply the box constraint function whenever samples are set
+        set_samples_hook = lambda x: x
+        if box_constraint is not None:
+            set_samples_hook = lambda samples: [box_constraint(x) for x in samples]
+        init_state = init_state if isinstance(init_state, SamplerState) else SamplerState(init_state)
+        init_state.set_samples_hook = set_samples_hook
+        # flatten batches before returning
+        if return_hook is None:
+            return_hook = lambda samples: [
+                x.reshape(-1, *shape) for x, shape in zip(samples, energy.event_shapes)
+            ]
+        if "n_stride" in kwargs:
+            warnings.warn("keyword n_stride is deprecated, use stride instead", DeprecationWarning)
+            stride = kwargs["n_stride"]
+        # set up sampler
+        super().__init__(
+            init_state,
+            sampler_steps=[
+                MCMCStep(
+                    energy,
+                    proposal=GaussianProposal(noise_std=noise_std),
+                    target_temperatures=temperature,
+                ),
+            ],
+            stride=stride,
+            n_burnin=n_burnin,
+            return_hook=return_hook
         )
-        self._energy_function = energy
-        self._init_state = init_state
-        self._temperature = temperature
-        self._noise_std = noise_std
-        self._n_stride = n_stride
-        self._n_burnin = n_burnin
-        self._box_constraint = box_constraint
-        
-        self._reset(init_state)
-        
-    def _step(self):
-        shape = self._x_curr.shape
-        noise = self._noise_std * torch.Tensor(self._x_curr.shape).normal_()
-        x_prop = self._x_curr + noise
-        e_prop = self._energy_function.energy(x_prop, temperature=self._temperature)
-        e_diff = e_prop - self._e_curr
-        r = -torch.Tensor(x_prop.shape[0]).uniform_(0, 1).log().view(-1, 1)
-        acc = (r > e_diff).float().view(-1, 1)
-        rej = 1. - acc
-        self._x_curr = rej * self._x_curr + acc * x_prop
-        self._e_curr = rej * self._e_curr + acc * e_prop
-        if self._box_constraint is not None:
-            self._x_curr = self._box_constraint(self._x_curr)
-        self._xs.append(self._x_curr)
-        self._es.append(self._e_curr)
-        self._acc.append(acc.bool())
-        
-    def _reset(self, init_state):
-        self._x_curr = self._init_state
-        self._e_curr = self._energy_function.energy(self._x_curr, temperature=self._temperature)
-        self._xs = [self._x_curr]
-        self._es = [self._e_curr]
-        self._acc = [torch.zeros(init_state.shape[0]).bool()]
-        self._run(self._n_burnin)
-    
-    def _run(self, n_steps):
-        with torch.no_grad():
-            for i in range(n_steps):
-                self._step()
-    
-    def _sample(self, n_samples):
-        self._run(n_samples)
-        return torch.cat(self._xs[-n_samples::self._n_stride], dim=0)
-    
-    def _sample_accepted(self, n_samples):
-        samples = self._sample(n_samples)
-        acc = torch.cat(self._acc[-n_samples::self._n_stride], dim=0)
-        return samples[acc]
-    
-    def _energy(self, x):
-        return self._energy_function.energy(x)
 
 
 class ReplicaExchangeStep(SamplerStep):
@@ -210,8 +136,7 @@ class ReplicaExchangeStep(SamplerStep):
         self.is_odd_step = False
 
     def _step(self, state):
-        if state.energies is None:
-            # TODO: check if energies are up to date
+        if state.needs_update(check_energies=True, check_forces=False):
             state.energies = self.energy(*state.samples)[..., None]
         replica_index_lower = torch.arange(self.is_odd_step, state.energies.shape[-1] - 1, 2)
         replica_index_higher = replica_index_lower + 1
@@ -264,3 +189,78 @@ def metropolis_accept(
     log_random = torch.rand_like(log_acceptance_ratio).log()
     accept = log_acceptance_ratio >= log_random
     return accept
+
+
+class _GaussianMCMCSampler(Energy, Sampler):
+    def __init__(
+            self,
+            energy,
+            init_state=None,
+            temperature=1.,
+            noise_std=.1,
+            n_stride=1,
+            n_burnin=0,
+            box_constraint=None
+    ):
+        super().__init__(energy.dim)
+        warnings.warn(
+            """This implementation of the MC sampler is deprecated. 
+Instead try using:
+>>> IterativeSampler(
+>>>     init_state, [MCMCStep(energy)]
+>>> ) 
+""",
+            DeprecationWarning
+        )
+        self._energy_function = energy
+        self._init_state = init_state
+        self._temperature = temperature
+        self._noise_std = noise_std
+        self._n_stride = n_stride
+        self._n_burnin = n_burnin
+        self._box_constraint = box_constraint
+
+        self._reset(init_state)
+
+    def _step(self):
+        shape = self._x_curr.shape
+        noise = self._noise_std * torch.Tensor(self._x_curr.shape).normal_()
+        x_prop = self._x_curr + noise
+        e_prop = self._energy_function.energy(x_prop, temperature=self._temperature)
+        e_diff = e_prop - self._e_curr
+        r = -torch.Tensor(x_prop.shape[0]).uniform_(0, 1).log().view(-1, 1)
+        acc = (r > e_diff).float().view(-1, 1)
+        rej = 1. - acc
+        self._x_curr = rej * self._x_curr + acc * x_prop
+        self._e_curr = rej * self._e_curr + acc * e_prop
+        if self._box_constraint is not None:
+            self._x_curr = self._box_constraint(self._x_curr)
+        self._xs.append(self._x_curr)
+        self._es.append(self._e_curr)
+        self._acc.append(acc.bool())
+
+    def _reset(self, init_state):
+        self._x_curr = self._init_state
+        self._e_curr = self._energy_function.energy(self._x_curr, temperature=self._temperature)
+        self._xs = [self._x_curr]
+        self._es = [self._e_curr]
+        self._acc = [torch.zeros(init_state.shape[0]).bool()]
+        self._run(self._n_burnin)
+
+    def _run(self, n_steps):
+        with torch.no_grad():
+            for i in range(n_steps):
+                self._step()
+
+    def _sample(self, n_samples):
+        self._run(n_samples)
+        return torch.cat(self._xs[-n_samples::self._n_stride], dim=0)
+
+    def _sample_accepted(self, n_samples):
+        samples = self._sample(n_samples)
+        acc = torch.cat(self._acc[-n_samples::self._n_stride], dim=0)
+        return samples[acc]
+
+    def _energy(self, x):
+        return self._energy_function.energy(x)
+

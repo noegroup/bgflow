@@ -3,8 +3,9 @@ import pytest
 import torch
 from bgflow import (
     GaussianProposal, SamplerState, NormalDistribution,
-    IterativeSampler, MCMCStep, LatentProposal, SequentialFlow, BentIdentity
+    IterativeSampler, MCMCStep, LatentProposal, BentIdentity, GaussianMCMCSampler
 )
+from bgflow.distribution.sampling.mcmc import _GaussianMCMCSampler
 
 
 @pytest.mark.parametrize("proposal", [
@@ -46,3 +47,9 @@ def test_mcmc(ctx, proposal, temperatures):
     assert torch.allclose(std, temperatures.sqrt(), rtol=0.05, atol=0.0)
 
 
+def test_old_vs_new_mcmc(ctx):
+    energy = NormalDistribution(dim=4)
+    x0 = torch.randn(64, 4)
+    old_mc = _GaussianMCMCSampler(energy, x0)
+    new_mc = GaussianMCMCSampler(energy, x0)
+    assert old_mc.sample(10).shape == new_mc.sample(10).shape

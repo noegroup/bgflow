@@ -4,12 +4,12 @@ import torch
 from .base import Sampler
 from ...utils.types import pack_tensor_in_list
 
-__all__ = ["SamplerState", "default_get_sample_hook", "IterativeSampler", "SamplerStep"]
+__all__ = ["SamplerState", "default_extract_sample_hook", "IterativeSampler", "SamplerStep"]
 
 
 class SamplerState(dict):
     """Batch of states of iterative samplers.
-    Contains samples, energies (optional), momenta (optional), forces (optional)
+    Contains samples, energies (optional), velocities (optional), forces (optional)
     along an arbitrary number of batch dimensions.
     """
     def __init__(
@@ -18,8 +18,10 @@ class SamplerState(dict):
             energies=None,
             momenta=None,
             forces=None,
-            box_vector_min=None,
-            box_vector_max=None,
+            box_vectors=None,
+            set_samples_hook=lambda x: x,
+            _are_energies_up_to_date=False,
+            _are_forces_up_to_date=False,
             **kwargs
     ):
         super().__init__(
@@ -27,9 +29,31 @@ class SamplerState(dict):
             energies=energies,
             momenta=pack_tensor_in_list(momenta),
             forces=pack_tensor_in_list(forces),
-            box_vectors=[box_vector_min, box_vector_max],
+            box_vectors=pack_tensor_in_list(box_vectors),
             **kwargs
         )
+        self._are_energies_up_to_date = _are_energies_up_to_date
+        self._are_forces_up_to_date = _are_forces_up_to_date
+        self.set_samples_hook = set_samples_hook
+
+    @property
+    def samples(self):
+        return self["samples"]
+
+    @samples.setter
+    def samples(self, samples):
+        self["samples"] = self.set_samples_hook(pack_tensor_in_list(samples))
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if key in ["samples", "box_vectors"]:
+            # invalidate energies and forces
+            self._are_energies_up_to_date = False
+            self._are_forces_up_to_date = False
+        elif key == ["forces"]:
+            self._are_forces_up_to_date = True
+        elif key == ["energies"]:
+            self._are_energies_up_to_date = True
 
     def __getattr__(self, item):
         return self.__getitem__(item)
@@ -38,10 +62,25 @@ class SamplerState(dict):
         return self.__setitem__(item, value)
 
     def copy(self):
-        return SamplerState(*self)
+        return SamplerState(**self)
+
+    def needs_update(self, check_energies=True, check_forces=False):
+        """whether the energies and forces are outdated.
+        The criteria is that energies/forces were set after samples were set.
+        """
+        if check_energies and not self._are_energies_up_to_date:
+            return True
+        elif check_energies and self["energies"] is None:
+            return True
+        elif check_forces and not self._are_forces_up_to_date:
+            return True
+        elif check_forces and self["forces"] is None:
+            return True
+        else:
+            return False
 
 
-def default_get_sample_hook(state: SamplerState):
+def default_extract_sample_hook(state: SamplerState):
     return state.samples
 
 
@@ -56,33 +95,34 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
         which
     sampler_steps : Sequence[SamplerStep]
         A list of sampler_steps, which are applied
-    get_sample_hook : Callable, optional
-        A function that takes a sampler state and returns the samples
-    progress_bar : Callable, optional
-        A progress bar (e.g. tqdm.tqdm)
     stride : int, optional
         The number of steps to take between two samples.
     n_burnin : int, optional
         Burnin phase; number of samples for equilibration before starting to return samples.
     max_iterations : int,optional
         The maximum number of steps this sampler can take. None = infinitely many.
+    extract_sample_hook : Callable, optional
+        A function that takes a sampler state and returns the samples
+    progress_bar : Callable, optional
+        A progress bar (e.g. tqdm.tqdm)
     """
     def __init__(
             self,
             initial_state,
             sampler_steps,
-            get_sample_hook=default_get_sample_hook,
-            progress_bar=lambda x: x,
             stride=1,
             n_burnin=0,
-            max_iterations=None
+            max_iterations=None,
+            extract_sample_hook=default_extract_sample_hook,
+            progress_bar=lambda x: x,
+            **kwargs
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         if isinstance(initial_state, torch.Tensor):
             initial_state = SamplerState(samples=initial_state)
         self.state = initial_state
         self.sampler_steps = sampler_steps
-        self.get_sample_hook = get_sample_hook
+        self.extract_sample_hook = extract_sample_hook
         self.progress_bar = progress_bar
         self.stride = stride
         self.max_iterations = max_iterations
@@ -94,7 +134,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
         samples = None
         for _ in self.progress_bar(range(n_samples)):
             self.state = next(self)
-            new_samples = self.get_sample_hook(self.state)
+            new_samples = self.extract_sample_hook(self.state)
             if samples is None:
                 # add batch dim
                 samples = [copy.deepcopy(x[None, ...]) for x in new_samples]
