@@ -5,7 +5,7 @@ from .energy.base import Energy
 from .sampling.base import Sampler
 
 
-__all__ = ["NormalDistribution", "TruncatedNormalDistribution"]
+__all__ = ["NormalDistribution", "TruncatedNormalDistribution", "MeanFreeNormalDistribution"]
 
 
 def _is_symmetric_matrix(m):
@@ -236,3 +236,34 @@ class TruncatedNormalDistribution(Energy, Sampler):
 
     def __len__(self):
         return self._dim
+
+class MeanFreeNormalDistribution(Energy, Sampler):
+    """ Mean-free normal distribution. """
+
+    def __init__(self, dim, n_particles, std=1., two_event_dims=True):
+        if two_event_dims:
+            super().__init__([n_particles, dim // n_particles])
+        else:
+            super().__init__(dim)
+        self._two_event_dims = two_event_dims
+        self._dim = dim
+        self._n_particles = n_particles
+        self._spacial_dims = dim // n_particles
+        self.register_buffer("_std", torch.as_tensor(std))
+
+    def _energy(self, x):
+        x = self._remove_mean(x).view(-1, self._dim)
+        return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) / self._std ** 2
+
+    def sample(self, n_samples, temperature=1.):
+        x = torch.ones((n_samples, self._n_particles, self._spacial_dims), dtype=self._std.dtype,
+                         device=self._std.device).normal_(mean=0, std=self._std)
+        x = self._remove_mean(x)
+        if not self._two_event_dims:
+            x = x.view(-1, self._dim)
+        return x
+
+    def _remove_mean(self, x):
+        x = x.view(-1, self._n_particles, self._spacial_dims)
+        x = x - torch.mean(x, dim=1, keepdim=True)
+        return x
