@@ -43,6 +43,10 @@ class LatentProposal(torch.nn.Module):
         perturbed, delta_log_prob = self.base_proposal.forward(latent)
         *proposal, logdet_forward = self.flow.forward(*perturbed)
         # TODO: check if this needs to be the other way round   vvvv
+        # g(x|x') = g(x|z') = p_z (F_{zx}^{-1}(x)  | z') * log | det J_{zx}^{-1} (x) |
+        # log g(x|x') = log p(z|z') + logabsdet J_{zx}^-1 (x)
+        # log g(x'|x) = log p(z'|z) + logabsdet J_{zx}^-1 (x')
+        # log g(x'|x) - log g(x|x') = log p(z|z') - log p(z|z') - logabsdet_forward - logsabdet_inverse
         delta_log_prob = delta_log_prob - (logdet_forward + logdet_inverse)
         return list(proposal), delta_log_prob[:, 0]
 
@@ -189,22 +193,6 @@ Instead try using:
     
     def _energy(self, x):
         return self._energy_function.energy(x)
-
-
-class OpenMMToolsStep(SamplerStep):
-    def __init__(self, multi_state_sampler, energies: Sequence[OpenMMEnergy], temperatures):
-        import openmmtools
-        self.multi_state_sampler = multi_state_sampler
-        systems = [energy._openmm_energy_bridge._openmm_system for energy in energies]
-        tstates = [
-            openmmtools.states.ThermodynamicState(system, temperature)
-            for system, temperature in zip(systems, temperatures)
-        ]
-        # TODO: Michele, do we need this?
-
-    def _step(self, state):
-        assert len(state.samples) == 1
-        ...
 
 
 class ReplicaExchangeStep(SamplerStep):
