@@ -1,12 +1,13 @@
+"""Markov-Chain Monte Carlo iterative sampling."""
+
 import warnings
-from typing import Sequence
+import copy
 
 import torch
 
 from ..energy import Energy
 from .base import Sampler
 from .iterative import SamplerStep, IterativeSampler, SamplerState
-from ..energy.openmm import OpenMMEnergy
 
 
 __all__ = [
@@ -20,10 +21,11 @@ class GaussianProposal(torch.nn.Module):
         super().__init__()
         self._noise_std = noise_std
 
-    def forward(self, samples):
-        proposal = [x + torch.randn_like(x) * self._noise_std for x in samples]
+    def forward(self, state):
+        proposed_state = state.copy()  # shallow copy
+        proposed_state.samples = [x + torch.randn_like(x) * self._noise_std for x in state.samples]
         delta_log_prob = 0.0  # symmetric density
-        return proposal, delta_log_prob
+        return proposed_state, delta_log_prob
 
 
 class LatentProposal(torch.nn.Module):
@@ -38,17 +40,18 @@ class LatentProposal(torch.nn.Module):
         self.base_proposal = base_proposal
         self.flow_kwargs = flow_kwargs
 
-    def forward(self, samples):
-        *latent, logdet_inverse = self.flow.forward(*samples, inverse=True, **self.flow_kwargs)
-        perturbed, delta_log_prob = self.base_proposal.forward(latent)
-        *proposal, logdet_forward = self.flow.forward(*perturbed)
+    def forward(self, state):
+        proposed_state = state.copy()  # shallow copy
+        *proposed_state.samples, logdet_inverse = self.flow.forward(*state.samples, inverse=True, **self.flow_kwargs)
+        proposed_state, delta_log_prob = self.base_proposal.forward(proposed_state)
+        *proposed_state.samples, logdet_forward = self.flow.forward(*proposed_state.samples)
         # TODO: check if this needs to be the other way round   vvvv
         # g(x|x') = g(x|z') = p_z (F_{zx}^{-1}(x)  | z') * log | det J_{zx}^{-1} (x) |
         # log g(x|x') = log p(z|z') + logabsdet J_{zx}^-1 (x)
         # log g(x'|x) = log p(z'|z) + logabsdet J_{zx}^-1 (x')
         # log g(x'|x) - log g(x|x') = log p(z|z') - log p(z|z') - logabsdet_forward - logsabdet_inverse
         delta_log_prob = delta_log_prob - (logdet_forward + logdet_inverse)
-        return list(proposal), delta_log_prob[:, 0]
+        return proposed_state, delta_log_prob[:, 0]
 
 
 class MCMCStep(SamplerStep):
@@ -65,8 +68,8 @@ class MCMCStep(SamplerStep):
             # TODO: check if energies are up to date
             state.energies = self.target_energy.energy(*state.samples)[..., 0]
         # make a proposal
-        proposed_samples, delta_log_prob = self.proposal.forward(state.samples)
-        proposed_energies = self.target_energy.energy(*proposed_samples)[..., 0]
+        proposed_state, delta_log_prob = self.proposal.forward(state)
+        proposed_energies = self.target_energy.energy(*proposed_state.samples)[..., 0]
         # accept according to Metropolis criterion
         accept = metropolis_accept(
             current_energies=state.energies/self.target_temperatures,
@@ -74,7 +77,10 @@ class MCMCStep(SamplerStep):
             proposal_delta_log_prob=delta_log_prob
         )
         state.energies = torch.where(accept, proposed_energies, state.energies)
-        state.samples = [torch.where(accept[..., None], new, old) for new, old in zip(proposed_samples, state.samples)]
+        state.samples = [
+            torch.where(accept[..., None], new, old)
+            for new, old in zip(proposed_state.samples, state.samples)
+        ]
         return state
 
 

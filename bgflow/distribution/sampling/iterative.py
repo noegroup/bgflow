@@ -37,6 +37,9 @@ class SamplerState(dict):
     def __setattr__(self, item, value):
         return self.__setitem__(item, value)
 
+    def copy(self):
+        return SamplerState(*self)
+
 
 def default_get_sample_hook(state: SamplerState):
     return state.samples
