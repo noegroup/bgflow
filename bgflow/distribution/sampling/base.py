@@ -11,7 +11,8 @@ class Sampler(torch.nn.Module):
     ----------
     return_hook : Callable, optional
         A function to postprocess the samples. This can (for example) be used to
-        only return samples at a selected thermodynamic state of a replica exchange sampler.
+        only return samples at a selected thermodynamic state of a replica exchange sampler
+        or to combine the batch and sample dimension.
         The function takes a list of tensors and should return a list of tensors.
         Each tensor contains a batch of samples.
     """

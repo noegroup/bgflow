@@ -1,4 +1,13 @@
-"""Markov-Chain Monte Carlo iterative sampling."""
+"""Markov-Chain Monte Carlo iterative sampling.
+
+The `MCMCStep` takes a target energy and a proposal.
+Each proposal is a `torch.nn.Module`, whose `forward` method
+takes a `SamplerState` and proposes a modified state along
+with a `delta_log_prob` tensor. The `delta_log_prob` is the difference
+in log proposal probabilities. It is 0 for symmetric proposals
+`g(x|x') = g(x'|x)` and nonzero for asymmetric proposals,
+`delta_log_prob = log g(x'|x) - log g(x|x')`.
+"""
 
 import warnings
 
@@ -16,11 +25,18 @@ __all__ = [
 
 
 class GaussianProposal(torch.nn.Module):
+    """Normal distributed displacement of samples.
+
+    Parameters
+    ----------
+    noise_std : float, optional
+        The standard deviation by which samples are perturbed.
+    """
     def __init__(self, noise_std=0.1):
         super().__init__()
         self._noise_std = noise_std
 
-    def forward(self, state):
+    def forward(self, state: SamplerState) -> tuple[SamplerState, float]:
         proposed_state = state.copy()  # shallow copy
         proposed_state.samples = [x + torch.randn_like(x) * self._noise_std for x in state.samples]
         delta_log_prob = 0.0  # symmetric density
@@ -28,6 +44,17 @@ class GaussianProposal(torch.nn.Module):
 
 
 class LatentProposal(torch.nn.Module):
+    """Proposal in latent space.
+
+    Parameters
+    ----------
+    flow : bgflow.Flow
+        A bijective transform, where the latent-to-target direction is the forward direction.
+    base_proposal : torch.nn.Module, optional
+        The proposal that is to be performed in latent space.
+    flow_kwargs : dict, optional
+        Any additional keyword arguments to the flow.
+    """
     def __init__(
             self,
             flow,
@@ -39,7 +66,7 @@ class LatentProposal(torch.nn.Module):
         self.base_proposal = base_proposal
         self.flow_kwargs = flow_kwargs
 
-    def forward(self, state):
+    def forward(self, state: SamplerState) -> tuple[SamplerState, torch.Tensor]:
         proposed_state = state.copy()  # shallow copy
         *proposed_state.samples, logdet_inverse = self.flow.forward(
             *state.samples, inverse=True, **self.flow_kwargs
@@ -55,14 +82,23 @@ class LatentProposal(torch.nn.Module):
 
 
 class MCMCStep(SamplerStep):
-    """Metropolis Monte Carlo"""
+    """Metropolis Monte Carlo
+
+    Parameters
+    ----------
+    target_energy : bgflow.Energy
+    proposal : torch.nn.Module, optional
+    target_temperatures : Union[torch.Tensor, float]
+    n_steps : int
+        Number of steps to take at a time.
+    """
     def __init__(self, target_energy, proposal=GaussianProposal(), target_temperatures=1.0, n_steps=1):
         super().__init__(n_steps=n_steps)
         self.target_energy = target_energy
         self.target_temperatures = target_temperatures
         self.proposal = proposal
 
-    def _step(self, state: SamplerState):
+    def _step(self, state: SamplerState) -> SamplerState:
         # compute current energies
         if state.needs_update(check_energies=True, check_forces=False):
             state.energies = self.target_energy.energy(*state.samples)[..., 0]
@@ -84,10 +120,33 @@ class MCMCStep(SamplerStep):
 
 
 class GaussianMCMCSampler(IterativeSampler):
+    """This is a shortcut implementation of a simple Gaussian MCMC sampler
+    that is largely backward-compatible with the old implementation.
+    The only difference is that `GaussianMCMCSampler.sample(n)`
+    will propagate for `n` strides rather than `n` steps.
+
+    Parameters
+    ----------
+    energy : bgflow.Energy
+        The target energy.
+    init_state : Union[torch.Tensor, SamplerState]
+    temperature : Union[torch.Tensor, float], optional
+        The temperature scaling factor that is broadcasted along the batch dimension.
+    noise_std : float, optional
+        The Gaussian noise standard deviation.
+    stride : int, optional
+    n_burnin : int, optional
+    box_constraint : Callable, optional
+        The function is supplied as a `set_samples_hook` to the SamplerState so that
+        boundary conditions are applied to all samples.
+    return_hook : Callable, optional
+        The function is supplied as a `return_hook` to the Sampler. By default, we combine
+        the batch and sample dimensions to keep consistent with the old implementation.
+    """
     def __init__(
             self,
             energy,
-            init_state=None,
+            init_state,
             temperature=1.,
             noise_std=.1,
             stride=1,
@@ -127,38 +186,6 @@ class GaussianMCMCSampler(IterativeSampler):
         )
 
 
-class ReplicaExchangeStep(SamplerStep):
-    def __init__(self, energy, temperature_scalings):
-        super().__init__()
-        # TODO
-        self.energy = energy
-        self.temperature_scalings = temperature_scalings
-        self.is_odd_step = False
-
-    def _step(self, state):
-        if state.needs_update(check_energies=True, check_forces=False):
-            state.energies = self.energy(*state.samples)[..., None]
-        replica_index_lower = torch.arange(self.is_odd_step, state.energies.shape[-1] - 1, 2)
-        replica_index_higher = replica_index_lower + 1
-        lower_energies = state.energies[..., replica_index_higher]
-        higher_energies = state.energies[..., replica_index_higher]
-        lower_temperatures = self.temperature_scalings[replica_index_lower]
-        higher_temperatures = self.temperature_scalings[replica_index_higher]
-        accept = metropolis_accept(
-            current_energies=lower_energies/lower_temperatures + higher_energies/higher_temperatures,
-            proposed_energies=lower_energies/higher_temperatures + higher_energies/lower_temperatures,
-            proposal_delta_log_prob=0.0
-        )
-        ...
-        # perform swaps
-        # TODO (Michele)
-        # rescale velocities
-        if state.velocities is not None:
-            # TODO
-            pass
-        return state
-
-
 def metropolis_accept(
         current_energies,
         proposed_energies,
@@ -193,7 +220,7 @@ def metropolis_accept(
 
 
 class _GaussianMCMCSampler(Energy, Sampler):
-    """Deprecated implementation."""
+    """Deprecated legacy implementation."""
     def __init__(
             self,
             energy,
