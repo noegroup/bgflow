@@ -10,6 +10,7 @@ in log proposal probabilities. It is 0 for symmetric proposals
 """
 
 import warnings
+from typing import Tuple
 
 import torch
 
@@ -36,7 +37,7 @@ class GaussianProposal(torch.nn.Module):
         super().__init__()
         self._noise_std = noise_std
 
-    def forward(self, state: SamplerState) -> tuple[SamplerState, float]:
+    def forward(self, state: SamplerState) -> Tuple[SamplerState, float]:
         proposed_state = state.copy()  # shallow copy
         proposed_state.samples = [x + torch.randn_like(x) * self._noise_std for x in state.samples]
         delta_log_prob = 0.0  # symmetric density
@@ -66,7 +67,7 @@ class LatentProposal(torch.nn.Module):
         self.base_proposal = base_proposal
         self.flow_kwargs = flow_kwargs
 
-    def forward(self, state: SamplerState) -> tuple[SamplerState, torch.Tensor]:
+    def forward(self, state: SamplerState) -> Tuple[SamplerState, torch.Tensor]:
         proposed_state = state.copy()  # shallow copy
         *proposed_state.samples, logdet_inverse = self.flow.forward(
             *state.samples, inverse=True, **self.flow_kwargs
