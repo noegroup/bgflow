@@ -58,7 +58,7 @@ class MetropolizedReplayBuffer(DataSetSampler):
         self.temperature_scaling = temperature_scaling
 
     def _sample(self, n_samples, *args, **kwargs):
-        *samples, energies = super()._sample(n_samples, *args, **kwargs)
+        *samples, _ = super()._sample(n_samples, *args, **kwargs)
         return unpack_tensor_tuple(samples)
 
     def update(self, *proposals, energies=None, proposal_energies=None, forced_update=False):

@@ -7,6 +7,10 @@ from ...utils.types import pack_tensor_in_list
 __all__ = ["SamplerState", "default_extract_sample_hook", "IterativeSampler", "SamplerStep"]
 
 
+def default_set_samples_hook(x):
+    return x
+
+
 class SamplerState(dict):
     """Batch of states of iterative samplers.
     Contains samples, energies (optional), velocities (optional), forces (optional)
@@ -19,7 +23,7 @@ class SamplerState(dict):
             momenta=None,
             forces=None,
             box_vectors=None,
-            set_samples_hook=lambda x: x,
+            set_samples_hook=default_set_samples_hook,
             _are_energies_up_to_date=False,
             _are_forces_up_to_date=False,
             **kwargs
@@ -61,6 +65,14 @@ class SamplerState(dict):
     def __setattr__(self, item, value):
         return self.__setitem__(item, value)
 
+    def __eq__(self, other):
+        return (
+            super().__eq__(other)
+            and self._are_energies_up_to_date == other._are_energies_up_to_date
+            and self._are_forces_up_to_date == other._are_forces_up_to_date
+            and self.set_samples_hook == other.set_samples_hook
+        )
+
     def copy(self):
         return SamplerState(**self)
 
@@ -81,6 +93,7 @@ class SamplerState(dict):
 
 
 def default_extract_sample_hook(state: SamplerState):
+    """Default extraction of samples from a SamplerState."""
     return state.samples
 
 

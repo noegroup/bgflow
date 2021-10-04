@@ -40,7 +40,7 @@ def unpack_tensor_tuple(seq):
         if len(seq) == 1:
             return seq[0]
         else:
-            return *seq,
+            return (*seq, )
 
 
 def pack_tensor_in_tuple(seq):
@@ -48,7 +48,7 @@ def pack_tensor_in_tuple(seq):
     if isinstance(seq, torch.Tensor):
         return seq,
     elif isinstance(seq, Iterable):
-        return *seq,
+        return (*seq, )
     else:
         return seq
 

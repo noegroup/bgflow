@@ -149,10 +149,11 @@ class ReplicaExchangeStep(SamplerStep):
             proposed_energies=lower_energies/higher_temperatures + higher_energies/lower_temperatures,
             proposal_delta_log_prob=0.0
         )
+        ...
         # perform swaps
-        # TODO
+        # TODO (Michele)
         # rescale velocities
-        if state.momenta is not None:
+        if state.velocities is not None:
             # TODO
             pass
         return state
@@ -192,6 +193,7 @@ def metropolis_accept(
 
 
 class _GaussianMCMCSampler(Energy, Sampler):
+    """Deprecated implementation."""
     def __init__(
             self,
             energy,
