@@ -100,6 +100,8 @@ plt.hist2d(
 
 * [Basic Boltzmann Generator example](https://github.com/noegroup/bgflow/blob/master/notebooks/example.ipynb)
 * [Training a Boltzmann Generator for Alanine Dipeptide](https://github.com/noegroup/bgflow/blob/master/notebooks/alanine_dipeptide_basics.ipynb)
+* [Equivariant kernel flow example](https://github.com/noegroup/bgflow/blob/master/notebooks/example_equivariant_nODE.ipynb)
+* [Equivariant Real NVP flow example](https://github.com/noegroup/bgflow/blob/master/notebooks/example_equivariant_RNVP.ipynb)
 
 ***
 
