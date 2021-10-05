@@ -41,8 +41,8 @@ class InternalCoordinateMarginals(dict):
             self[bonds] = TruncatedNormalDistribution(
                 mu=bond_mu*torch.ones(current_dims[bonds], **ctx),
                 sigma=bond_sigma*torch.ones(current_dims[bonds], **ctx),
-                lower_bound=torch.tensor(bond_lower, **ctx),
-                upper_bound=torch.tensor(bond_upper, **ctx),
+                lower_bound=torch.as_tensor(bond_lower, **ctx),
+                upper_bound=torch.as_tensor(bond_upper, **ctx),
             )
 
         # angles
@@ -50,8 +50,8 @@ class InternalCoordinateMarginals(dict):
             self[angles] = TruncatedNormalDistribution(
                 mu=angle_mu*torch.ones(current_dims[angles], **ctx),
                 sigma=angle_sigma*torch.ones(current_dims[angles], **ctx),
-                lower_bound=torch.tensor(angle_lower, **ctx),
-                upper_bound=torch.tensor(angle_upper, **ctx),
+                lower_bound=torch.as_tensor(angle_lower, **ctx),
+                upper_bound=torch.as_tensor(angle_upper, **ctx),
             )
 
         # angles
@@ -127,20 +127,20 @@ class InternalCoordinateMarginals(dict):
                 bond_mu = bond_mu[constrained_bond_indices]
                 bond_sigma = bond_sigma[constrained_bond_indices]
             self[bonds] = TruncatedNormalDistribution(
-                mu=torch.tensor(bond_mu, **self.ctx),
-                sigma=torch.tensor(bond_sigma, **self.ctx),
-                lower_bound=torch.tensor(bond_lower, **self.ctx),
-                upper_bound=torch.tensor(bond_upper, **self.ctx),
+                mu=torch.as_tensor(bond_mu, **self.ctx),
+                sigma=torch.as_tensor(bond_sigma, **self.ctx),
+                lower_bound=torch.as_tensor(bond_lower, **self.ctx),
+                upper_bound=torch.as_tensor(bond_upper, **self.ctx),
             )
 
         if angles in self.current_dims:
             angle_mu = angle_values.mean(axis=0)
             angle_sigma = angle_values.std(axis=0)
             self[angles] = TruncatedNormalDistribution(
-                mu=torch.tensor(angle_mu, **self.ctx),
-                sigma=torch.tensor(angle_sigma, **self.ctx),
-                lower_bound=torch.tensor(angle_lower, **self.ctx),
-                upper_bound=torch.tensor(angle_upper, **self.ctx),
+                mu=torch.as_tensor(angle_mu, **self.ctx),
+                sigma=torch.as_tensor(angle_sigma, **self.ctx),
+                lower_bound=torch.as_tensor(angle_lower, **self.ctx),
+                upper_bound=torch.as_tensor(angle_upper, **self.ctx),
             )
 
         torsion_values = torsion_values.detach().cpu().numpy()

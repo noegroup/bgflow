@@ -14,6 +14,8 @@ from bgflow import (
     CDFTransform, TruncatedNormalDistribution, ProductDistribution, NormalDistribution
 )
 
+pytestmark = pytest.mark.filterwarnings("ignore:singular ")
+
 
 def test_builder_api(ala2, ctx):
     z_matrix = ala2.system.z_matrix

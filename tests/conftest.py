@@ -21,7 +21,7 @@ from bgflow import MixedCoordinateTransformation, OpenMMBridge, OpenMMEnergy
 )
 def device(request):
     """Run a test case for all available devices."""
-    return request.param
+    return torch.device(request.param)
 
 
 @pytest.fixture(params=[torch.float32, torch.float64])
