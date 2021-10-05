@@ -24,8 +24,6 @@ An MCMC sampler is set up as follows
 
 """
 
-import copy
-
 import torch
 from .base import Sampler
 from ...utils.types import pack_tensor_in_list
