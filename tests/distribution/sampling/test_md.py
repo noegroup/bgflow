@@ -13,7 +13,7 @@ def test_openmm_sampling(ctx):
     sampler_state = SamplerState(
         samples=torch.randn(batchsize, 6, **ctx),
         velocities=pack_tensor_in_list(torch.randn(batchsize, 6, **ctx)),
-        box_vectors=torch.arange(2, batchsize+2)[:, None, None] * torch.eye(3, **ctx)
+        box_vectors=torch.arange(2, batchsize+2, **ctx)[:, None, None] * torch.eye(3, **ctx)
     )
 
     sampler = IterativeSampler(
