@@ -102,13 +102,14 @@ class MCMCStep(SamplerStep):
     def _step(self, state: SamplerState) -> SamplerState:
         # compute current energies
         if state.needs_update(check_energies=True, check_forces=False):
-            state.energies = self.target_energy.energy(*state.samples)[..., 0]
+            state.energies = self.target_energy.energy(*state.samples)
+        current_energies = state.energies[..., 0]
         # make a proposal
         proposed_state, delta_log_prob = self.proposal.forward(state)
         proposed_energies = self.target_energy.energy(*proposed_state.samples)[..., 0]
         # accept according to Metropolis criterion
         accept = metropolis_accept(
-            current_energies=state.energies/self.target_temperatures,
+            current_energies=current_energies/self.target_temperatures,
             proposed_energies=proposed_energies/self.target_temperatures,
             proposal_delta_log_prob=delta_log_prob
         )
@@ -116,7 +117,7 @@ class MCMCStep(SamplerStep):
             torch.where(accept[..., None], new, old)
             for new, old in zip(proposed_state.samples, state.samples)
         ]
-        state.energies = torch.where(accept, proposed_energies, state.energies)
+        state.energies = torch.where(accept, proposed_energies, current_energies)[...,None]
         return state
 
 

@@ -223,7 +223,7 @@ class IterativeSampler(Sampler, torch.utils.data.Dataset):
             new_samples = self.extract_sample_hook(self.state)
             if samples is None:
                 # add batch dim
-                samples = [copy.deepcopy(x[None, ...]) for x in new_samples]
+                samples = [x[None, ...].clone() for x in new_samples]
             else:
                 for i, (x, new) in enumerate(zip(samples, new_samples)):
                     samples[i] = torch.cat((x, new[None, ...]), dim=0)
