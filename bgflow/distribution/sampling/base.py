@@ -62,5 +62,5 @@ class Sampler(torch.nn.Module):
                 new_samples = self.sample(min(n_samples-len(samples[0]), batch_size), *args, **kwargs)
                 new_samples = pack_tensor_in_list(new_samples)
                 for i, new in enumerate(new_samples):
-                    samples[i] = torch.cat([samples[i], new], dim=0)
+                    samples[i] = torch.cat([samples[i], new.detach().cpu()], dim=0)
         return unpack_tensor_tuple(samples)

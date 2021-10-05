@@ -8,6 +8,7 @@ from bgflow import (
     NormalDistribution, ProductDistribution
 )
 from bgflow.utils import pack_tensor_in_tuple
+from bgflow.utils.types import as_numpy
 
 
 @pytest.mark.parametrize("use_product", [True, False])
@@ -99,8 +100,8 @@ def test_hdf5_file(tmpdir, ctx, use_product):
     assert np.allclose(buffer_energies.astype(np.float), energies2.detach().cpu().numpy().astype(np.float))
 
     # items
-    assert np.allclose(hdf5[0]["energy"], energies[0].numpy())
-    assert np.allclose(hdf5[12:14]["energy"], energies2[2:4].numpy())
+    assert np.allclose(hdf5[0]["energy"], as_numpy(energies[0]))
+    assert np.allclose(hdf5[12:14]["energy"], as_numpy(energies2[2:4]))
 
     hdf5.close()
 
