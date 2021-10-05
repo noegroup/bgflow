@@ -20,11 +20,16 @@ from bgflow.nn.flow.crd_transform.ic import (
     decompose_z_matrix,
 )
 
+
 # TODO Floating point precision is brittle!
 #      Revision should include numerically more robust
 #      implementations - especially for angular values.
 
-torch.set_default_tensor_type = torch.DoubleTensor
+TOLERANCES = {
+    torch.device("cuda:0"): {torch.float32: (1e-2, 1e-3), torch.float64: (1e-6, 1e-6)},
+    torch.device("cpu"): {torch.float32: (1e-4, 1e-4), torch.float64: (1e-7, 1e-7)}
+}
+
 
 N_REPETITIONS = 50
 
@@ -158,7 +163,10 @@ def test_dist_deriv(device, dtype, atol=1e-6, rtol=1e-5):
     assert torch.allclose(J, -x2 / sqrt2)
 
 
-def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
+def test_angle_deriv(device, dtype):
+    atol = 1e-2 if dtype is torch.float32 and device is torch.device("cuda:0") else 1e-4
+    rtol = 1e-3 if dtype is torch.float32 else 1e-5
+    atol, rtol = TOLERANCES[device][dtype]
     np.random.seed(123122)
     # check 45 deg angle
     x1 = torch.Tensor([0, 1, 0]).to(device, dtype)
@@ -166,7 +174,7 @@ def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
     x3 = torch.Tensor([1, 1, 0]).to(device, dtype)
     a, J = angle_deriv(x1, x2, x3)
     assert torch.allclose(a, torch.tensor(deg2rad(45.0), device=device, dtype=dtype))
-    assert torch.allclose(J, torch.Tensor([-1, 0, 0]).to(device, dtype))
+    assert torch.allclose(J, torch.Tensor([-1, 0, 0]).to(device, dtype), atol=atol)
 
     # check random angle
     for i in range(N_REPETITIONS):
@@ -203,7 +211,8 @@ def test_angle_deriv(device, dtype, atol=1e-4, rtol=1e-4):
         assert torch.allclose(J, J_ref, atol=atol, rtol=rtol)
 
 
-def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
+def test_torsion_deriv(device, dtype):
+    atol, rtol = TOLERANCES[device][dtype]
     np.random.seed(202422)
     for i in range(N_REPETITIONS):
 
@@ -238,7 +247,8 @@ def test_torsion_deriv(device, dtype, atol=1e-6, rtol=1e-5):
         assert torch.allclose(J, J_ref, atol=atol, rtol=rtol)
 
 
-def test_ic2xyz_deriv(device, dtype, atol=1e-5, rtol=1e-4):
+def test_ic2xyz_deriv(device, dtype): 
+    atol, rtol = TOLERANCES[device][dtype]
     np.random.seed(202982)
     for i in range(N_REPETITIONS):
 
@@ -267,11 +277,13 @@ def test_ic2xyz_deriv(device, dtype, atol=1e-5, rtol=1e-4):
         # reconstruct 4th point
         x4_new, J = ic2xyz_deriv(x3, x2, x1, d, a, t)
 
-        assert torch.allclose(x4_new, x4, atol=atol, rtol=rtol)
+        assert torch.allclose(x4_new, x4, atol=atol)
 
 
 # TODO: floating point precision is terrible...
-def test_global_ic_transform(device, dtype, atol=1e-4, rtol=1e-4):
+@pytest.mark.filterwarnings("ignore:singular division")
+def test_global_ic_transform(device, dtype):
+    atol, rtol = TOLERANCES[device][dtype]
     torch.manual_seed(1)
 
     if dtype == torch.float32:
@@ -505,13 +517,14 @@ def test_decompose_z_matrix(alanine_ics):
 
 
 def test_global_ic_inversion(ctx, alanine_ics):
+    tol = 1e-3 if ctx["dtype"] is torch.float32 else 1e-5
     _, z_matrix, _, positions = alanine_ics
     ic = GlobalInternalCoordinateTransformation(z_matrix).to(**ctx)
     positions = torch.tensor(positions, **ctx)
     *out, dlogp = ic.forward(positions)
     positions2, dlogp2 = ic.forward(*out, inverse=True)
-    assert torch.allclose(positions, positions2)
-    assert torch.allclose(dlogp, -dlogp2)
+    assert torch.allclose(positions, positions2, atol=tol)
+    assert torch.allclose(dlogp, -dlogp2, atol=tol)
 
 
 def test_relative_ic_inversion(ctx, alanine_ics):

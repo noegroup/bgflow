@@ -4,6 +4,9 @@ import torch
 from bgflow.distribution import Energy
 
 
+pytestmark = pytest.mark.filterwarnings("ignore:This Energy instance is defined on multidimensional events")
+
+
 class DummyEnergy(Energy):
     def __init__(self, dim):
         super().__init__(dim=dim)
