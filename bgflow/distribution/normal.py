@@ -42,6 +42,20 @@ class NormalDistribution(Energy, Sampler):
         if self._has_cov:
             self._log_Z += 1 / 2 * self._log_diag.sum()  # * torch.slogdet(cov)[1]
 
+    @staticmethod
+    def _eigen(cov):
+        try:
+            diag, rot = torch.linalg.eig(cov)
+            assert (diag.imag.abs() < 1e-6).all(), "`cov` possesses complex valued eigenvalues"
+            diag, rot = diag.real, rot.real
+        except AttributeError:
+            # old implementation
+            diag, rot = torch.eig(cov, eigenvectors=True)
+            assert (diag[:,1].abs() < 1e-6).all(), "`cov` possesses complex valued eigenvalues"
+            diag = diag[:,0] 
+        return diag + 1e-6, rot
+
+            
     def set_cov(self, cov):
         self._has_cov = True
         assert (
@@ -51,11 +65,7 @@ class NormalDistribution(Energy, Sampler):
             cov.shape[0] == self.dim and cov.shape[1] == self.dim
         ), "`cov` must have dimension `[dim, dim]`"
         assert _is_symmetric_matrix, "`cov` must be symmetric"
-        diag, rot = torch.eig(cov, eigenvectors=True)
-        assert torch.allclose(
-            diag[:, 1], torch.zeros_like(diag[:, 1])
-        ), "`cov` possesses complex valued eigenvalues"
-        diag = diag[:, 0] + 1e-6
+        diag, rot = self._eigen(cov)
         assert torch.all(diag > 0), "`cov` must be positive definite"
         self.register_buffer("_log_diag", diag.log().unsqueeze(0))
         self.register_buffer("_rot", rot)
