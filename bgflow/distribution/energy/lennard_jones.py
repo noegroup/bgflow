@@ -39,7 +39,7 @@ class LennardJonesPotential(Energy):
         else:
             super().__init__(dim)
         self._n_particles = n_particles
-        self._n_dims = self.dim // n_particles
+        self._n_dims = dim // n_particles
 
         self._eps = eps
         self._rm = rm
@@ -47,27 +47,25 @@ class LennardJonesPotential(Energy):
         self._oscillator_scale = oscillator_scale
 
     def _energy(self, x):
-        n_batch = x.shape[0]
-        x = x.view(n_batch, self._n_particles, self._n_dims)
+        batch_shape = x.shape[:-len(self.event_shape)]
+        x = x.view(*batch_shape, self._n_particles, self._n_dims)
 
         dists = distances_from_vectors(
             distance_vectors(x.view(-1, self._n_particles, self._n_dims))
         )
-        dists = dists.view(-1, 1)
 
         lj_energies = lennard_jones_energy_torch(dists, self._eps, self._rm)
-        lj_energies = lj_energies.view(n_batch, -1).sum(-1) / 2
+        lj_energies = lj_energies.view(*batch_shape, -1).sum(dim=-1) / 2
 
         if self.oscillator:
-            osc_energies = 0.5 * self._remove_mean(x).pow(2).sum(-1).sum(-1)
-            return lj_energies + osc_energies * self._oscillator_scale
-        else:
-            return lj_energies
+            osc_energies = 0.5 * self._remove_mean(x).pow(2).sum(dim=(-2, -1)).view(*batch_shape)
+            lj_energies = lj_energies + osc_energies * self._oscillator_scale
+
+        return lj_energies[:, None]
 
     def _remove_mean(self, x):
         x = x.view(-1, self._n_particles, self._n_dims)
-        x = x - torch.mean(x, dim=1, keepdim=True)
-        return x.view(-1, self._n_particles, self._n_dims)
+        return x - torch.mean(x, dim=1, keepdim=True)
 
     def _energy_numpy(self, x):
         x = torch.Tensor(x)

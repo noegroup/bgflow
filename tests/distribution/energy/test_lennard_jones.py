@@ -26,20 +26,21 @@ def test_lennard_jones_potential(oscillator, two_event_dims):
         two_event_dims=two_event_dims
     )
 
-    data3d = torch.tensor([[[-1., 0, 0], [1, 0, 0]]])
+    batch_shape = (5, 7)
+    data3d = torch.tensor([[[[-1., 0, 0], [1, 0, 0]]]]).repeat(*batch_shape, 1, 1)
     if not two_event_dims:
-        data3d = data3d.view(-1, 6)
-    energy3d = torch.tensor([- eps])
+        data3d = data3d.view(*batch_shape, 6)
+    energy3d = torch.tensor([[- eps]]).repeat(*batch_shape)
     if oscillator:
         energy3d += 1
     lj_energy_3d = lj_pot.energy(data3d)
-    assert torch.allclose(energy3d, lj_energy_3d)
+    assert torch.allclose(energy3d[:, None], lj_energy_3d)
 
     # 3 particles in 2D
     lj_pot = LennardJonesPotential(
         dim=6, n_particles=3, eps=eps, rm=1.0,
         oscillator=oscillator, oscillator_scale=1.,
-        two_event_dims = two_event_dims
+        two_event_dims=two_event_dims
     )
     h = np.sqrt(0.75)
     data2d = torch.tensor([[[0, 2 / 3 * h], [0.5, -1 / 3 * h], [-0.5, -1 / 3 * h]]], dtype=torch.float)
@@ -51,4 +52,4 @@ def test_lennard_jones_potential(oscillator, two_event_dims):
     lj_energy_2d = lj_pot.energy(data2d)
     assert torch.allclose(energy2d, lj_energy_2d)
     lj_energy2d_np = lj_pot._energy_numpy(data2d)
-    assert energy2d.numpy() == pytest.approx(lj_energy2d_np, abs=1e-6)
+    assert energy2d[:, None].numpy() == pytest.approx(lj_energy2d_np, abs=1e-6)
