@@ -1,19 +1,21 @@
+import warnings
 
 import pytest
 import torch
 from bgflow import (
     GaussianProposal, SamplerState, NormalDistribution,
-    IterativeSampler, MCMCStep, LatentProposal, SequentialFlow, BentIdentity
+    IterativeSampler, MCMCStep, LatentProposal, BentIdentity, GaussianMCMCSampler
 )
+from bgflow.distribution.sampling.mcmc import _GaussianMCMCSampler
 
 
 @pytest.mark.parametrize("proposal", [
     GaussianProposal(noise_std=0.2),
     LatentProposal(
-        flow=SequentialFlow([BentIdentity()]*2),
-        base_proposal=GaussianProposal(noise_std=0.2))
+        flow=BentIdentity(),
+        base_proposal=GaussianProposal(noise_std=0.4))
 ])
-@pytest.mark.parametrize("temperatures", [torch.ones(3), torch.arange(1, 4)])
+@pytest.mark.parametrize("temperatures", [torch.ones(3), torch.arange(1, 10, 100)])
 def test_mcmc(ctx, proposal, temperatures):
     """sample from a normal distribution with mu=3 and std=1,2,3 using MCMC"""
     try:
@@ -36,13 +38,36 @@ def test_mcmc(ctx, proposal, temperatures):
                 target_temperatures=temperatures
             )
         ],
-        stride=5,
+        stride=2,
         n_burnin=100,
         progress_bar=progress_bar
     )
-    samples = mcmc.sample(200)
-    assert samples.mean().item() == pytest.approx(3.0, abs=0.1)
+    samples = mcmc.sample(100)
+    assert torch.allclose(samples.mean(dim=(0, 1, 3)), torch.tensor([3.0]*3, **ctx), atol=0.1)
     std = samples.std(dim=(0, 1, 3))
-    assert torch.allclose(std, temperatures.sqrt(), atol=0.2)
+    assert torch.allclose(std, temperatures.sqrt(), rtol=0.05, atol=0.0)
 
 
+def test_old_vs_new_mcmc(ctx):
+    energy = NormalDistribution(dim=4)
+    x0 = torch.randn(64, 4)
+
+    def constraint(x):
+        return torch.fmod(x, torch.ones(4))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        old_mc = _GaussianMCMCSampler(
+            energy, x0, n_stride=10, n_burnin=10,
+            noise_std=0.3, box_constraint=constraint
+        )
+    new_mc = GaussianMCMCSampler(
+        energy, x0, stride=10, n_burnin=10,
+        noise_std=0.3, box_constraint=constraint
+    )
+    old_samples = old_mc.sample(1000)
+    new_samples = new_mc.sample(100)
+    assert old_samples.shape == (6400, 4)
+    assert old_samples.shape == new_samples.shape
+    assert old_samples.mean().item() == pytest.approx(new_samples.mean().item(), abs=1e-2)
+    assert old_samples.std().item() == pytest.approx(new_samples.std().item(), abs=1e-1)

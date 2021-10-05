@@ -50,7 +50,7 @@ class SequentialFlow(Flow):
         for block in blocks:
             *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
             dlogp += ddlogp
-        return *xs, dlogp
+        return (*xs, dlogp)
 
     def trigger(self, function_name):
         """
