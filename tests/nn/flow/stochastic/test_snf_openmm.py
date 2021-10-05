@@ -17,7 +17,10 @@ try:
 except ImportError:
     _OPENMM_INSTALLED = False
 
-pytestmark = pytest.mark.skipif(not _OPENMM_INSTALLED, reason="requires openmm and openmmtools")
+pytestmark = [
+    pytest.mark.skipif(not _OPENMM_INSTALLED, reason="requires openmm and openmmtools"),
+    pytest.mark.filterwarnings("ignore:The current implementation of the BrownianPathProbabilityIntegrator")
+]
 
 
 def _copy_integrator(integrator):
