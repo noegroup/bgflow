@@ -138,6 +138,8 @@ class ReferenceSystemTransformation(Flow):
     ----------
     normalize_angles : bool
         bring angles and torsions into (0, 1) interval
+    orientation : "euler" | "basis"
+        which representation is used to represent the global orientation of the system
     eps : float
         numerical epsilon used to enforce manifold boundaries
     raise_warnings : bool
@@ -168,6 +170,10 @@ class ReferenceSystemTransformation(Flow):
         --------
         x0: torch.Tensor
             origin of the system
+        orientation: torch.Tensor
+            if orientation is "basis" returns [3,3] matrix 
+            if orientation is "euler" returns tuple with three Euler angles (alpha, beta, gamma)
+                their range are in [0, pi] if unnormalized and [0, 1] if normalized
         d01: torch.Tensor
         d12: torch.Tensor
         a012: torch.Tensor
@@ -199,6 +205,7 @@ class ReferenceSystemTransformation(Flow):
 
         return (x0, orientation, d01, d12, a012, dlogp)
 
+
     def _inverse(self, x0, orientation, d01, d12, a012, *args, **kwargs):
         """
         Parameters:
@@ -220,7 +227,6 @@ class ReferenceSystemTransformation(Flow):
         --------
         x0, x1, x2: torch.Tensor
             xyz coordinates of the first three points
-
         dlogp: torch.Tensor
             log det jacobian of the transformation
         """

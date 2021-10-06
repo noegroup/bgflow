@@ -1,5 +1,6 @@
-import torch
+
 import numpy as np
+import torch
 
 from ..utils.types import is_list_or_tuple
 

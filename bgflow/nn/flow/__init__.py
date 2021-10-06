@@ -9,7 +9,6 @@ from .root_finding import *
 from .affine import *
 from .coupling import *
 from .funnel import FunnelFlow
-from .spline import LinearSplineFlow
 from .kronecker import KroneckerProductFlow
 from .sequential import SequentialFlow
 from .inverted import *

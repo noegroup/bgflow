@@ -1,3 +1,4 @@
 from .distribution import *
 from .nn import *
-from .bg import BoltzmannGenerator
+from .factory import *
+from .bg import *
