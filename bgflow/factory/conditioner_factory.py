@@ -81,13 +81,14 @@ def _affine_out_dims(what, shape_info, transformer_kwargs={}):
 
 def _mixture_out_dims(what, shape_info, transformer_kwargs={}, num_components=8):
     dim_out1 = num_components * shape_info.dim_all(what)
+    # TODO distinguish between different trasnsformers
     return {"weights": dim_out1, "alphas": dim_out1, "params": 3*dim_out1}
 
 
 CONDITIONER_OUT_DIMS = {
     bg.ConditionalSplineTransformer: _spline_out_dims,
     bg.AffineTransformer: _affine_out_dims,
-    #TODO bg.MixtureCDFTransformer: _mixture_out_dims
+    bg.MixtureCDFTransformer: _mixture_out_dims
 }
 
 
