@@ -1,8 +1,7 @@
 import torch
 import pytest
 import numpy as np
-from bgflow.distribution import NormalDistribution, TruncatedNormalDistribution
-
+from bgflow.distribution import NormalDistribution, TruncatedNormalDistribution, MeanFreeNormalDistribution
 
 @pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("n_samples", [10000])
@@ -46,7 +45,8 @@ def test_energy(device, dtype):
 
 @pytest.mark.parametrize("assert_range", [True, False])
 @pytest.mark.parametrize("sampling_method", ["icdf", "rejection"])
-def test_truncated_normal_distribution_tensors(device, dtype, assert_range, sampling_method):
+@pytest.mark.parametrize("is_learnable", [True, False])
+def test_truncated_normal_distribution_tensors(device, dtype, assert_range, sampling_method, is_learnable):
     """Test with tensor parameters."""
     dim = 5
     tn = TruncatedNormalDistribution(
@@ -56,7 +56,12 @@ def test_truncated_normal_distribution_tensors(device, dtype, assert_range, samp
         upper_bound=4 * torch.ones(dim,),
         assert_range=assert_range,
         sampling_method=sampling_method,
+        is_learnable=is_learnable
     ).to(device, dtype)
+    if is_learnable:
+        assert len(list(tn.parameters())) > 0
+    else:
+        assert len(list(tn.parameters())) == 0
     n_samples = 10
     samples = tn.sample(n_samples)
     assert samples.shape == (n_samples, dim)
@@ -75,3 +80,20 @@ def test_truncated_normal_distribution_tensors(device, dtype, assert_range, samp
         energies = tn.energy(samples)
         assert torch.all(torch.isinf(energies[:5, 0]))
         assert torch.all(torch.isfinite(energies[5:, 0]))
+
+
+@pytest.mark.parametrize("two_event_dims", [True, False])
+def test_mean_free_normal_distribution(two_event_dims, device):
+    mean_free_normal_distribution = MeanFreeNormalDistribution(dim=8, n_particles=4, two_event_dims=two_event_dims)
+    mean_free_normal_distribution.to(device)
+    n_samples = 10000
+    threshold = 1e-5
+    samples = mean_free_normal_distribution.sample(n_samples)
+    if two_event_dims:
+        assert samples.shape == (n_samples, 4, 2)
+        mean_deviation = samples.mean(dim=(1, 2))
+        assert torch.all(mean_deviation.abs() < threshold)
+    else:
+        assert samples.shape == (n_samples, 8)
+        mean_deviation = samples.mean(dim=(1))
+        assert torch.all(mean_deviation.abs() < threshold)

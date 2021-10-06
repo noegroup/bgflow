@@ -19,11 +19,10 @@ This framework provides:
     * [Neural Ordinary Differential Equations](https://arxiv.org/abs/1806.07366)
     * [Stochastic Normalizing Flows](https://arxiv.org/abs/2002.06707)
     * [Equivariant flows](https://arxiv.org/abs/2006.02425)
-    * [Temperature-steerable flows](https://arxiv.org/abs/2012.00429)
+    * [Temperature-steerable flows](https://arxiv.org/abs/2108.01590)
     * [P4Inv Linear Flows](https://arxiv.org/abs/2010.07033)
     * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
     * [Augmented Normalizing Flows](https://arxiv.org/abs/2002.07101)
-    * [Neural Spline Flows](https://arxiv.org/abs/1906.04032)
 * Other sampling methods
     * Markov-Chain Monte Carlo
     * Molecular dynamics
@@ -100,6 +99,8 @@ plt.hist2d(
 
 * [Basic Boltzmann Generator example](https://github.com/noegroup/bgflow/blob/master/notebooks/example.ipynb)
 * [Training a Boltzmann Generator for Alanine Dipeptide](https://github.com/noegroup/bgflow/blob/master/notebooks/alanine_dipeptide_basics.ipynb)
+* [Equivariant kernel flow example](https://github.com/noegroup/bgflow/blob/master/notebooks/example_equivariant_nODE.ipynb)
+* [Equivariant Real NVP flow example](https://github.com/noegroup/bgflow/blob/master/notebooks/example_equivariant_RNVP.ipynb)
 
 ***
 
@@ -126,6 +127,7 @@ pytest
 ***
 ## [Dependencies](#dependencies)
 * Mandatory
+  * [einops](https://github.com/arogozhnikov/einops/)
   * [pytorch](https://github.com/pytorch/pytorch)
   * [numpy](https://github.com/numpy/numpy)
   * [matplotlib](https://github.com/matplotlib/matplotlib)

@@ -8,9 +8,9 @@ from bgflow.distribution import TorchDistribution, NormalDistribution
 def _random_mean_cov(dim, device, dtype):
     mean = 10*torch.randn(dim).to(device, dtype)
     # generate a symmetric, positive definite matrix
-    Q = torch.qr(torch.randn(dim, dim))[0]
-    D = torch.diag(0.1+torch.rand(dim))
-    cov = (Q.t()@D@Q).to(device, dtype)
+    cov = torch.triu(torch.rand(dim, dim))
+    cov = cov + cov.T + dim * torch.diag(torch.ones(dim))
+    cov = cov.to(device, dtype)
     return mean, cov
 
 

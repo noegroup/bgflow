@@ -56,7 +56,7 @@ class ConditionalSplineTransformer(Transformer):
         """
         super().__init__()
         self._params_net = params_net
-        self._is_circular = torch.tensor(is_circular, dtype=torch.bool)
+        self._is_circular = torch.as_tensor(is_circular, dtype=torch.bool)
         self._left = left
         self._right = right
         self._bottom = bottom

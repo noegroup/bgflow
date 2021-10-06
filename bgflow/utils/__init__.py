@@ -1,16 +1,13 @@
-from .train import IndexBatchIterator 
+from .train import IndexBatchIterator, LossReporter
 from .shape import tile
-from .types import (
-    is_list_or_tuple,
-    assert_numpy
-)
-from .autograd import (
-    brute_force_jacobian, 
-    brute_force_jacobian_trace 
-)
+from .types import *
+from .autograd import *
+
 from .geometry import (
     distance_vectors,
-    distances_from_vectors
+    distances_from_vectors,
+    remove_mean,
+    compute_distances
 )
 from .rbf_kernels import (
     kernelize_with_rbf,
@@ -18,3 +15,4 @@ from .rbf_kernels import (
     RbfEncoder,
     rbf_kernels
 )
+
