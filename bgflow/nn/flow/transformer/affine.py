@@ -12,7 +12,6 @@ class AffineTransformer(Transformer):
         self,
         shift_transformation=None,
         scale_transformation=None,
-        dt=1.0,
         init_downscale=1.0,
         preserve_volume=False,
     ):
@@ -21,8 +20,6 @@ class AffineTransformer(Transformer):
         self._scale_transformation = scale_transformation
         self._log_alpha = torch.nn.Parameter(torch.zeros(1) - init_downscale)
         self._preserve_volume = preserve_volume
-        assert dt > 0
-        self._dt = dt
 
     def _get_mu_and_log_sigma(self, x, y, *cond):
         if self._shift_transformation is not None:
