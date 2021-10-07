@@ -110,9 +110,9 @@ class SamplerState(dict):
             # invalidate energies and forces
             self._are_energies_up_to_date = False
             self._are_forces_up_to_date = False
-        elif key == ["forces"]:
+        elif key == "forces":
             self._are_forces_up_to_date = True
-        elif key == ["energies"]:
+        elif key == "energies":
             self._are_energies_up_to_date = True
 
     def __getattr__(self, item):
