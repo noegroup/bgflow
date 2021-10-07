@@ -54,15 +54,9 @@ class IndexBatchIterator(object):
         return self.__next__()
 
 
-def linlogcut(vals, high_val=1e3, max_val=1e9, inplace=False):
-    if not inplace:
-        vals = vals.clone()
-    filt = vals >= high_val
-    diff = vals[filt] - high_val
-    vals[filt] = torch.min(
-        high_val + torch.log(1 + diff), max_val * torch.ones_like(diff)
-    )
-    return vals
+def linlogcut(vals, high_val=1e3, max_val=1e9):
+    cut = torch.where(vals >= high_val, high_val + torch.log(1 + vals - high_val), vals)
+    return cut.clamp(min=None, max=max_val)
 
 
 class _ClipGradient(torch.autograd.Function):
