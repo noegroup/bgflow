@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 import torch
@@ -27,25 +29,36 @@ def test_bar(ctx, method):
     assert uncertainty.item() < 1e-2
 
 
-@pytest.mark.parametrize("method", [
-    "torch",
-    "pymbar"
-])
-def test_bar_no_convergence(ctx, method):
-    pytest.importorskip("pymbar")
-    dim = 1
-    energy1 = NormalDistribution(dim, mean=-1e20*torch.ones(dim, **ctx))
-    energy2 = NormalDistribution(dim, mean=1e20*torch.ones(dim, **ctx))
-    samples1 = energy1.sample(5)
-    samples2 = energy2.sample(5)
+@pytest.mark.parametrize("method", ["torch", "pymbar"])
+@pytest.mark.parametrize("warn", [True, False])
+def test_bar_no_convergence(ctx, method, warn):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        pytest.importorskip("pymbar")
+        dim = 1
+        energy1 = NormalDistribution(dim, mean=-1e20*torch.ones(dim, **ctx))
+        energy2 = NormalDistribution(dim, mean=1e20*torch.ones(dim, **ctx))
+        samples1 = energy1.sample(5)
+        samples2 = energy2.sample(5)
 
-    free_energy, uncertainty = bennett_acceptance_ratio(
-        forward_work=(1.0 + energy2.energy(samples1)) - energy1.energy(samples1),
-        reverse_work=energy1.energy(samples2) - (1.0 + energy2.energy(samples2)),
-        implementation=method
-    )
-    assert np.isnan(free_energy.item())
-    assert np.isnan(uncertainty.item())
+        if warn:
+            # test if warning is raised
+            with pytest.warns(UserWarning, match="BAR could not"):
+                free_energy, uncertainty = bennett_acceptance_ratio(
+                    forward_work=(1.0 + energy2.energy(samples1)) - energy1.energy(samples1),
+                    reverse_work=energy1.energy(samples2) - (1.0 + energy2.energy(samples2)),
+                    implementation=method,
+                    warn=warn
+                )
+        else:
+            free_energy, uncertainty = bennett_acceptance_ratio(
+                forward_work=(1.0 + energy2.energy(samples1)) - energy1.energy(samples1),
+                reverse_work=energy1.energy(samples2) - (1.0 + energy2.energy(samples2)),
+                implementation=method,
+                warn=warn
+            )
+        assert np.isnan(free_energy.item())
+        assert np.isnan(uncertainty.item())
 
 
 def test_bar_uncertainty(ctx):

@@ -58,7 +58,7 @@ def bennett_acceptance_ratio(
         relative_tolerance=relative_tolerance
     )
     if torch.isnan(delta_f) and warn:
-        warnings.warn("BAR could not compute free energy differences due to poor overlap. Returns nan.")
+        warnings.warn("BAR could not compute free energy differences due to poor overlap. Returns nan.", UserWarning)
     return delta_f, uncertainty
 
 
