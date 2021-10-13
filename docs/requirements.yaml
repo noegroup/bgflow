@@ -1,0 +1,12 @@
+name: docs
+channels:
+dependencies:
+    # Base depends
+  - python
+  - pip
+
+
+
+    # Pip-only installs
+  #- pip:
+
