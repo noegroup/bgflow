@@ -12,6 +12,7 @@ Welcome to bgflow's documentation!
 
    getting_started
    api
+   api/flows.rst
 
 
 
