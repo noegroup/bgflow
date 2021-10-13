@@ -13,6 +13,7 @@ __all__ = ["bennett_acceptance_ratio"]
 def bennett_acceptance_ratio(
         forward_work: torch.Tensor,
         reverse_work: torch.Tensor,
+        compute_uncertainty: bool = True,
         implementation: str = "torch",
         maximum_iterations: int = 500,
         relative_tolerance: float = 1e-12,
@@ -27,6 +28,8 @@ def bennett_acceptance_ratio(
         The dimensionless energy difference u1(x_k) - u0(x_k) computed on samples x_k ~ e^-u0.
     forward_work : torch.Tensor
         The dimensionless energy difference u0(x_k) - u1(x_k) computed on samples x_k ~ e^-u1.
+    compute_uncertainty : bool
+        Whether uncertainties on the free energy estimate are computed or not.
     implementation : str
         Either "torch" (the native python implementation) or "pymbar" (the original reference implementation)
     maximum_iterations : int
@@ -41,7 +44,7 @@ def bennett_acceptance_ratio(
     delta_f : torch.Tensor
         The estimate for the free energy difference (shape [])
     uncertainty : torch.Tensor
-        An estimate for the uncertainty of delta_f (shape [])
+        An estimate for the uncertainty of delta_f (shape []). None if no uncertainties are computed.
 
     Notes
     -----
@@ -54,6 +57,7 @@ def bennett_acceptance_ratio(
     delta_f, uncertainty = implementations[implementation](
         forward_work,
         reverse_work,
+        compute_uncertainty=compute_uncertainty,
         maximum_iterations=maximum_iterations,
         relative_tolerance=relative_tolerance
     )
@@ -62,30 +66,36 @@ def bennett_acceptance_ratio(
     return delta_f, uncertainty
 
 
-def _bennett_accpetance_ratio_pymbar(forward_work, reverse_work, maximum_iterations=500, relative_tolerance=1e-12):
+def _bennett_accpetance_ratio_pymbar(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
     """pymbar reference implementation"""
     import pymbar
     ctx = {"device": forward_work.device, "dtype": forward_work.dtype}
     f = io.StringIO()
     with redirect_stdout(f):
-        delta_f, uncertainty = pymbar.BAR(
+        result = pymbar.BAR(
             w_F=as_numpy(forward_work),
             w_R=as_numpy(reverse_work),
             return_dict=False,
+            compute_uncertainty=compute_uncertainty,
             maximum_iterations=maximum_iterations,
             relative_tolerance=relative_tolerance
         )
-    if "poor overlap" in f.getvalue() or np.isnan(uncertainty):
+
+    if "poor overlap" in f.getvalue() or (compute_uncertainty and np.isnan(result[1])):
         return torch.tensor(np.nan, **ctx), torch.tensor(np.nan, **ctx)
-    return torch.tensor(delta_f, **ctx), torch.tensor(uncertainty, **ctx)
+    if compute_uncertainty:
+        return torch.tensor(result[0], **ctx), torch.tensor(result[1], **ctx)
+    else:
+        return torch.tensor(result, **ctx), None
 
 
-def _bennett_accpetance_ratio_torch(forward_work, reverse_work, maximum_iterations=500, relative_tolerance=1e-12):
+def _bennett_accpetance_ratio_torch(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
     """native implementation in pytorch"""
     with torch.no_grad():
         estimate, uncertainty = _bar(
             forward_work,
             reverse_work,
+            compute_uncertainty=compute_uncertainty,
             maximum_iterations=maximum_iterations,
             relative_tolerance=relative_tolerance
         )

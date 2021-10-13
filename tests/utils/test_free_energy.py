@@ -3,16 +3,14 @@ import warnings
 import numpy as np
 import pytest
 import torch
-from bgflow.distribution import NormalDistribution, UniformDistribution
+from bgflow.distribution import NormalDistribution
 
 from bgflow.utils.free_energy import bennett_acceptance_ratio
 
 
-@pytest.mark.parametrize("method", [
-    "torch",
-    "pymbar"
-])
-def test_bar(ctx, method):
+@pytest.mark.parametrize("method", ["torch", "pymbar"])
+@pytest.mark.parametrize("compute_uncertainty", [True, False])
+def test_bar(ctx, method, compute_uncertainty):
     pytest.importorskip("pymbar")
     dim = 1
     energy1 = NormalDistribution(dim, mean=torch.zeros(dim, **ctx))
@@ -23,10 +21,14 @@ def test_bar(ctx, method):
     free_energy, uncertainty = bennett_acceptance_ratio(
         forward_work=(1.0 + energy2.energy(samples1)) - energy1.energy(samples1),
         reverse_work=energy1.energy(samples2) - (1.0 + energy2.energy(samples2)),
-        implementation=method
+        implementation=method,
+        compute_uncertainty=compute_uncertainty
     )
     assert free_energy.item() == pytest.approx(1., abs=1e-2)
-    assert uncertainty.item() < 1e-2
+    if compute_uncertainty:
+        assert uncertainty.item() < 1e-2
+    else:
+        assert uncertainty is None
 
 
 @pytest.mark.parametrize("method", ["torch", "pymbar"])
