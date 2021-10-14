@@ -91,15 +91,14 @@ def _bennett_acceptance_ratio_pymbar(forward_work, reverse_work, compute_uncerta
 
 def _bennett_acceptance_ratio_torch(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
     """native implementation in pytorch"""
-    with torch.no_grad():
-        estimate, uncertainty = _bar(
-            forward_work,
-            reverse_work,
-            compute_uncertainty=compute_uncertainty,
-            maximum_iterations=maximum_iterations,
-            relative_tolerance=relative_tolerance
-        )
-        return estimate, uncertainty
+    estimate, uncertainty = _bar(
+        forward_work,
+        reverse_work,
+        compute_uncertainty=compute_uncertainty,
+        maximum_iterations=maximum_iterations,
+        relative_tolerance=relative_tolerance
+    )
+    return estimate, uncertainty
 
 
 def _bar_zero(forward_work, reverse_work, delta_f):
