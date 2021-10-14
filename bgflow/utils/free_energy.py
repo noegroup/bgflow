@@ -26,7 +26,7 @@ def bennett_acceptance_ratio(
     ----------
     forward_work : torch.Tensor
         The dimensionless energy difference u1(x_k) - u0(x_k) computed on samples x_k ~ e^-u0.
-    forward_work : torch.Tensor
+    reverse_work : torch.Tensor
         The dimensionless energy difference u0(x_k) - u1(x_k) computed on samples x_k ~ e^-u1.
     compute_uncertainty : bool
         Whether uncertainties on the free energy estimate are computed or not.
@@ -51,8 +51,8 @@ def bennett_acceptance_ratio(
     The free energy difference is the negative log ratio of the partitions functions.
     """
     implementations = {
-        "torch": _bennett_accpetance_ratio_torch,
-        "pymbar": _bennett_accpetance_ratio_pymbar
+        "torch": _bennett_acceptance_ratio_torch,
+        "pymbar": _bennett_acceptance_ratio_pymbar
     }
     delta_f, uncertainty = implementations[implementation](
         forward_work,
@@ -66,7 +66,7 @@ def bennett_acceptance_ratio(
     return delta_f, uncertainty
 
 
-def _bennett_accpetance_ratio_pymbar(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
+def _bennett_acceptance_ratio_pymbar(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
     """pymbar reference implementation"""
     import pymbar
     ctx = {"device": forward_work.device, "dtype": forward_work.dtype}
@@ -89,7 +89,7 @@ def _bennett_accpetance_ratio_pymbar(forward_work, reverse_work, compute_uncerta
         return torch.tensor(result, **ctx), None
 
 
-def _bennett_accpetance_ratio_torch(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
+def _bennett_acceptance_ratio_torch(forward_work, reverse_work, compute_uncertainty=True, maximum_iterations=500, relative_tolerance=1e-12):
     """native implementation in pytorch"""
     with torch.no_grad():
         estimate, uncertainty = _bar(
