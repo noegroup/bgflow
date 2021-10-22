@@ -18,7 +18,8 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 
 import bgflow
-
+import torch
+from sphinx.application import Sphinx
 
 # -- Project information -----------------------------------------------------
 
@@ -51,6 +52,8 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.extlinks',
 ]
+
+
 
 autosummary_generate = True
 napoleon_google_docstring = False
@@ -172,3 +175,17 @@ texinfo_documents = [
 
 
 # -- Extension configuration -------------------------------------------------
+
+
+
+# -- Skip troch.nn.Module
+Foo = torch.nn.Module()
+method_list = [func for func in dir(Foo) if callable(getattr(Foo, func))]
+
+def skip(app, what, name, obj, skip, options):
+    if name in method_list:
+        return True
+    return None
+
+def setup(app: Sphinx):
+    app.connect("autodoc-skip-member", skip)

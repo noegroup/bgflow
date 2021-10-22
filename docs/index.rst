@@ -1,18 +1,25 @@
-.. bgflow documentation master file, created by
-   sphinx-quickstart on Thu Mar 15 13:55:56 2018.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
-Welcome to bgflow's documentation!
+Bgflow
 =========================================================
+Bgflow is a pytorch framework for Boltzmann Generators and other sampling methods.
+
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
+   installation.rst
    getting_started
-   api
-   api/flows.rst
+
+
+.. toctree::
+   :maxdepth: 4
+   :caption: API docs:
+
+   api/bgflow.rst
+
+..   api/flows.rst
+..   api/bg.rst
+
 
 
 
