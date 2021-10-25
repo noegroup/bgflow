@@ -299,10 +299,16 @@ class ReplayBufferHDF5File:
             raise AttributeError("You have to write the header first.")
         pos = self.stats_size
         stat_group = self.dataset["stats"]
-        stat_group["min_energy"][pos] = energies.min().item()
-        stat_group["mean_energy"][pos] = energies.mean().item()
-        stat_group["max_energy"][pos] = energies.max().item()
-        stat_group["median_energy"][pos] = energies.median().item()
+        if len(energies) > 0:
+            stat_group["min_energy"][pos] = energies.min().item()
+            stat_group["mean_energy"][pos] = energies.mean().item()
+            stat_group["max_energy"][pos] = energies.max().item()
+            stat_group["median_energy"][pos] = energies.median().item()
+        else:
+            stat_group["min_energy"][pos] = np.nan
+            stat_group["mean_energy"][pos] = np.nan
+            stat_group["max_energy"][pos] = np.nan
+            stat_group["median_energy"][pos] = np.nan
         stat_group["buffer_size"][pos] = len(energies)
         stat_group["n_proposed"][pos] = n_proposed
         stat_group["n_accepted"][pos] = n_accepted
