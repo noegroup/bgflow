@@ -150,8 +150,8 @@ class ReplayBufferHDF5Reporter:
             forced_update=forced_update
         )
 
-    def _write_stats(self, energies, n_proposed):
-        self.file.write_stats(energies, step=self.step, n_proposed=n_proposed, n_accepted=len(energies))
+    def _write_stats(self, energies, n_proposed, n_accepted):
+        self.file.write_stats(energies, step=self.step, n_proposed=n_proposed, n_accepted=n_accepted)
 
     def write(self, *samples, buffer, energies, indices, forced_update, n_proposed):
         """Write one step.
@@ -172,7 +172,7 @@ class ReplayBufferHDF5Reporter:
             Number of samples that were proposed to the buffer in this step.
         """
         self._write_accepted_samples(*samples, energies=energies, indices=indices, forced_update=forced_update)
-        self._write_stats(energies, n_proposed)
+        self._write_stats(buffer.energies, n_proposed, n_accepted=len(energies))
         if self.step % self.write_buffer_interval == 0:
             self.write_buffer(*buffer.samples, energies=buffer.energies)
         self.step += 1
@@ -299,16 +299,10 @@ class ReplayBufferHDF5File:
             raise AttributeError("You have to write the header first.")
         pos = self.stats_size
         stat_group = self.dataset["stats"]
-        if len(energies) > 0:
-            stat_group["min_energy"][pos] = energies.min().item()
-            stat_group["mean_energy"][pos] = energies.mean().item()
-            stat_group["max_energy"][pos] = energies.max().item()
-            stat_group["median_energy"][pos] = energies.median().item()
-        else:
-            stat_group["min_energy"][pos] = np.nan
-            stat_group["mean_energy"][pos] = np.nan
-            stat_group["max_energy"][pos] = np.nan
-            stat_group["median_energy"][pos] = np.nan
+        stat_group["min_energy"][pos] = energies.min().item()
+        stat_group["mean_energy"][pos] = energies.mean().item()
+        stat_group["max_energy"][pos] = energies.max().item()
+        stat_group["median_energy"][pos] = energies.median().item()
         stat_group["buffer_size"][pos] = len(energies)
         stat_group["n_proposed"][pos] = n_proposed
         stat_group["n_accepted"][pos] = n_accepted
