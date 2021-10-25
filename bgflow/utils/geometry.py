@@ -3,11 +3,14 @@ from .shape import tile
 
 
 def distance_vectors(x, remove_diagonal=True):
-    """
-    Computes the matrix `r` of all distance vectors between
+    r"""
+    Computes the matrix :math:`r` of all distance vectors between
     given input points where
 
-        ``r_{ij} = x_{i} - x{j}``
+    .. math::
+        r_{ij} = x_{i} - y_{j}
+
+    as used in :footcite:`Khler2020EquivariantFE`
 
     Parameters
     ----------
@@ -30,6 +33,10 @@ def distance_vectors(x, remove_diagonal=True):
     Examples
     --------
     TODO
+
+    References
+    ----------
+    .. footbibliography::
     """
     r = tile(x.unsqueeze(2), 2, x.shape[1])
     r = r - r.permute([0, 2, 1, 3])
@@ -44,8 +51,8 @@ def distance_vectors_v2(x, y, remove_diagonal=True):
     """
     Computes the matrix `r` of all distance vectors between
     given input points x and y where
-
-        ``r_{ij} = x_{i} - y{j}``
+    .. math::
+        r_{ij} = x_{i} - y_{j}
 
     Parameters
     ----------

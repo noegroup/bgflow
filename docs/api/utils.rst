@@ -2,9 +2,8 @@ Utils
 =======
 
 
-.. autosummary::
-   :toctree: _autosummary
-   :template: module.rst
-   :recursive:
+.. automodule:: bgflow.utils
 
-   bgflow.utils
+.. toctree::
+   :maxdepth: 1
+

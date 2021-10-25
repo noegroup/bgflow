@@ -106,7 +106,8 @@ class KernelDynamics(torch.nn.Module):
         if compute_divergence:
             divergence = (d * d_force_mag + self._n_dimensions * force_mag).view(n_batch, -1).sum(dim=-1)
             divergence = divergence.unsqueeze(-1)
+            return forces, -divergence
         else:
-            divergence = None
+            return forces
 
-        return forces, -divergence
+

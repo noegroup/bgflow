@@ -20,6 +20,10 @@ sys.path.insert(0, os.path.abspath('..'))
 import bgflow
 import torch
 from sphinx.application import Sphinx
+import sphinxcontrib.bibtex
+import sphinx.util
+
+
 
 # -- Project information -----------------------------------------------------
 
@@ -51,9 +55,15 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.extlinks',
+    'sphinxcontrib.bibtex',
+    'sphinxcontrib.katex',
 ]
 
+sphinxlog_adapter = sphinx.util.logging.getLogger(sphinxcontrib.bibtex.__name__)
+bibtex_bibfiles = ['literature.bib']
 
+# prerender tex
+katex_prerender = False
 
 autosummary_generate = True
 napoleon_google_docstring = False

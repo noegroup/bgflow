@@ -1,3 +1,22 @@
+"""
+.. currentmodule: bgflow.utils
+
+===============================================================================
+Distance utilities
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: module.rst
+
+    distance_vectors
+    distances_from_vectors
+    remove_mean
+    compute_distances
+
+
+"""
+
 from .train import IndexBatchIterator, LossReporter
 from .shape import tile
 from .types import *
@@ -15,4 +34,3 @@ from .rbf_kernels import (
     RbfEncoder,
     rbf_kernels
 )
-
