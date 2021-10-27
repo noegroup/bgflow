@@ -37,6 +37,7 @@ def distance_vectors(x, remove_diagonal=True):
     References
     ----------
     .. footbibliography::
+
     """
     r = tile(x.unsqueeze(2), 2, x.shape[1])
     r = r - r.permute([0, 2, 1, 3])

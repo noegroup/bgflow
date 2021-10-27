@@ -15,6 +15,7 @@
 # Incase the project was not installed
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('..'))
 
 import bgflow
@@ -22,8 +23,6 @@ import torch
 from sphinx.application import Sphinx
 import sphinxcontrib.bibtex
 import sphinx.util
-
-
 
 # -- Project information -----------------------------------------------------
 
@@ -36,7 +35,6 @@ author = 'noegroup'
 version = ''
 # The full version, including alpha/beta/rc tags
 release = ''
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -57,7 +55,19 @@ extensions = [
     'sphinx.ext.extlinks',
     'sphinxcontrib.bibtex',
     'sphinxcontrib.katex',
+    'sphinx_gallery.gen_gallery',
+    'sphinx_nbexamples',
 ]
+
+sphinx_gallery_conf = {
+    'examples_dirs': ['../examples/general_examples', '../examples/datasets'],  # path to your example scripts
+    'gallery_dirs': ['examples', 'datasets']  # path to where to save gallery generated output
+}
+
+example_gallery_config = {
+    'examples_dirs': ['../examples/nb_examples'],  # path to your example scripts
+    'gallery_dirs': ['nb_examples']  # path to where to save gallery generated output
+}
 
 sphinxlog_adapter = sphinx.util.logging.getLogger(sphinxcontrib.bibtex.__name__)
 bibtex_bibfiles = ['literature.bib']
@@ -97,7 +107,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'default'
 
-
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
@@ -132,7 +141,6 @@ html_static_path = ['_static']
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'bgflowdoc'
 
-
 # -- Options for LaTeX output ------------------------------------------------
 
 latex_elements = {
@@ -161,7 +169,6 @@ latex_documents = [
      'bgflow', 'manual'),
 ]
 
-
 # -- Options for manual page output ------------------------------------------
 
 # One entry per manual page. List of tuples
@@ -170,7 +177,6 @@ man_pages = [
     (master_doc, 'bgflow', 'bgflow Documentation',
      [author], 1)
 ]
-
 
 # -- Options for Texinfo output ----------------------------------------------
 
@@ -183,19 +189,19 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
-
 # -- Extension configuration -------------------------------------------------
-
 
 
 # -- Skip troch.nn.Module
 Foo = torch.nn.Module()
 method_list = [func for func in dir(Foo) if callable(getattr(Foo, func))]
 
+
 def skip(app, what, name, obj, skip, options):
     if name in method_list:
         return True
     return None
+
 
 def setup(app: Sphinx):
     app.connect("autodoc-skip-member", skip)
