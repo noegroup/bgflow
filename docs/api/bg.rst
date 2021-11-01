@@ -2,11 +2,11 @@ Boltzmann Generators
 ====================
 
 
-.. currentmodule:: bgflow.bg
+.. currentmodule:: bgflow
 .. autosummary::
    :toctree: generated/
-   :template: module.rst
+   :template: class.rst
 
-    BoltzmannGenerator
+    bg.BoltzmannGenerator
 
 
