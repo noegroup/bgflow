@@ -11,7 +11,7 @@ Bgflow is a pytorch framework for Boltzmann Generators and other sampling method
    examples.rst
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 1
    :caption: API docs:
 
    api/bg.rst
