@@ -7,7 +7,7 @@ Distance utilities
 
 .. autosummary::
     :toctree: generated/
-    :template: module.rst
+    :template: class.rst
 
     distance_vectors
     distances_from_vectors

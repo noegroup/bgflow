@@ -2,9 +2,7 @@ Samplers
 ========
 
 
-.. autosummary::
-   :toctree: _autosummary
-   :template: module.rst
-   :recursive:
+.. automodule:: bgflow.distribution.sampling
 
-   bgflow.distribution.sampling
+.. toctree::
+   :maxdepth: 1

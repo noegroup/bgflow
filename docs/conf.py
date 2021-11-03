@@ -141,6 +141,17 @@ html_static_path = ['_static']
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'bgflowdoc'
 
+# -- Autosummary settings -----------------------------------------------------
+autosummary_generate = True
+
+autodoc_default_options = {
+    'inherited-members': True,
+    'members': True,
+    'show-inheritance':True,
+    'undoc-members': True,
+    'member-order': 'groupwise'
+}
+
 # -- Options for LaTeX output ------------------------------------------------
 
 latex_elements = {
