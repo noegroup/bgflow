@@ -96,12 +96,32 @@ def test_hdf5_file(tmpdir, ctx, use_product):
     buffer_samples = hdf5.buffer["samples"]
     buffer_energies = hdf5.buffer["energies"]
     for s1, s2 in zip(buffer_samples, samples2):
-        assert np.allclose(s2.detach().cpu().numpy().astype(np.float), s1.astype(np.float))
-    assert np.allclose(buffer_energies.astype(np.float), energies2.detach().cpu().numpy().astype(np.float))
+        assert np.allclose(s2.detach().cpu().numpy().astype(float), s1.astype(float))
+    assert np.allclose(buffer_energies.astype(float), energies2.detach().cpu().numpy().astype(float))
 
     # items
     assert np.allclose(hdf5[0]["energy"], as_numpy(energies[0]))
     assert np.allclose(hdf5[12:14]["energy"], as_numpy(energies2[2:4]))
 
     hdf5.close()
+
+
+def test_hdf5_to_mdtraj(tmpdir, ctx):
+    md = pytest.importorskip("mdtraj")
+    bgmol = pytest.importorskip("bgmol")
+    nframes = 2
+    top = bgmol.systems.AlanineDipeptideTSF().mdtraj_topology
+    samples = torch.randn(nframes, top.n_atoms, 3, **ctx)
+    hdf5 = ReplayBufferHDF5File(tmpdir / "test.h5", "w")
+    hdf5.write_header(samples)
+    hdf5.write_accepted_samples(
+        samples.reshape(nframes, -1),
+        energies=torch.randn_like(samples[..., 0, 0]),
+        indices=torch.arange(len(samples)),
+        step=0,
+        forced_update=True
+    )
+    traj = hdf5.as_mdtraj_trajectory(topology=top)
+    assert traj.n_frames == nframes
+    assert traj.xyz.shape == (nframes, top.n_atoms, 3)
 

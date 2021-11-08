@@ -2,13 +2,17 @@
 
 import torch
 from bgflow import IterativeSampler, SamplerState, SamplerStep
+from bgflow.distribution.sampling._iterative_helpers import AbstractSamplerState
 
 
 class AddOne(SamplerStep):
-    def _step(self, state):
-        for i in range(len(state.samples)):
-            state.samples[i] = state.samples[i] + 1.0
-        return state
+    def _step(self, state: AbstractSamplerState):
+        statedict = state.as_dict()
+        samples = tuple(
+            x + 1.0
+            for x in statedict["samples"]
+        )
+        return state.replace(samples=samples)
 
 
 def test_iterative_sampler(ctx):
@@ -33,8 +37,4 @@ def test_iterative_sampler(ctx):
     for batch in sampler:  # only called once
         assert torch.allclose(batch.samples[0], torch.tensor([[27., 27.]], **ctx))
     sampler.max_iterations = None
-
-
-
-
 

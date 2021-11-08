@@ -25,142 +25,94 @@ An MCMC sampler is set up as follows
 """
 
 import torch
+import dataclasses
 from .base import Sampler
-from ...utils.types import pack_tensor_in_list
+from ...utils.types import pack_tensor_in_tuple
+from ._iterative_helpers import AbstractSamplerState, default_set_samples_hook, default_extract_sample_hook
 
-__all__ = ["SamplerState", "default_extract_sample_hook", "IterativeSampler", "SamplerStep"]
-
-
-def default_set_samples_hook(x):
-    """by default, use samples as is"""
-    return x
+__all__ = ["SamplerState", "IterativeSampler", "SamplerStep"]
 
 
-class SamplerState(dict):
+@dataclasses.dataclass(frozen=True)
+class _SamplerStateData:
+    samples: tuple[torch.Tensor]
+    velocities: tuple[torch.Tensor] = None
+    energies: torch.Tensor = None
+    forces: tuple[torch.Tensor] = None
+    box_vectors: tuple[torch.Tensor] = None
+    energies_up_to_date: bool = False
+    forces_up_to_date: bool = False
+
+
+class SamplerState(AbstractSamplerState):
     """State of an iterative sampler.
     Contains a minibatch of samples alongside optional information such as
     velocities, forces.
 
-    The SamplerState is essentially a dictionary that can contain any additional
-    user-defined fields.
+    The SamplerState implements the interface defined by AbstractSamplerState.
 
-    >>> state = SamplerState(samples=torch.randn(10, 10), some_other_variable=torch.randn(10, 10))
+    >>> state = SamplerState(samples=torch.randn(10, 10))
 
     The sampler steps that operate on a sampler state can read from and write to
     these user-defiend variables.
     Fields can be accessed by the syntax
 
-    >>> state.samples, state.some_other_variable
-
-    which is equivalent to
-
-    >>> state["samples"], state["some_other_variable"]
+    >>> state_dict = state.as_dict()
+    >>> state_dict["samples"]
 
     Notes
     -----
     To support energies that are defined on multiple events, the samples are
-    stored internally as a list of tensors.
-    (In most cases, this list will only contain one tensor.)
+    stored internally as a tuple of tensors.
+    (In most cases, this tuple will only contain one tensor.)
 
     Parameters
     ----------
-    samples : Union[torch.Tensor, list[torch.Tensor]]
+    samples : Union[torch.Tensor, tuple[torch.Tensor]]
     energies : Union[torch.Tensor, NoneType], optional
-    velocities : Union[torch.Tensor, list[torch.Tensor], NoneType], optional
-    forces : Union[torch.Tensor, list[torch.Tensor], NoneType], optional
+    velocities : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
+    forces : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
     box_vectors : Union[torch.Tensor, NoneType], optional
         The box vectors are a 3x3 matrix (a b c) , whose columns denote the periodic box vectors.
         The first vector, a, has to be parallel to the x-axis. The second vector, b, has
         to lie in the x-y plane (i.e. the matrix is upper triangular).
     set_samples_hook : Callable, optional
         A callable that is applied to the samples whenever samples are set.
-    _are_energies_up_to_date : bool, optional
-    _are_forces_up_to_date : bool, optional
+    dataclass : class
+        The dataclasses.dataclass that is used internally to store the data.
+    energies_up_to_date : bool, optional
+    forces_up_to_date : bool, optional
 
     """
-    def __init__(
-            self,
-            samples,
-            energies=None,
-            velocities=None,
-            forces=None,
-            box_vectors=None,
-            set_samples_hook=default_set_samples_hook,
-            _are_energies_up_to_date=False,
-            _are_forces_up_to_date=False,
-            **kwargs
-    ):
-        super().__init__(
-            samples=pack_tensor_in_list(samples),
-            energies=energies,
-            velocities=pack_tensor_in_list(velocities),
-            forces=pack_tensor_in_list(forces),
-            box_vectors=box_vectors,
-            **kwargs
-        )
-        self._are_energies_up_to_date = _are_energies_up_to_date
-        self._are_forces_up_to_date = _are_forces_up_to_date
+    _tuple_kwargs = ["samples", "velocities", "forces", "box_vectors"]
+
+    def __init__(self, dataclass=_SamplerStateData, set_samples_hook=default_set_samples_hook, **kwargs):
+        self._dataclass = dataclass
         self.set_samples_hook = set_samples_hook
+        kwargs_with_tuples = dict()
+        for key, value in kwargs.items():
+            if key in self._tuple_kwargs:
+                value = pack_tensor_in_tuple(value)
+            kwargs_with_tuples[key] = value
+        self._data = dataclass(**kwargs_with_tuples)
 
-    def __setitem__(self, key, value):
-        if key == "samples":
-            value = self.set_samples_hook(pack_tensor_in_list(value))
-        super().__setitem__(key, value)
-        if key in ["samples", "box_vectors"]:
-            # invalidate energies and forces
-            self._are_energies_up_to_date = False
-            self._are_forces_up_to_date = False
-        elif key == "forces":
-            self._are_forces_up_to_date = True
-        elif key == "energies":
-            self._are_energies_up_to_date = True
+    def __getattr__(self, field):
+        try:
+            return getattr(self._data, field)
+        except AttributeError as e:
+            raise AttributeError(f"SamplerState has no attribute '{field}'; {str(e)}")
 
-    def __getattr__(self, item):
-        return self.__getitem__(item)
+    def __str__(self):
+        return str(self._data)
 
-    def __setattr__(self, item, value):
-        return self.__setitem__(item, value)
+    def as_dict(self):
+        return dataclasses.asdict(self._data)
 
-    def __eq__(self, other):
-        return (
-            super().__eq__(other)
-            and self._are_energies_up_to_date == other._are_energies_up_to_date
-            and self._are_forces_up_to_date == other._are_forces_up_to_date
-            and self.set_samples_hook == other.set_samples_hook
-        )
-
-    def copy(self):
-        """Make a shallow copy.
-
-        Returns
-        -------
-        copy : SamplerState
-        """
-        clone = SamplerState(**self)
-        for item, value in clone.items():
-            if isinstance(value, list):
-                clone[item] = value.copy()
-        return clone
-
-    def needs_update(self, check_energies=True, check_forces=False):
-        """Whether the energies and forces are outdated.
-        The criteria is that energies/forces were set after samples were set.
-        """
-        if check_energies and not self._are_energies_up_to_date:
-            return True
-        elif check_energies and self["energies"] is None:
-            return True
-        elif check_forces and not self._are_forces_up_to_date:
-            return True
-        elif check_forces and self["forces"] is None:
-            return True
-        else:
-            return False
-
-
-def default_extract_sample_hook(state: SamplerState):
-    """Default extraction of samples from a SamplerState."""
-    return state.samples
+    def _replace(self, **kwargs):
+        data = {**self.as_dict(), **kwargs}
+        if "samples" in kwargs:
+            data["samples"] = self.set_samples_hook(data["samples"])
+        return SamplerState(dataclass=self._dataclass, set_samples_hook=self.set_samples_hook, **data)
 
 
 class IterativeSampler(Sampler, torch.utils.data.Dataset):
@@ -262,5 +214,4 @@ class SamplerStep(torch.nn.Module):
         for _ in range(self._n_steps):
             state = self._step(state)
         return state
-
 
