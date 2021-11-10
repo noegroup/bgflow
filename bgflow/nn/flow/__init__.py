@@ -1,3 +1,28 @@
+"""
+.. currentmodule: bgflow.nn.flow
+
+===============================================================================
+Coupling flows
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    CouplingFlow
+
+===============================================================================
+Coupling flows 2
+===============================================================================
+
+.. automodule:: affine
+    :toctree: generated/
+    :template: class.rst
+    :recursive:
+
+
+"""
+
 from .base import *
 from .crd_transform import *
 from .dynamics import *

@@ -1,3 +1,12 @@
+"""
+.. currentmodule: bgflow.distribution.energy
+
+===============================================================================
+Energies
+===============================================================================
+
+"""
+
 from .base import *
 from .double_well import *
 from .particles import *
