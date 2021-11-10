@@ -7,6 +7,7 @@
 
     Sampler
     DataSetSampler
+    GaussianMCMCSampler
 
 """
 

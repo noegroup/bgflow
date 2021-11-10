@@ -12,13 +12,8 @@ Coupling flows
     CouplingFlow
 
 ===============================================================================
-Coupling flows 2
+Continuous Normalizing Flows
 ===============================================================================
-
-.. automodule:: affine
-    :toctree: generated/
-    :template: class.rst
-    :recursive:
 
 
 """

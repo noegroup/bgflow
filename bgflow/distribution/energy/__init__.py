@@ -2,10 +2,55 @@
 .. currentmodule: bgflow.distribution.energy
 
 ===============================================================================
-Energies
+Double Well Potential
 ===============================================================================
 
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    DoubleWellEnergy
+    MultiDoubleWellPotential
+
+===============================================================================
+Lennard Jones Potential
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    LennardJonesPotential
+
+===============================================================================
+OpenMMBridge
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    OpenMMBridge
+    OpenMMEnergy
+
+===============================================================================
+Particle Box
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    RepulsiveParticles
+    HarmonicParticles
+
+===============================================================================
+Linlogcut
+===============================================================================
+include?
+
 """
+
 
 from .base import *
 from .double_well import *
