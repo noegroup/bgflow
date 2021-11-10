@@ -205,7 +205,7 @@ texinfo_documents = [
 
 # -- Skip troch.nn.Module
 Foo = torch.nn.Module()
-method_list = [func for func in dir(Foo) if callable(getattr(Foo, func))]
+method_list = dir(Foo)
 
 
 def skip(app, what, name, obj, skip, options):
