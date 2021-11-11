@@ -34,3 +34,5 @@ from .rbf_kernels import (
     RbfEncoder,
     rbf_kernels
 )
+
+from .free_energy import *
