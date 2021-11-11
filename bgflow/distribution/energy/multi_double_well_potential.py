@@ -7,7 +7,9 @@ __all__ = ["MultiDoubleWellPotential"]
 class MultiDoubleWellPotential(Energy):
     """Energy for a many particle system with pair wise double-well interactions.
     The energy of the double-well is given via
-    .. math:: E_{DW}(d) = a * (d-offset)^4 + b * (d-offset)^2 + c.
+
+    .. math::
+        E_{DW}(d) = a \cdot (d-d_{\text{offset})^4 + b \cdot (d-d_{\text{offset})^2 + c.
 
     Parameters
     ----------
