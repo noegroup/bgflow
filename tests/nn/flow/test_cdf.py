@@ -49,7 +49,7 @@ def test_constrain_slightly_pertubed(ctx):
 
 
 def test_cdf_transform(ctx):
-    input = torch.arange(0.1, 1.0, 0.1)[:,None]
+    input = torch.arange(0.1, 1.0, 0.1, **ctx)[:,None]
     input.requires_grad = True
     truncated_normal = TruncatedNormalDistribution(
         mu=torch.tensor([0.5], **ctx),
