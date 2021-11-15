@@ -467,7 +467,7 @@ class BoltzmannGeneratorBuilder:
             sizes_or_indices=(unconstrained_indices, constrained_indices)
         )
 
-    def add_constrain_chirality(self, halpha_torsion_indices, torsions=TORSIONS):
+    def add_constrain_chirality(self, halpha_torsion_indices, right_handed=False, torsions=TORSIONS):
         """Constrain the chirality of aminoacids
          by constraining their normalized halpha torsions to [0.5,1] instead of [0,1].
 
@@ -480,7 +480,7 @@ class BoltzmannGeneratorBuilder:
         """
         loc = torch.zeros(*self.current_dims[TORSIONS], **self.ctx)
         scale = torch.ones(*self.current_dims[TORSIONS], **self.ctx)
-        loc[halpha_torsion_indices] = 0.5
+        loc[halpha_torsion_indices] = 0.5 * (1 - right_handed)
         scale[halpha_torsion_indices] = 0.5
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
