@@ -242,3 +242,21 @@ def test_builder_bond_constraints(ala2, ctx):
     generator.energy(samples)
     generator.kldiv(10)
 
+
+def test_constrain_chirality(ala2, ctx):
+    bgmol = pytest.importorskip("bgmol")
+    top = ala2.system.mdtraj_topology
+    zmatrix, _ = bgmol.ZMatrixFactory(top).build_naive()
+    crd_transform = GlobalInternalCoordinateTransformation(zmatrix)
+    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
+    builder = BoltzmannGeneratorBuilder(shape_info, target=ala2.system.energy_model, **ctx)
+    chiral_torsions = bgmol.is_chiral_torsion(crd_transform.torsion_indices, top)
+    builder.add_constrain_chirality(chiral_torsions)
+    builder.add_map_to_ic_domains()
+    builder.add_map_to_cartesian(crd_transform)
+    generator = builder.build_generator()
+    # play forward and backward
+    samples = generator.sample(20)
+    b, a, t, *_ = crd_transform.forward(samples)
+    assert torch.all(t[:, chiral_torsions] >= 0.5)
+    assert torch.all(t[:, chiral_torsions] <= 1.0)

@@ -15,6 +15,7 @@ from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
+from ..nn.flow.torchtransform import TorchTransform
 from ..distribution.distribution import UniformDistribution
 from ..distribution.normal import NormalDistribution
 from ..distribution.product import ProductDistribution, ProductEnergy
@@ -26,7 +27,6 @@ from .conditioner_factory import make_conditioners
 from .transformer_factory import make_transformer
 from .distribution_factory import make_distribution
 from .icmarginals import InternalCoordinateMarginals
-#from ..utils.ff import lookup_bonds
 
 __all__ = ["BoltzmannGeneratorBuilder"]
 
@@ -466,6 +466,24 @@ class BoltzmannGeneratorBuilder:
             to=field,
             sizes_or_indices=(unconstrained_indices, constrained_indices)
         )
+
+    def add_constrain_chirality(self, halpha_torsion_indices, torsions=TORSIONS):
+        """Constrain the chirality of aminoacids
+         by constraining their normalized halpha torsions to [0.5,1] instead of [0,1].
+
+        Parameters
+        ----------
+        halpha_torsion_indices : Sequence[int] or Sequence[bool]
+            An index array for the torsions.
+
+        torsions : torch.TensorInfo
+        """
+        loc = torch.zeros(*self.current_dims[TORSIONS], **self.ctx)
+        scale = torch.ones(*self.current_dims[TORSIONS], **self.ctx)
+        loc[halpha_torsion_indices] = 0.5
+        scale[halpha_torsion_indices] = 0.5
+        affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
+        return self.add_layer(affine, what=(torsions, ))
 
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)
