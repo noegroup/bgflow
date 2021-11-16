@@ -96,8 +96,8 @@ class BoltzmannGenerator(Energy, Sampler):
         z = self._prior.sample(n_samples, temperature=temperature)
         if isinstance(z, torch.Tensor):
             z = (z,)
-        *results, dlogp = self._flow(*z, temperature=temperature)
-        results = list(results)
+        *x, dlogp = self._flow(*z, temperature=temperature)
+        results = list(x)
 
         if with_latent:
             results.append(*z)
@@ -107,7 +107,7 @@ class BoltzmannGenerator(Energy, Sampler):
             energy = self._prior.energy(*z, temperature=temperature) + dlogp
             results.append(energy)
         if with_log_weights or with_weights:
-            target_energy = self._target.energy(*results, temperature=temperature)
+            target_energy = self._target.energy(*x, temperature=temperature)
             bg_energy = self._prior.energy(*z, temperature=temperature) + dlogp
             log_weights = bg_energy - target_energy
             if with_log_weights:
