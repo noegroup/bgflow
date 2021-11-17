@@ -38,46 +38,48 @@ def _parse_dim(dim):
 
 
 class Energy(torch.nn.Module):
+    """
+    Base class for all energy models.
+
+    It supports energies defined over:
+        - simple vector states of shape [..., D]
+        - tensor states of shape [..., D1, D2, ..., Dn]
+        - states composed of multiple tensors (x1, x2, x3, ...)
+          where each xi is of form [..., D1, D2, ...., Dn]
+
+    Each input can have multiple batch dimensions,
+    so a final state could have shape
+        ([B1, B2, ..., Bn, D1, D2, ..., Dn],
+         ...,
+         [B1, B2, ..., Bn, D'1, ..., D'1n]).
+
+    which would return an energy tensor with shape
+        ([B1, B2, ..., Bn, 1]).
+
+    Forces are computed for each input by default.
+    Here the convention is followed, that forces will have
+    the same shape as the input state.
+
+    To define the state shape, the parameter `dim` has to
+    be of the following form:
+        - an integer, e.g. d = 5
+            then each event is a simple vector state
+            of shape [..., 5]
+        - a non-empty list of integers, e.g. d = [3, 6, 7]
+            then each event is a tensor state of shape [..., 3, 6, 7]
+        - a list of len > 1 containing non-empty integer lists,
+            e.g. d = [[1, 3], [5, 3, 6]]. Then each event is
+            a tuple of tensors of shape ([..., 1, 3], [..., 5, 3, 6])
+
+    Parameters:
+    ----------
+    dim: Union[int, Sequence[int], Sequence[Sequence[int]]]
+        The event shape of the states for which energies/forces ar computed.
+
+    """
+
     def __init__(self, dim: Union[int, Sequence[int], Sequence[Sequence[int]]], **kwargs):
-        """
-        Base class for all energy models.
 
-        It supports energies defined over:
-            - simple vector states of shape [..., D]
-            - tensor states of shape [..., D1, D2, ..., Dn]
-            - states composed of multiple tensors (x1, x2, x3, ...)
-              where each xi is of form [..., D1, D2, ...., Dn]
-
-        Each input can have multiple batch dimensions,
-        so a final state could have shape
-            ([B1, B2, ..., Bn, D1, D2, ..., Dn],
-             ...,
-             [B1, B2, ..., Bn, D'1, ..., D'1n]).
-
-        which would return an energy tensor with shape
-            ([B1, B2, ..., Bn, 1]).
-
-        Forces are computed for each input by default.
-        Here the convention is followed, that forces will have
-        the same shape as the input state.
-
-        To define the state shape, the parameter `dim` has to
-        be of the following form:
-            - an integer, e.g. d = 5
-                then each event is a simple vector state
-                of shape [..., 5]
-            - a non-empty list of integers, e.g. d = [3, 6, 7]
-                then each event is a tensor state of shape [..., 3, 6, 7]
-            - a list of len > 1 containing non-empty integer lists,
-                e.g. d = [[1, 3], [5, 3, 6]]. Then each event is
-                a tuple of tensors of shape ([..., 1, 3], [..., 5, 3, 6])
-
-        Parameters:
-        ----------
-        dim: Union[int, Sequence[int], Sequence[Sequence[int]]]
-            The event shape of the states for which energies/forces ar computed.
-
-        """
         super().__init__(**kwargs)
         self._event_shapes = _parse_dim(dim)
 
