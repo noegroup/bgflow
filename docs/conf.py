@@ -214,7 +214,7 @@ def skip(app, what, name, obj, skip, options):
     if name in method_list:
         return True
     if name in excluded_methods:
-        print(app, what, name, obj, skip, options)
+        # print(app, what, name, obj, skip, options)
         if str(obj).startswith('<function _'):
             return True
     return None
