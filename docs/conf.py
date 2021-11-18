@@ -206,11 +206,17 @@ texinfo_documents = [
 # -- Skip troch.nn.Module
 Foo = torch.nn.Module()
 method_list = dir(Foo)
-
+# TODO maybe implement more elegant
+excluded_methods = ['forward']
+method_list = [elem for elem in method_list if elem not in excluded_methods]
 
 def skip(app, what, name, obj, skip, options):
     if name in method_list:
         return True
+    if name in excluded_methods:
+        print(app, what, name, obj, skip, options)
+        if str(obj).startswith('<function _'):
+            return True
     return None
 
 
