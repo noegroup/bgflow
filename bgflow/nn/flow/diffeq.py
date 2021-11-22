@@ -12,7 +12,7 @@ class DiffEqFlow(Flow):
     """
     Neural Ordinary Differential Equations flow :footcite:`chen2018neural`
     with the choice of optimize than discretize (use_checkpoints=False)
-    and discretize than optimize :footcite:`gholami2019anode`(use_checkpoints=True) for the ODE solver.
+    and discretize than optimize :footcite:`gholami2019anode` (use_checkpoints=True) for the ODE solver.
 
     References
     ----------

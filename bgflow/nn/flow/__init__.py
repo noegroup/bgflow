@@ -6,8 +6,16 @@ Coupling flows
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
     CouplingFlow
+    SplitFlow
+    MergeFlow
+    SwapFlow
+    WrapFlow
+    AffineFlow
+
 
 ===============================================================================
 Internal Coordinate Transformation
@@ -18,7 +26,10 @@ Continuous Normalizing Flows
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
+    DiffEqFlow
     BlackBoxDynamics
 
 
@@ -30,14 +41,50 @@ Stochastic Normalizing Flows
 Autoregressive Flows
 ===============================================================================
 
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    BNARFlow
+
+
+===============================================================================
+CDF Transformations
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    CDFTransform
+    DistributionTransferFlow
+    ConstrainGaussianFlow
+
 ===============================================================================
 Base
 ===============================================================================
 
-CDF Transform
-------
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
+    Flow
+    InverseFlow
 
+===============================================================================
+Other
+===============================================================================
+Docs and/or classification required
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    CheckerboardFlow
+    BentIdentity
+    FunnelFlow
+    KroneckerProductFlow
+    PseudoOrthogonalFlow
 """
 
 from .base import *

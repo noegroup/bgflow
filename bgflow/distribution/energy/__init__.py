@@ -6,6 +6,8 @@ Double Well Potential
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
     DoubleWellEnergy
     MultiDoubleWellPotential
@@ -15,6 +17,8 @@ Lennard Jones Potential
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
     LennardJonesPotential
 
@@ -23,6 +27,8 @@ OpenMMBridge
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
     OpenMMBridge
     OpenMMEnergy
@@ -32,6 +38,8 @@ Particle Box
 ===============================================================================
 
 .. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
     RepulsiveParticles
     HarmonicParticles
@@ -40,6 +48,16 @@ Particle Box
 Linlogcut
 ===============================================================================
 include?
+
+===============================================================================
+Base
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    Energy
 
 """
 
