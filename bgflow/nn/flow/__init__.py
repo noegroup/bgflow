@@ -6,8 +6,6 @@ Coupling flows
 ===============================================================================
 
 .. autosummary::
-    :toctree: generated/
-    :template: class.rst
 
     CouplingFlow
 
@@ -20,8 +18,6 @@ Continuous Normalizing Flows
 ===============================================================================
 
 .. autosummary::
-    :toctree: generated/
-    :template: class.rst
 
     BlackBoxDynamics
 

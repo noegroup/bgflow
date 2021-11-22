@@ -149,7 +149,9 @@ autodoc_default_options = {
     'members': True,
     'show-inheritance':True,
     'undoc-members': True,
-    'member-order': 'groupwise'
+    'member-order': 'groupwise',
+    'toctree': 'generated/',
+    'template': 'class.rst',
 }
 
 # -- Options for LaTeX output ------------------------------------------------

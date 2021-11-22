@@ -6,8 +6,6 @@ Geometry utilities
 ===============================================================================
 
 .. autosummary::
-    :toctree: generated/
-    :template: class.rst
 
     distance_vectors
     distances_from_vectors

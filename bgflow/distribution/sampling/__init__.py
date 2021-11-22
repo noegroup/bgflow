@@ -2,8 +2,6 @@
 .. currentmodule: bgflow.distribution.sampling
 
 .. autosummary::
-    :toctree: generated/
-    :template: class.rst
 
     Sampler
     DataSetSampler
