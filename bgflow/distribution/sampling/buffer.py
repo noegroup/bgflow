@@ -150,8 +150,8 @@ class ReplayBufferHDF5Reporter:
             forced_update=forced_update
         )
 
-    def _write_stats(self, energies, n_proposed):
-        self.file.write_stats(energies, step=self.step, n_proposed=n_proposed, n_accepted=len(energies))
+    def _write_stats(self, energies, n_proposed, n_accepted):
+        self.file.write_stats(energies, step=self.step, n_proposed=n_proposed, n_accepted=n_accepted)
 
     def write(self, *samples, buffer, energies, indices, forced_update, n_proposed):
         """Write one step.
@@ -172,7 +172,7 @@ class ReplayBufferHDF5Reporter:
             Number of samples that were proposed to the buffer in this step.
         """
         self._write_accepted_samples(*samples, energies=energies, indices=indices, forced_update=forced_update)
-        self._write_stats(energies, n_proposed)
+        self._write_stats(buffer.energies, n_proposed, n_accepted=len(energies))
         if self.step % self.write_buffer_interval == 0:
             self.write_buffer(*buffer.samples, energies=buffer.energies)
         self.step += 1

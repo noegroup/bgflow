@@ -1,5 +1,6 @@
 
 import torch
+from torch.distributions import Independent
 from .energy import Energy
 from .sampling import Sampler
 from torch.distributions import constraints
@@ -41,8 +42,18 @@ class TorchDistribution(Energy, Sampler):
     """Wrapper for torch.components.Distribution objects. Instances
     of this class provide all methods and attributes of torch components,
     while also implementing the `Energy` and `Sampler` interfaces in bgflow.
+
+    Parameters
+    ----------
+    distribution : torch.distributions.Distribution
+        The probability distribution.
+    reinterpreted_batch_ndims : int, optional
+        Number of batch dimensions to be reinterpreted as event dimensions.
+        If >0, this transform is wrapped in an torch.distributions.Independent instance.
     """
-    def __init__(self, distribution: torch.distributions.Distribution):
+    def __init__(self, distribution: torch.distributions.Distribution, reinterpreted_batch_ndims: int = 0):
+        if reinterpreted_batch_ndims > 0:
+            distribution = Independent(distribution, reinterpreted_batch_ndims=reinterpreted_batch_ndims)
         self._delegate = distribution
         super().__init__(dim=distribution.event_shape)
 
@@ -57,7 +68,7 @@ class TorchDistribution(Energy, Sampler):
         raise NotImplementedError()
 
     def _energy(self, x):
-        return -self._delegate.log_prob(x)[:,None]
+        return -self._delegate.log_prob(x)[:, None]
 
     def __getattr__(self, name):
         try:

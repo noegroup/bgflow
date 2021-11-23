@@ -50,6 +50,15 @@ def bennett_acceptance_ratio(
     -----
     The free energy difference is the negative log ratio of the partitions functions.
     """
+    # trivial case: constant energy offset
+    if (
+            torch.allclose(forward_work, forward_work[0]*torch.ones_like(forward_work))
+            and torch.allclose(reverse_work, -forward_work[0]*torch.ones_like(reverse_work))
+    ):
+        uncertainty = torch.zeros_like(forward_work.flatten()[0]) if compute_uncertainty else None
+        return forward_work.flatten()[0], uncertainty
+
+    # nontrivial case
     implementations = {
         "torch": _bennett_acceptance_ratio_torch,
         "pymbar": _bennett_acceptance_ratio_pymbar

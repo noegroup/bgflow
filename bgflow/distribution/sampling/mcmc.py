@@ -17,6 +17,7 @@ import torch
 from ..energy import Energy
 from .base import Sampler
 from .iterative import SamplerStep, IterativeSampler, SamplerState
+from ._iterative_helpers import default_set_samples_hook
 
 
 __all__ = [
@@ -38,9 +39,10 @@ class GaussianProposal(torch.nn.Module):
         self._noise_std = noise_std
 
     def forward(self, state: SamplerState) -> Tuple[SamplerState, float]:
-        proposed_state = state.copy()  # shallow copy
-        proposed_state.samples = [x + torch.randn_like(x) * self._noise_std for x in state.samples]
         delta_log_prob = 0.0  # symmetric density
+        proposed_state = state.replace(
+            samples=tuple(x + torch.randn_like(x) * self._noise_std for x in state.as_dict()["samples"])
+        )
         return proposed_state, delta_log_prob
 
 
@@ -68,18 +70,17 @@ class LatentProposal(torch.nn.Module):
         self.flow_kwargs = flow_kwargs
 
     def forward(self, state: SamplerState) -> Tuple[SamplerState, torch.Tensor]:
-        proposed_state = state.copy()  # shallow copy
-        *proposed_state.samples, logdet_inverse = self.flow.forward(
-            *state.samples, inverse=True, **self.flow_kwargs
+        *z, logdet_inverse = self.flow.forward(
+            *state.as_dict()["samples"], inverse=True, **self.flow_kwargs
         )
-        proposed_state, delta_log_prob = self.base_proposal.forward(proposed_state)
-        *proposed_state.samples, logdet_forward = self.flow.forward(*proposed_state.samples)
+        proposed_latent, delta_log_prob = self.base_proposal.forward(state.replace(samples=z))
+        *proposed_samples, logdet_forward = self.flow.forward(*proposed_latent.as_dict()["samples"])
         # g(x|x') = g(x|z') = p_z (F_{zx}^{-1}(x)  | z') * log | det J_{zx}^{-1} (x) |
         # log g(x|x') = log p(z|z') + logabsdet J_{zx}^-1 (x)
         # log g(x'|x) = log p(z'|z) + logabsdet J_{zx}^-1 (x')
         # log g(x'|x) - log g(x|x') = log p(z|z') - log p(z|z') - logabsdet_forward - logsabdet_inverse
         delta_log_prob = delta_log_prob - (logdet_forward + logdet_inverse)
-        return proposed_state, delta_log_prob[:, 0]
+        return proposed_latent.replace(samples=proposed_samples), delta_log_prob[:, 0]
 
 
 class MCMCStep(SamplerStep):
@@ -101,24 +102,24 @@ class MCMCStep(SamplerStep):
 
     def _step(self, state: SamplerState) -> SamplerState:
         # compute current energies
-        if state.needs_update(check_energies=True, check_forces=False):
-            state.energies = self.target_energy.energy(*state.samples)
-        current_energies = state.energies[..., 0]
+        state = state.evaluate_energy_force(self.target_energy, evaluate_forces=False)
         # make a proposal
         proposed_state, delta_log_prob = self.proposal.forward(state)
-        proposed_energies = self.target_energy.energy(*proposed_state.samples)[..., 0]
+        proposed_state = proposed_state.evaluate_energy_force(self.target_energy, evaluate_forces=False)
         # accept according to Metropolis criterion
+        new_dict = proposed_state.as_dict()
+        old_dict = state.as_dict()
         accept = metropolis_accept(
-            current_energies=current_energies/self.target_temperatures,
-            proposed_energies=proposed_energies/self.target_temperatures,
+            current_energies=old_dict["energies"]/self.target_temperatures,
+            proposed_energies=new_dict["energies"]/self.target_temperatures,
             proposal_delta_log_prob=delta_log_prob
         )
-        state.samples = [
-            torch.where(accept[..., None], new, old)
-            for new, old in zip(proposed_state.samples, state.samples)
-        ]
-        state.energies = torch.where(accept, proposed_energies, current_energies)[...,None]
-        return state
+        return state.replace(
+            samples=tuple(
+                torch.where(accept[..., None], new, old) for new, old in zip(new_dict["samples"], old_dict["samples"])
+            ),
+            energies=torch.where(accept, new_dict["energies"], old_dict["energies"])
+        )
 
 
 class GaussianMCMCSampler(IterativeSampler):
@@ -159,11 +160,11 @@ class GaussianMCMCSampler(IterativeSampler):
     ):
         # first, some things to ensure backwards compatibility
         # apply the box constraint function whenever samples are set
-        set_samples_hook = lambda x: x
+        set_samples_hook = default_set_samples_hook
         if box_constraint is not None:
             set_samples_hook = lambda samples: [box_constraint(x) for x in samples]
-        init_state = init_state if isinstance(init_state, SamplerState) else SamplerState(init_state)
-        init_state.set_samples_hook = set_samples_hook
+        if not isinstance(init_state, SamplerState):
+            init_state = SamplerState(samples=init_state, set_samples_hook=set_samples_hook)
         # flatten batches before returning
         if return_hook is None:
             return_hook = lambda samples: [
