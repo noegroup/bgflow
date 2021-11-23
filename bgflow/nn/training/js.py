@@ -17,7 +17,8 @@ def jensen_shannon_divergence(
         ua_on_xb: torch.Tensor,
         ub_on_xa: torch.Tensor,
         ub_on_xb: torch.Tensor,
-        free_energy_ua_to_ub: Union[torch.Tensor, float]
+        free_energy_ua_to_ub: Union[torch.Tensor, float],
+        use_log_d_trick: bool = False
 ):
     """Jensen-Shannon divergence
 
@@ -31,10 +32,12 @@ def jensen_shannon_divergence(
         Second energy function evaluated on samples from first distribution.
     ub_on_xb: torch.Tensor
         Second energy function evaluated on samples from its corresponding distribution.
-    free_energy_ua_to_ub:
+    free_energy_ua_to_ub: Union[torch.Tensor, float]
         Free energy difference between the two energy functions.
         If :math:`F_a = -ln Z_a`, and math:`F_b = -ln Z_b`,
         the free energy is :math:`F_b - F_a`
+    use_log_d_trick: bool
+        Whether to use the "logD" trick from the GAN paper instead of the classical JS divergence.
 
     Returns
     -------
@@ -42,7 +45,12 @@ def jensen_shannon_divergence(
     """
     umix_on_xa = u_mixture(ua_on_xa, ub_on_xa - free_energy_ua_to_ub)
     umix_on_xb = u_mixture(ua_on_xb, ub_on_xb - free_energy_ua_to_ub)
-    return 0.5*(- ua_on_xa.mean() - (ub_on_xb.mean() - free_energy_ua_to_ub) + umix_on_xb.mean() + umix_on_xa.mean())
+    expectation_xa = - ua_on_xa.mean() + umix_on_xa.mean()
+    if use_log_d_trick:
+        expectation_xb = - umix_on_xb.mean() + (ub_on_xa.mean() - free_energy_ua_to_ub)
+    else:
+        expectation_xb = - (ub_on_xb.mean() - free_energy_ua_to_ub) + umix_on_xb.mean()
+    return 0.5*(expectation_xa + expectation_xb)
 
 
 class JensenShannonDivergence:
