@@ -141,7 +141,7 @@ class JensenShannonDivergence:
         """
         if n_samples_target is None:
             n_samples_target = n_samples_flow
-        *xa, ua_on_xa = self.generator.sample(n_samples_flow, with_energy=True)
+        *xa, dlogp, ua_on_xa = self.generator.sample(n_samples_flow, with_dlogp=True, with_energy=True)
         ub_on_xa = self.target.energy(*xa)
         xb = self.target.sample(n_samples_target)
         xb = pack_tensor_in_tuple(xb)
@@ -171,7 +171,8 @@ class JensenShannonDivergence:
                 "ugen_on_xgen": ua_on_xa,
                 "uref_on_xref": ub_on_xb,
                 "ugen_on_xref": ua_on_xb,
-                "uref_on_xgen": ub_on_xa
+                "uref_on_xgen": ub_on_xa,
+                "xgen_dlogp": dlogp
             }
             return js, result_dict
         else:
