@@ -107,6 +107,11 @@ def test_jensen_shannon_class(product, i_shift_scale, ctx):
     for i in range(2):
         js = jsdiv(1000, update_free_energy=True)
         assert torch.allclose(js, _js_uniform_analytic(low, high, shift+scale*low, shift+scale*high), atol=0.05)
+    js, res = jsdiv(100, return_result_dict=True)
+    assert isinstance(res["xref"], tuple)
+    assert isinstance(res["xgen"], tuple) or isinstance(res["xgen"], list)
+    assert res["uref_on_xref"].shape[0] == res["xref"][0].shape[0]
+    assert res["ugen_on_xref"].shape[0] == res["xref"][0].shape[0]
 
 
 def _make_normal(mu, sigma, dim, **ctx):

@@ -59,6 +59,15 @@ class JensenShannonDivergence:
         a replay buffer sampler.
     target_free_energy : torch.Tensor
         Initial estimate for the absolute free energy of the target distribution.
+
+    Attributes
+    ----------
+    target_free_energy : Union[torch.Tensor, torch.nn.Parameter, float]
+        The current estimate for the absolute free energy of the target distribution.
+    result_dict : dict
+        (only returned if `return_result_dict == True`) A dictionary containing the
+        generated samples and computed energies. For example, the key "ugen_on_xref"
+        denotes the energy of the generator evaluated on samples from the reference potential.
     """
     def __init__(
             self,
@@ -90,7 +99,35 @@ class JensenShannonDivergence:
         else:
             self._target_free_energy = delta_f
 
-    def __call__(self, n_samples_flow, n_samples_target=None, update_free_energy=False, **kwargs):
+    def __call__(
+            self,
+            n_samples_flow: int,
+            n_samples_target: int = None,
+            update_free_energy: bool = False,
+            return_result_dict: bool = False,
+            **kwargs
+    ):
+        """
+
+        Parameters
+        ----------
+        n_samples_flow : int
+            Number of samples to draw from the generator.
+        n_samples_target : int, optional
+            Number of samples to draw from the target distribution; by default = n_samples_flow
+        update_free_energy : bool, optional
+            Whether to update the free energy using BAR.
+        return_result_dict : bool, optional
+            Whether to return the full result dictionary.
+        kwargs : dict
+            Any keyword arguments to `bennett_acceptance_ratio`.
+
+        Returns
+        -------
+        js : torch.Tensor
+            Jensen-Shannon divergence
+
+        """
         if n_samples_target is None:
             n_samples_target = n_samples_flow
         *xa, ua_on_xa = self.generator.sample(n_samples_flow, with_energy=True)
@@ -108,17 +145,29 @@ class JensenShannonDivergence:
                     compute_uncertainty=False
                 )
                 self.target_free_energy = self.target_free_energy + free_energy
-        return jensen_shannon_divergence(
+        js = jensen_shannon_divergence(
             ua_on_xa,
             ua_on_xb,
             ub_on_xa,
             ub_on_xb,
             self.target_free_energy
         )
+        if return_result_dict:
+            result_dict = {
+                "xgen": xa,
+                "xref": xb,
+                "ugen_on_xgen": ua_on_xa,
+                "uref_on_xref": ub_on_xb,
+                "ugen_on_xref": ua_on_xb,
+                "uref_on_xgen": ub_on_xa
+            }
+            return js, result_dict
+        else:
+            return js
 
-    def update_free_energy(self, n_samples_flow, n_samples_target=None):
+    def update_free_energy(self, n_samples_flow, n_samples_target=None, **kwargs):
         """Update the target free energy through BAR."""
-        self(n_samples_flow, n_samples_target, update_free_energy=True)
+        self(n_samples_flow, n_samples_target, update_free_energy=True, **kwargs)
 
 
 def logsumexp2(a: torch.Tensor, b: torch.Tensor):
