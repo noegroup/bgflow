@@ -25,6 +25,12 @@ def test_dataset_sampler(ctx):
         )
 
 
+def test_dataset_to_device_sampler(ctx):
+    data = torch.arange(12).reshape(4,3)
+    sampler = DataSetSampler(data).to(**ctx)
+    assert sampler.sample(10).device == ctx["device"]
+
+
 def test_multiple_dataset_sampler(ctx):
     data = torch.arange(12).reshape(4,3).to(**ctx)
     data2 = torch.arange(8).reshape(4,2).to(**ctx)
@@ -33,6 +39,7 @@ def test_multiple_dataset_sampler(ctx):
     assert len(samples) == 2
     assert samples[0].shape == (3, 3)
     assert samples[1].shape == (3, 2)
+    assert samples[0].device == ctx["device"]
 
 
 def test_resizing(ctx):
@@ -52,4 +59,7 @@ def test_dataloader_sampler(ctx):
         batch_size=4,
     )
     sampler = DataLoaderSampler(loader, **ctx)
-    assert sampler.sample(4).shape == (4, 2, 2)
+    samples = sampler.sample(4)
+    assert samples.shape == (4, 2, 2)
+    assert samples.device == ctx["device"]
+
