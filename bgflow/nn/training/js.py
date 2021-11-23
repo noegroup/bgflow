@@ -113,6 +113,7 @@ class JensenShannonDivergence:
             n_samples_target: int = None,
             update_free_energy: bool = False,
             return_result_dict: bool = False,
+            use_log_d_trick: bool = False,
             **kwargs
     ):
         """
@@ -127,6 +128,8 @@ class JensenShannonDivergence:
             Whether to update the free energy using BAR.
         return_result_dict : bool, optional
             Whether to return the full result dictionary.
+        use_log_d_trick: bool
+            Whether to use the "logD" trick from the GAN paper instead of the classical JS divergence.
         kwargs : dict
             Any keyword arguments to `bennett_acceptance_ratio`.
 
@@ -158,7 +161,8 @@ class JensenShannonDivergence:
             ua_on_xb,
             ub_on_xa,
             ub_on_xb,
-            self.target_free_energy
+            self.target_free_energy,
+            use_log_d_trick=use_log_d_trick
         )
         if return_result_dict:
             result_dict = {
