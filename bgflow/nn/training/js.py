@@ -137,14 +137,13 @@ class JensenShannonDivergence:
         ub_on_xb = self.target.energy(*xb)
         ua_on_xb = self.generator.energy(*xb)
         if update_free_energy:
-            with torch.no_grad():
-                free_energy, error_estimate = bennett_acceptance_ratio(
-                    forward_work=(ub_on_xa - self.target_free_energy) - ua_on_xa,
-                    reverse_work=ua_on_xb - (ub_on_xb - self.target_free_energy),
-                    **kwargs,
-                    compute_uncertainty=False
-                )
-                self.target_free_energy = self.target_free_energy + free_energy
+            free_energy, error_estimate = bennett_acceptance_ratio(
+                forward_work=(ub_on_xa - self.target_free_energy) - ua_on_xa,
+                reverse_work=ua_on_xb - (ub_on_xb - self.target_free_energy),
+                **kwargs,
+                compute_uncertainty=False
+            )
+            self.target_free_energy = self.target_free_energy + free_energy
         js = jensen_shannon_divergence(
             ua_on_xa,
             ua_on_xb,
