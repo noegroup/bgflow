@@ -16,11 +16,6 @@ Coupling flows
     WrapFlow
     AffineFlow
 
-
-===============================================================================
-Internal Coordinate Transformation
-===============================================================================
-
 ===============================================================================
 Continuous Normalizing Flows
 ===============================================================================
@@ -30,23 +25,48 @@ Continuous Normalizing Flows
     :template: class.rst
 
     DiffEqFlow
-    BlackBoxDynamics
 
+Dynamics Functions
+---------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    BlackBoxDynamics
+    TimeIndependentDynamics
+    KernelDynamics
+    DensityDynamics
+
+
+Jacobian Trace Estimators
+------------------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    BruteForceEstimator
+    HutchinsonEstimator
 
 ===============================================================================
 Stochastic Normalizing Flows
 ===============================================================================
 
+
+
 ===============================================================================
-Autoregressive Flows
+Internal Coordinate Transformations
 ===============================================================================
 
 .. autosummary::
     :toctree: generated/
     :template: class.rst
 
-    BNARFlow
-
+    RelativeInternalCoordinateTransformation
+    GlobalInternalCoordinateTransformation
+    MixedCoordinateTransformation
+    WhitenFlow
 
 ===============================================================================
 CDF Transformations
@@ -70,6 +90,7 @@ Base
 
     Flow
     InverseFlow
+    SequentialFlow
 
 ===============================================================================
 Other
@@ -85,6 +106,11 @@ Docs and/or classification required
     FunnelFlow
     KroneckerProductFlow
     PseudoOrthogonalFlow
+    InvertiblePPPP
+    PPPPScheduler
+    TorchTransform
+    TriuFlow
+    BNARFlow
 """
 
 from .base import *
