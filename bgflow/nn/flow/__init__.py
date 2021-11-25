@@ -14,7 +14,12 @@ Coupling flows
     MergeFlow
     SwapFlow
     WrapFlow
-    AffineFlow
+    Transformer
+    AffineTransformer
+    TruncatedGaussianTransformer
+    ConditionalSplineTransformer
+    ScalingLayer
+    EntropyScalingLayer
 
 ===============================================================================
 Continuous Normalizing Flows
@@ -53,7 +58,17 @@ Jacobian Trace Estimators
 Stochastic Normalizing Flows
 ===============================================================================
 
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
 
+    MetropolisMCFlow
+    BrownianFlow
+    LangevinFlow
+    StochasticAugmentation
+    OpenMMStochasticFlow
+    PathProbabilityIntegrator
+    BrownianPathProbabilityIntegrator
 
 ===============================================================================
 Internal Coordinate Transformations
@@ -101,6 +116,7 @@ Docs and/or classification required
     :toctree: generated/
     :template: class.rst
 
+    AffineFlow
     CheckerboardFlow
     BentIdentity
     FunnelFlow
