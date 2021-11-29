@@ -38,10 +38,19 @@ class XTBBridge:
         Atomic numbers
     method : str
         The semi-empirical method that is used to compute energies
-    solvent : str
-        The solvent.
+    solvent : str or None
+        The solvent. If None, perform a vacuum calculation.
     verbosity : int
         0 (muted), 1 (minimal), 2 (full)
+
+    Attributes
+    ----------
+    n_atoms : int
+        The number of atoms in this molecules.
+    available_solvents : List[str]
+        The solvent models that are available for computations in xtb.
+    available_methods : List[str]
+        The semiempirical methods that are available for computations in xtb.
 
     Notes
     -----
@@ -55,9 +64,8 @@ class XTBBridge:
             solvent: str = "water",
             verbosity: int = 0
     ):
+        self.numbers = numbers
         self.method = method
-        if numbers is not None:
-            self.numbers = numbers
         self.solvent = solvent
         self.verbosity = verbosity
         self._last_batch = None
@@ -65,6 +73,16 @@ class XTBBridge:
     @property
     def n_atoms(self):
         return len(self.numbers)
+
+    @property
+    def available_solvents(self):
+        from xtb.utils import _solvents
+        return list(_solvents.keys())
+
+    @property
+    def available_methods(self):
+        from xtb.utils import _methods
+        return list(_methods.keys())
 
     def evaluate(self, positions: torch.Tensor):
         self._last_batch = hash(str(positions))

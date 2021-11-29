@@ -6,6 +6,7 @@ from bgflow import XTBEnergy, XTBBridge
 
 @pytest.mark.parametrize("pos_shape", [(1, 3, 3), (1, 9)])
 def test_xtb_water(pos_shape, ctx):
+    _ = pytest.importorskip("xtb")
     numbers = np.array([8, 1, 1])
     positions = torch.tensor([
         [0.00000000000000, 0.00000000000000, -0.73578586109551],
