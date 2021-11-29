@@ -98,7 +98,7 @@ class XTBBridge:
         force_batch = np.zeros_like(position_batch)
 
         for i, pos in enumerate(position_batch):
-            energy_batch[i, 0], force_batch[i] = self._evaluate_single(pos)
+            energy_batch[i], force_batch[i] = self._evaluate_single(pos)
 
         energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
         forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
