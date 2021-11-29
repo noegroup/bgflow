@@ -1,8 +1,9 @@
+"""Wrapper for semi-empirical QM energies with XTB.
+"""
 
 __all__ = ["XTBEnergy", "XTBBridge"]
 
 import torch
-import sys
 import numpy as np
 from .base import Energy
 from ...utils.types import assert_numpy
@@ -10,7 +11,6 @@ from ...utils.types import assert_numpy
 
 _XTB_FLOATING_TYPE = np.float64
 _SPATIAL_DIM = 3
-
 
 
 class _XTBEnergyWrapper(torch.autograd.Function):
@@ -30,7 +30,31 @@ _evaluate_xtb_energy = _XTBEnergyWrapper.apply
 
 
 class XTBBridge:
-    def __init__(self, numbers: np.ndarray = None, method: str = "GFN2-xTB", solvent: str = "water", verbosity: int = 0):
+    """Wrapper around XTB for semi-empirical QM energy calculations.
+
+    Parameters
+    ----------
+    numbers : np.ndarray
+        Atomic numbers
+    method : str
+        The semi-empirical method that is used to compute energies
+    solvent : str
+        The solvent.
+    verbosity : int
+        0 (muted), 1 (minimal), 2 (full)
+
+    Notes
+    -----
+    Requires the xtb-python program (installable with `conda install -c conda-forge xtb-python`).
+
+    """
+    def __init__(
+            self,
+            numbers: np.ndarray = None,
+            method: str = "GFN2-xTB",
+            solvent: str = "water",
+            verbosity: int = 0
+    ):
         self.method = method
         if numbers is not None:
             self.numbers = numbers
@@ -69,16 +93,26 @@ class XTBBridge:
 
     def _evaluate_single(self, positions):
         from xtb.interface import Calculator
-        from xtb.libxtb import VERBOSITY_MUTED
         from xtb.utils import get_method, get_solvent
         calc = Calculator(get_method(self.method), self.numbers, positions)
-        calc.set_solvent(self.solvent)
+        calc.set_solvent(get_solvent(self.solvent))
         calc.set_verbosity(self.verbosity)
         res = calc.singlepoint()
         return res.get_energy(), -res.get_gradient()
 
 
 class XTBEnergy(Energy):
+    """Semi-empirical energy computation with XTB.
+
+    Parameters
+    ----------
+    xtb_bridge : XTBBridge
+        The wrapper object.
+    two_event_dims : bool
+        Whether to use two event dimensions.
+        In this case, the energy call expects positions of shape (*batch_shape, n_atoms, 3).
+        Otherwise, it expects positions of shape (*batch_shape, n_atoms * 3).
+    """
     def __init__(self, xtb_bridge: XTBBridge, two_event_dims=True):
         event_shape = (xtb_bridge.n_atoms, 3) if two_event_dims else (xtb_bridge.n_atoms * 3, )
         super().__init__(event_shape)
@@ -100,5 +134,3 @@ class XTBEnergy(Energy):
         else:
             self._last_batch = hash(str(batch))
             return self._xtb_bridge.evaluate(batch)[1]
-
-
