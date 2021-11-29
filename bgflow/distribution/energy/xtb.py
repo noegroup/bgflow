@@ -38,8 +38,8 @@ class XTBBridge:
         Atomic numbers
     method : str
         The semi-empirical method that is used to compute energies
-    solvent : str or None
-        The solvent. If None, perform a vacuum calculation.
+    solvent : str
+        The solvent. If empty string, perform a vacuum calculation.
     verbosity : int
         0 (muted), 1 (minimal), 2 (full)
 
@@ -61,7 +61,7 @@ class XTBBridge:
             self,
             numbers: np.ndarray = None,
             method: str = "GFN2-xTB",
-            solvent: str = "water",
+            solvent: str = "",
             verbosity: int = 0
     ):
         self.numbers = numbers
