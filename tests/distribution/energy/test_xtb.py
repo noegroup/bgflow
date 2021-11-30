@@ -23,7 +23,7 @@ def test_xtb_water(pos_shape, ctx):
         [-1.44183152868459, 0.00000000000000, 0.36789293054775]],
         **ctx
     )
-    positions = (positions * unit.angstrom).value_in_unit(unit.nanometer)
+    positions = (positions * unit.bohr).value_in_unit(unit.nanometer)
     target = XTBEnergy(
         XTBBridge(numbers=numbers, temperature=temperature),
         two_event_dims=(pos_shape == (1, 3, 3))
@@ -33,13 +33,13 @@ def test_xtb_water(pos_shape, ctx):
     assert energy.shape == (1, 1)
     assert force.shape == pos_shape
 
-    kbt = unit.MOLAR_GAS_CONSTANT_R * temperature * unit.kelvin
-    expected_energy = torch.tensor(-5.070451354836705, **ctx) * unit.kilocalories_per_mole / kbt
+    kbt = unit.BOLTZMANN_CONSTANT_R * temperature * unit.kelvin
+    expected_energy = torch.tensor(-5.070451354836705, **ctx) * unit.hartree / kbt
     expected_force = - torch.tensor([
         [6.24500451e-17, - 3.47909735e-17, - 5.07156941e-03],
         [-1.24839222e-03,  2.43536791e-17,  2.53578470e-03],
         [1.24839222e-03, 1.04372944e-17, 2.53578470e-03],
-    ], **ctx) * unit.kilocalories_per_mole/unit.angstrom/(kbt/unit.nanometer)
+    ], **ctx) * unit.hartree/unit.bohr/(kbt/unit.nanometer)
     assert torch.allclose(energy.flatten(), expected_energy.flatten(), atol=1e-5)
     assert torch.allclose(force.flatten(), expected_force.flatten(), atol=1e-5)
 

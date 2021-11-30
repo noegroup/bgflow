@@ -122,7 +122,7 @@ class XTBBridge:
     def _evaluate_single(self, positions):
         from xtb.interface import Calculator, XTBException
         from xtb.utils import get_method, get_solvent
-        positions = _nm2angstrom(positions)
+        positions = _nm2bohr(positions)
         try:
             calc = Calculator(get_method(self.method), self.numbers, positions)
             calc.set_solvent(get_solvent(self.solvent))
@@ -160,8 +160,8 @@ class XTBBridge:
             if self.err_handling in ["error", "warning"]:
                 warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
 
-        energy = _kcal_per_mol2kbt(energy, self.temperature)
-        force = _kcal_per_mol_and_angstrom2kbt_per_nm(force, self.temperature)
+        energy = _hartree2kbt(energy, self.temperature)
+        force = _hartree_per_bohr2kbt_per_nm(force, self.temperature)
         return energy, force
 
 
@@ -200,25 +200,26 @@ class XTBEnergy(Energy):
             return self._xtb_bridge.evaluate(batch)[1]
 
 
-_MOLAR_GAS_CONSTANT_R = 0.0019872043  # kcal/K/mol  0.00831446261815324  # kJ/K/mol
+_BOLTZMANN_CONSTANT_HE = 3.1668115634556076e-06  # in hartree / kelvin
+_BOHR_RADIUS = 0.0529177210903  # nm
 
 
-def _angstrom2nm(x):
-    return x / 10
+def _bohr2nm(x):
+    return x * _BOHR_RADIUS
 
 
-def _nm2angstrom(x):
-    return x * 10
+def _nm2bohr(x):
+    return x / _BOHR_RADIUS
 
 
-def _per_angstrom2per_nm(x):
-    return _nm2angstrom(x)
+def _per_bohr2per_nm(x):
+    return _nm2bohr(x)
 
 
-def _kcal_per_mol2kbt(x, temperature):
-    kbt = _MOLAR_GAS_CONSTANT_R * temperature
+def _hartree2kbt(x, temperature):
+    kbt = _BOLTZMANN_CONSTANT_HE * temperature
     return x / kbt
 
 
-def _kcal_per_mol_and_angstrom2kbt_per_nm(x, temperature):
-    return _per_angstrom2per_nm(_kcal_per_mol2kbt(x, temperature))
+def _hartree_per_bohr2kbt_per_nm(x, temperature):
+    return _per_bohr2per_nm(_hartree2kbt(x, temperature))
