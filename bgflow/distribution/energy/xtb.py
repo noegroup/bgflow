@@ -155,7 +155,7 @@ class XTBBridge:
                 force = np.zeros_like(positions)
                 energy = np.infty
         except AssertionError:
-            force[torch.isnan(force)] = 0.
+            force[np.isnan(force)] = 0.
             energy = np.infty
             if self.err_handling in ["error", "warning"]:
                 warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
