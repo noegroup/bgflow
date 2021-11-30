@@ -258,7 +258,7 @@ class _BridgeEnergy(Energy):
     def _energy(self, batch, no_grads=False):
         # check if we have already computed this energy (hash of string representation should be sufficient)
         if hash(str(batch)) == self._last_batch:
-            return self._ase_bridge.last_energies
+            return self._bridge.last_energies
         else:
             self._last_batch = hash(str(batch))
             return _evaluate_bridge_energy(batch, self._bridge)
@@ -268,5 +268,5 @@ class _BridgeEnergy(Energy):
         if hash(str(batch)) == self.last_batch:
             return self.bridge.last_forces
         else:
-            self.last_batch = hash(str(batch))
+            self._last_batch = hash(str(batch))
             return self._bridge.evaluate(batch)[1]
