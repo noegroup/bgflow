@@ -6,3 +6,4 @@ from .multi_double_well_potential import *
 from .linlogcut import *
 from .openmm import *
 from .xtb import *
+from .ase import *
