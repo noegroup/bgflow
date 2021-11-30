@@ -127,7 +127,15 @@ class XTBBridge:
             calc = Calculator(get_method(self.method), self.numbers, positions)
             calc.set_solvent(get_solvent(self.solvent))
             calc.set_verbosity(self.verbosity)
-            res = calc.singlepoint()
+            calc.set_electronic_temperature(self.temperature)
+            try:
+                res = calc.singlepoint()
+            except XTBException:
+                # Try with higher temperature
+                calc.set_electronic_temperature(10 * self.temperature)
+                res = calc.singlepoint()
+                calc.set_electronic_temperature(self.temperature)
+                res = calc.singlepoint(res)
             energy = res.get_energy()
             force = -res.get_gradient()
             assert not np.isnan(energy)
