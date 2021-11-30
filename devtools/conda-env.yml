@@ -12,5 +12,6 @@ dependencies:
 
   - openmm
   - xtb-python
+  - ase
   - openmmtools
   - pytorch
