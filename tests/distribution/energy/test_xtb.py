@@ -9,7 +9,7 @@ try:
 except ImportError:
     xtb_imported = False
 
-pytest.mark.skipif(not xtb_imported)
+pytestmark = pytest.mark.skipif(not xtb_imported)
 
 
 @pytest.mark.parametrize("pos_shape", [(1, 3, 3), (1, 9)])
