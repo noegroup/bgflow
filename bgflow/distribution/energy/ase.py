@@ -27,7 +27,7 @@ class _ASEEnergyWrapper(torch.autograd.Function):
         grad_input = grad_output * neg_force
         return grad_input, None
 
-_evaluate_xtb_energy = _ASEEnergyWrapper.apply
+_evaluate_ase_energy = _ASEEnergyWrapper.apply
 
 
 class ASEBridge:
@@ -38,11 +38,11 @@ class ASEBridge:
     temperature : float
         Temperature in Kelvin.
     err_handling : str
-        How to deal with exceptions inside XTB. One of `["ignore", "warning", "error"]`
+        How to deal with exceptions inside ase. One of `["ignore", "warning", "error"]`
 
     Notes
     -----
-    Requires the ase program (installable with ` pip install ase`).
+    Requires the ase package (installable with ` pip install ase`).
 
     """
     def __init__(
@@ -56,6 +56,10 @@ class ASEBridge:
         self.temperature = temperature
         self._last_batch = None
         self.err_handling = err_handling
+
+    @property
+    def n_atoms(self):
+        return len(self.atoms)
 
     def evaluate(self, positions: torch.Tensor):
         self._last_batch = hash(str(positions))
@@ -94,10 +98,10 @@ class ASEBridge:
             force[np.isnan(force)] = 0.
             energy = np.infty
             if self.err_handling in ["error", "warning"]:
-                warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
+                warnings.warn("Found nan in ase force or energy. Returning infinite energy and zero force.")
         kbt = kB * 300
         energy = energy / kbt
-        force = force / kbt
+        force = force / (kbt / nm)
         return energy, force
 
 
@@ -106,31 +110,32 @@ class ASEEnergy(Energy):
 
     Parameters
     ----------
-    xtb_bridge : XTBBridge
+    ase_bridge : ASEBridge
         The wrapper object.
     two_event_dims : bool
         Whether to use two event dimensions.
         In this case, the energy call expects positions of shape (*batch_shape, n_atoms, 3).
         Otherwise, it expects positions of shape (*batch_shape, n_atoms * 3).
     """
-    def __init__(self, xtb_bridge: ASEBridge, two_event_dims=True):
-        event_shape = (xtb_bridge.n_atoms, 3) if two_event_dims else (xtb_bridge.n_atoms * 3, )
+    def __init__(self, ase_bridge: ASEBridge, two_event_dims=True):
+        n_atoms = len(ase_bridge.atoms)
+        event_shape = (n_atoms, 3) if two_event_dims else (n_atoms * 3, )
         super().__init__(event_shape)
-        self._xtb_bridge = xtb_bridge
+        self._ase_bridge = ase_bridge
         self._last_batch = None
 
     def _energy(self, batch, no_grads=False):
         # check if we have already computed this energy (hash of string representation should be sufficient)
         if hash(str(batch)) == self._last_batch:
-            return self._xtb_bridge.last_energies
+            return self._ase_bridge.last_energies
         else:
             self._last_batch = hash(str(batch))
-            return _evaluate_xtb_energy(batch, self._xtb_bridge)
+            return _evaluate_ase_energy(batch, self._ase_bridge)
 
     def force(self, batch, temperature=None):
         # check if we have already computed this energy
         if hash(str(batch)) == self._last_batch:
-            return self._xtb_bridge.last_forces
+            return self._ase_bridge.last_forces
         else:
             self._last_batch = hash(str(batch))
-            return self._xtb_bridge.evaluate(batch)[1]
+            return self._ase_bridge.evaluate(batch)[1]
