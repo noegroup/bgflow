@@ -31,13 +31,11 @@ class ASEBridge(_Bridge):
             temperature: float,
             err_handling: str = "warning"
     ):
+        super().__init__()
         assert hasattr(atoms, "calc")
         self.atoms = atoms
         self.temperature = temperature
-        self._last_batch = None
         self.err_handling = err_handling
-        self.last_energies = None
-        self.last_forces = None
 
     @property
     def n_atoms(self):
