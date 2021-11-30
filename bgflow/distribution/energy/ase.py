@@ -56,6 +56,8 @@ class ASEBridge:
         self.temperature = temperature
         self._last_batch = None
         self.err_handling = err_handling
+        self.last_energies = None
+        self.last_forces = None
 
     @property
     def n_atoms(self):

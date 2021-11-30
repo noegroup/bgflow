@@ -90,8 +90,10 @@ class XTBBridge:
         self.method = method
         self.solvent = solvent
         self.verbosity = verbosity
-        self._last_batch = None
         self.err_handling = err_handling
+        self._last_batch = None
+        self.last_energies = None
+        self.last_forces = None
 
     @property
     def n_atoms(self):
