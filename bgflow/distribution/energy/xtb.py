@@ -36,8 +36,10 @@ class XTBBridge:
     ----------
     numbers : np.ndarray
         Atomic numbers
+    temperature : float
+        Temperature in Kelvin.
     method : str
-        The semi-empirical method that is used to compute energies
+        The semi-empirical method that is used to compute energies.
     solvent : str
         The solvent. If empty string, perform a vacuum calculation.
     verbosity : int
@@ -59,12 +61,14 @@ class XTBBridge:
     """
     def __init__(
             self,
-            numbers: np.ndarray = None,
+            numbers: np.ndarray,
+            temperature: float,
             method: str = "GFN2-xTB",
             solvent: str = "",
             verbosity: int = 0
     ):
         self.numbers = numbers
+        self.temperature = temperature
         self.method = method
         self.solvent = solvent
         self.verbosity = verbosity
@@ -112,11 +116,14 @@ class XTBBridge:
     def _evaluate_single(self, positions):
         from xtb.interface import Calculator
         from xtb.utils import get_method, get_solvent
+        positions = _nm2angstrom(positions)
         calc = Calculator(get_method(self.method), self.numbers, positions)
         calc.set_solvent(get_solvent(self.solvent))
         calc.set_verbosity(self.verbosity)
         res = calc.singlepoint()
-        return res.get_energy(), -res.get_gradient()
+        energy = _kcal_per_mol2kbt(res.get_energy(), self.temperature)
+        force = _kcal_per_mol_and_angstrom2kbt_per_nm(-res.get_gradient(), self.temperature)
+        return energy, force
 
 
 class XTBEnergy(Energy):
@@ -152,3 +159,27 @@ class XTBEnergy(Energy):
         else:
             self._last_batch = hash(str(batch))
             return self._xtb_bridge.evaluate(batch)[1]
+
+
+_MOLAR_GAS_CONSTANT_R = 0.0019872043  # kcal/K/mol  0.00831446261815324  # kJ/K/mol
+
+
+def _angstrom2nm(x):
+    return x / 10
+
+
+def _nm2angstrom(x):
+    return x * 10
+
+
+def _per_nm2per_angstrom(x):
+    return _angstrom2nm(x)
+
+
+def _kcal_per_mol2kbt(x, temperature):
+    kbt = _MOLAR_GAS_CONSTANT_R * temperature
+    return x / kbt
+
+
+def _kcal_per_mol_and_angstrom2kbt_per_nm(x, temperature):
+    return _per_nm2per_angstrom(_kcal_per_mol2kbt(x, temperature))
