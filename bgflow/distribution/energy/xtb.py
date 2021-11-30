@@ -172,8 +172,8 @@ def _nm2angstrom(x):
     return x * 10
 
 
-def _per_nm2per_angstrom(x):
-    return _angstrom2nm(x)
+def _per_angstrom2per_nm(x):
+    return _nm2angstrom(x)
 
 
 def _kcal_per_mol2kbt(x, temperature):
@@ -182,4 +182,4 @@ def _kcal_per_mol2kbt(x, temperature):
 
 
 def _kcal_per_mol_and_angstrom2kbt_per_nm(x, temperature):
-    return _per_nm2per_angstrom(_kcal_per_mol2kbt(x, temperature))
+    return _per_angstrom2per_nm(_kcal_per_mol2kbt(x, temperature))
