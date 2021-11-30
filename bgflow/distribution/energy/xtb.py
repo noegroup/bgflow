@@ -58,6 +58,19 @@ class XTBBridge:
     available_methods : List[str]
         The semiempirical methods that are available for computations in xtb.
 
+    Examples
+    --------
+    Setting up an XTB energy for a small peptide from bgmol
+    >>> from bgmol.systems import MiniPeptide
+    >>> from bgflow import XTBEnergy, XTBBridge
+    >>> import numpy as np
+    >>> import torch
+    >>> system = MiniPeptide("G")
+    >>> numbers = np.array([atom.element.number for atom in system.mdtraj_topology.atoms])
+    >>> target = XTBEnergy(XTBBridge(numbers=numbers, temperature=300, solvent="water"))
+    >>> xyz = torch.tensor(system.positions)
+    >>> energy = target.energy(xyz)
+
     Notes
     -----
     Requires the xtb-python program (installable with `conda install -c conda-forge xtb-python`).

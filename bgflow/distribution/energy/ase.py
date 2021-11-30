@@ -10,7 +10,7 @@ from .base import Energy
 from ...utils import assert_numpy
 
 
-_XTB_FLOATING_TYPE = np.float64
+_ASE_FLOATING_TYPE = np.float64
 _SPATIAL_DIM = 3
 
 
@@ -42,7 +42,7 @@ class ASEBridge:
 
     Notes
     -----
-    Requires the ase package (installable with ` pip install ase`).
+    Requires the ase package (installable with `conda install -c conda-forge ase`).
 
     """
     def __init__(
@@ -69,7 +69,7 @@ class ASEBridge:
         energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
         # the stupid last dim
         energy_shape = [*energy_shape, 1]
-        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=_XTB_FLOATING_TYPE)
+        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=_ASE_FLOATING_TYPE)
 
         energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
         force_batch = np.zeros_like(position_batch)
@@ -106,7 +106,21 @@ class ASEBridge:
 
 
 class ASEEnergy(Energy):
-    """Semi-empirical energy computation with XTB.
+    """Energy computation with calculators from the atomic simulation environment (ASE).
+    Various molecular simulation programs provide wrappers for ASE,
+    see https://wiki.fysik.dtu.dk/ase/ase/calculators/calculators.html
+    for a list of available calculators.
+
+    Examples
+    --------
+    Use the calculator from the xtb package to compute the energy of a water molecule with the GFN2-xTB method.
+    >>> from ase.build import molecule
+    >>> from xtb.ase.calculator import XTB
+    >>> water = molecule("H2O")
+    >>> water.calc = XTB()
+    >>> target = ASEEnergy(ASEBridge(water, 300.))
+    >>> pos = torch.tensor(0.1*water.positions, **ctx)
+    >>> energy = target.energy(pos)
 
     Parameters
     ----------
