@@ -33,7 +33,7 @@ def test_xtb_water(pos_shape, ctx):
     assert energy.shape == (1, 1)
     assert force.shape == pos_shape
 
-    kbt = unit.BOLTZMANN_CONSTANT_R * temperature * unit.kelvin
+    kbt = unit.BOLTZMANN_CONSTANT_kB * temperature * unit.kelvin
     expected_energy = torch.tensor(-5.070451354836705, **ctx) * unit.hartree / kbt
     expected_force = - torch.tensor([
         [6.24500451e-17, - 3.47909735e-17, - 5.07156941e-03],
