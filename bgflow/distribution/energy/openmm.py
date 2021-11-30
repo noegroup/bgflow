@@ -9,34 +9,13 @@ import pickle
 import torch
 
 from ...utils.types import assert_numpy
-from .base import Energy
+from .base import _BridgeEnergy, _Bridge
+
 
 __all__ = ["OpenMMBridge", "OpenMMEnergy"]
 
 
-_OPENMM_FLOATING_TYPE = np.float64
-_SPATIAL_DIM = 3
-
-
-class _OpenMMEnergyWrapper(torch.autograd.Function):
-    
-    @staticmethod
-    def forward(ctx, input, openmm_energy_bridge):
-        energy, force, *_ = openmm_energy_bridge.evaluate(input)
-        ctx.save_for_backward(-force)
-        return energy
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        neg_force, = ctx.saved_tensors
-        grad_input = grad_output * neg_force
-        return grad_input, None
-
-
-_evaluate_openmm_energy = _OpenMMEnergyWrapper.apply
-
-
-class OpenMMBridge:
+class OpenMMBridge(_Bridge):
     """Bridge object to evaluate energies in OpenMM.
     Input positions are in nm, returned energies are dimensionless (units of kT), returned forces are in kT/nm.
 
@@ -87,8 +66,11 @@ class OpenMMBridge:
         self._n_simulation_steps = n_simulation_steps
         self._unit_reciprocal = 1/(openmm_integrator.getTemperature() * unit.MOLAR_GAS_CONSTANT_R
                                    ).value_in_unit(unit.kilojoule_per_mole)
-        self.last_energies = None
-        self.last_forces = None
+        super().__init__()
+
+    @property
+    def n_atoms(self):
+        return self._openmm_system.getNumParticles()
 
     @property
     def integrator(self):
@@ -139,13 +121,13 @@ class OpenMMBridge:
         """
 
         # make a list of positions
-        batch_array = assert_numpy(batch, arr_type=_OPENMM_FLOATING_TYPE)
+        batch_array = assert_numpy(batch, arr_type=self._FLOATING_TYPE)
 
         # assert correct number of positions
-        assert batch_array.shape[1] == self._openmm_system.getNumParticles() * _SPATIAL_DIM
+        assert batch_array.shape[1] == self._openmm_system.getNumParticles() * self._SPATIAL_DIM
 
         # reshape to (B, N, D)
-        batch_array = batch_array.reshape(batch.shape[0], -1, _SPATIAL_DIM)
+        batch_array = batch_array.reshape(batch.shape[0], -1, self._SPATIAL_DIM)
         energies, forces, new_positions, log_path_probability_ratio = self.context_wrapper.evaluate(
             batch_array,
             evaluate_energy=evaluate_energy,
@@ -163,11 +145,11 @@ class OpenMMBridge:
         # to PyTorch tensors
         energies = torch.tensor(energies).to(batch).reshape(-1, 1) if evaluate_energy else None
         forces = (
-            torch.tensor(forces).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+            torch.tensor(forces).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*self._SPATIAL_DIM)
             if evaluate_force else None
         )
         new_positions = (
-            torch.tensor(new_positions).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*_SPATIAL_DIM)
+            torch.tensor(new_positions).to(batch).reshape(batch.shape[0], self._openmm_system.getNumParticles()*self._SPATIAL_DIM)
             if evaluate_positions else None
         )
         log_path_probability_ratio = (
@@ -527,25 +509,12 @@ class SingleContext:
         )
 
 
-class OpenMMEnergy(Energy):
-
-    def __init__(self, dimension, openmm_energy_bridge):
-        super().__init__(dimension)
-        self._openmm_energy_bridge = openmm_energy_bridge
-        self._last_batch = None
-
-    def _energy(self, batch, no_grads=False):
-        # check if we have already computed this energy (hash of string representation should be sufficient)
-        if hash(str(batch)) == self._last_batch:
-            return self._openmm_energy_bridge.last_energies
-        else:
-            self._last_batch = hash(str(batch))
-            return _evaluate_openmm_energy(batch, self._openmm_energy_bridge)
-
-    def force(self, batch, temperature=None):
-        # check if we have already computed this energy
-        if hash(str(batch)) == self._last_batch:
-            return self._openmm_energy_bridge.last_forces
-        else:
-            self._last_batch = hash(str(batch))
-            return self._openmm_energy_bridge.evaluate(batch)[1]
+class OpenMMEnergy(_BridgeEnergy):
+    def __init__(self, dimension=None, openmm_energy_bridge=None, two_event_dims=False):
+        if dimension is not None:
+            warnings.warn(
+                "dimension argument in OpenMMEnergy is deprectated and will be ignored. "
+                "The dimension is directly inferred from the system.",
+                DeprecationWarning
+            )
+        super().__init__(openmm_energy_bridge, two_event_dims=two_event_dims)

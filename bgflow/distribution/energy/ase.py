@@ -6,31 +6,11 @@ __all__ = ["ASEBridge", "ASEEnergy"]
 import warnings
 import torch
 import numpy as np
-from .base import Energy
 from ...utils import assert_numpy
+from .base import _BridgeEnergy, _Bridge
 
 
-_ASE_FLOATING_TYPE = np.float64
-_SPATIAL_DIM = 3
-
-
-class _ASEEnergyWrapper(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input, ase_energy_bridge):
-        energy, force, *_ = ase_energy_bridge.evaluate(input)
-        ctx.save_for_backward(-force)
-        return energy
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        neg_force, = ctx.saved_tensors
-        grad_input = grad_output * neg_force
-        return grad_input, None
-
-_evaluate_ase_energy = _ASEEnergyWrapper.apply
-
-
-class ASEBridge:
+class ASEBridge(_Bridge):
     """Wrapper around Atomic Simulation Environment.
 
     Parameters
@@ -64,14 +44,12 @@ class ASEBridge:
         return len(self.atoms)
 
     def evaluate(self, positions: torch.Tensor):
-        self._last_batch = hash(str(positions))
-
         shape = positions.shape
         assert shape[-2:] == (self.n_atoms, 3) or shape[-1] == self.n_atoms * 3
         energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
         # the stupid last dim
         energy_shape = [*energy_shape, 1]
-        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=_ASE_FLOATING_TYPE)
+        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=self._FLOATING_TYPE)
 
         energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
         force_batch = np.zeros_like(position_batch)
@@ -107,7 +85,7 @@ class ASEBridge:
         return energy, force
 
 
-class ASEEnergy(Energy):
+class ASEEnergy(_BridgeEnergy):
     """Energy computation with calculators from the atomic simulation environment (ASE).
     Various molecular simulation programs provide wrappers for ASE,
     see https://wiki.fysik.dtu.dk/ase/ase/calculators/calculators.html
@@ -133,25 +111,4 @@ class ASEEnergy(Energy):
         In this case, the energy call expects positions of shape (*batch_shape, n_atoms, 3).
         Otherwise, it expects positions of shape (*batch_shape, n_atoms * 3).
     """
-    def __init__(self, ase_bridge: ASEBridge, two_event_dims=True):
-        n_atoms = len(ase_bridge.atoms)
-        event_shape = (n_atoms, 3) if two_event_dims else (n_atoms * 3, )
-        super().__init__(event_shape)
-        self._ase_bridge = ase_bridge
-        self._last_batch = None
-
-    def _energy(self, batch, no_grads=False):
-        # check if we have already computed this energy (hash of string representation should be sufficient)
-        if hash(str(batch)) == self._last_batch:
-            return self._ase_bridge.last_energies
-        else:
-            self._last_batch = hash(str(batch))
-            return _evaluate_ase_energy(batch, self._ase_bridge)
-
-    def force(self, batch, temperature=None):
-        # check if we have already computed this energy
-        if hash(str(batch)) == self._last_batch:
-            return self._ase_bridge.last_forces
-        else:
-            self._last_batch = hash(str(batch))
-            return self._ase_bridge.evaluate(batch)[1]
+    pass

@@ -3,6 +3,7 @@ from collections.abc import Sequence as _Sequence
 import warnings
 
 import torch
+import numpy as np
 
 __all__ = ["Energy"]
 
@@ -206,3 +207,66 @@ class Energy(torch.nn.Module):
         if len(self._event_shapes) == 1:
             forces = forces[0]
         return forces
+
+
+class _BridgeEnergyWrapper(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, bridge):
+        energy, force, *_ = bridge.evaluate(input)
+        ctx.save_for_backward(-force)
+        return energy
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        neg_force, = ctx.saved_tensors
+        grad_input = grad_output * neg_force
+        return grad_input, None
+
+
+_evaluate_bridge_energy = _BridgeEnergyWrapper.apply
+
+
+class _Bridge:
+    _FLOATING_TYPE = np.float64
+    _SPATIAL_DIM = 3
+
+    def __init__(self):
+        self.last_energies = None
+        self.last_forces = None
+
+    @property
+    def n_atoms(self):
+        raise NotImplementedError()
+
+
+class _BridgeEnergy(Energy):
+
+    def __init__(self, bridge, two_event_dims=True):
+        event_shape = (bridge.n_atoms, 3) if two_event_dims else (bridge.n_atoms * 3, )
+        super().__init__(event_shape)
+        self._bridge = bridge
+        self._last_batch = None
+
+    @property
+    def last_batch(self):
+        return self._last_batch
+
+    @property
+    def bridge(self):
+        return self._bridge
+
+    def _energy(self, batch, no_grads=False):
+        # check if we have already computed this energy (hash of string representation should be sufficient)
+        if hash(str(batch)) == self._last_batch:
+            return self._ase_bridge.last_energies
+        else:
+            self._last_batch = hash(str(batch))
+            return _evaluate_bridge_energy(batch, self._bridge)
+
+    def force(self, batch, temperature=None):
+        # check if we have already computed this energy
+        if hash(str(batch)) == self.last_batch:
+            return self.bridge.last_forces
+        else:
+            self.last_batch = hash(str(batch))
+            return self._bridge.evaluate(batch)[1]
