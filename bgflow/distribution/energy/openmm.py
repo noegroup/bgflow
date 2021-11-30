@@ -510,11 +510,11 @@ class SingleContext:
 
 
 class OpenMMEnergy(_BridgeEnergy):
-    def __init__(self, dimension=None, openmm_energy_bridge=None, two_event_dims=False):
+    def __init__(self, dimension=None, bridge=None, two_event_dims=False):
         if dimension is not None:
             warnings.warn(
                 "dimension argument in OpenMMEnergy is deprectated and will be ignored. "
                 "The dimension is directly inferred from the system.",
                 DeprecationWarning
             )
-        super().__init__(openmm_energy_bridge, two_event_dims=two_event_dims)
+        super().__init__(bridge, two_event_dims=two_event_dims)

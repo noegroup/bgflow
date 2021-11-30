@@ -122,7 +122,7 @@ def test_openmm_bridge_evaluate_openmmtools_testsystem(
 def test_openmm_bridge_cache():
     """Test if hashing and caching works."""
     bridge = OneParticleTestBridge()
-    omm_energy = OpenMMEnergy(3, bridge)
+    omm_energy = OpenMMEnergy(bridge=bridge)
     omm_energy._energy(torch.tensor([[0.1, 0.0, 0.0]] * 2))
     hash1 = omm_energy._last_batch
     omm_energy._energy(torch.tensor([[0.2, 0.0, 0.0]] * 2))
@@ -132,9 +132,9 @@ def test_openmm_bridge_cache():
     omm_energy._energy(torch.tensor([[0.1, 0.0, 0.0]] * 2))
 
     # test if forces are in the same memory location for same input batch
-    force_address = hex(id(omm_energy._openmm_energy_bridge.last_forces))
+    force_address = hex(id(omm_energy.bridge.last_forces))
     force = (
-        omm_energy._openmm_energy_bridge.last_forces
+        omm_energy.bridge.last_forces
     )  # retain a pointer to last forces so that memory is not freed
     assert (
         hex(id(omm_energy.force(torch.tensor([[0.1, 0.0, 0.0]] * 2)))) == force_address

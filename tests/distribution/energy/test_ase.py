@@ -11,7 +11,7 @@ try:
 except ImportError:
     ase_and_xtb_imported = False
 
-pytestmark = pytest.mark.skipif(not ase_and_xtb_imported)
+pytestmark = pytest.mark.skipif(not ase_and_xtb_imported, reason="Tests require ASE and XTB")
 
 
 def test_ase_energy(ctx):
