@@ -3,6 +3,8 @@
 
 __all__ = ["XTBEnergy", "XTBBridge"]
 
+
+import warnings
 import torch
 import numpy as np
 from .base import Energy
@@ -44,6 +46,8 @@ class XTBBridge:
         The solvent. If empty string, perform a vacuum calculation.
     verbosity : int
         0 (muted), 1 (minimal), 2 (full)
+    err_handling : str
+        How to deal with exceptions inside XTB. One of `["ignore", "warning", "error"]`
 
     Attributes
     ----------
@@ -65,7 +69,8 @@ class XTBBridge:
             temperature: float,
             method: str = "GFN2-xTB",
             solvent: str = "",
-            verbosity: int = 0
+            verbosity: int = 0,
+            err_handling: str = "warning"
     ):
         self.numbers = numbers
         self.temperature = temperature
@@ -73,6 +78,7 @@ class XTBBridge:
         self.solvent = solvent
         self.verbosity = verbosity
         self._last_batch = None
+        self.err_handling = err_handling
 
     @property
     def n_atoms(self):
@@ -114,15 +120,40 @@ class XTBBridge:
         return energies, forces
 
     def _evaluate_single(self, positions):
-        from xtb.interface import Calculator
+        from xtb.interface import Calculator, XTBException
         from xtb.utils import get_method, get_solvent
         positions = _nm2angstrom(positions)
         calc = Calculator(get_method(self.method), self.numbers, positions)
         calc.set_solvent(get_solvent(self.solvent))
         calc.set_verbosity(self.verbosity)
-        res = calc.singlepoint()
-        energy = _kcal_per_mol2kbt(res.get_energy(), self.temperature)
-        force = _kcal_per_mol_and_angstrom2kbt_per_nm(-res.get_gradient(), self.temperature)
+        try:
+            res = calc.singlepoint()
+            energy = res.get_energy()
+            force = -res.get_gradient()
+            assert not np.isnan(energy)
+            assert not np.isnan(force).any()
+        except XTBException as e:
+            if self.err_handling == "error":
+                raise e
+            elif self.err_handling == "warning":
+                warnings.warn(
+                    f"Caught exception in xtb. "
+                    f"Returning infinite energy and zero force. "
+                    f"Original exception: {e}"
+                )
+                force = np.zeros_like(positions)
+                energy = np.infty
+            elif self.err_handling == "ignore":
+                force = np.zeros_like(positions)
+                energy = np.infty
+        except AssertionError:
+            force[torch.isnan(force)] = 0.
+            energy = np.infty
+            if self.err_handling in ["error", "warning"]:
+                warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
+
+        energy = _kcal_per_mol2kbt(energy, self.temperature)
+        force = _kcal_per_mol_and_angstrom2kbt_per_nm(force, self.temperature)
         return energy, force
 
 

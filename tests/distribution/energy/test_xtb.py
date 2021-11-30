@@ -3,10 +3,17 @@ import torch
 import numpy as np
 from bgflow import XTBEnergy, XTBBridge
 
+try:
+    import xtb
+    xtb_imported = True
+except ImportError:
+    xtb_imported = False
+
+pytest.mark.skipif(not xtb_imported)
+
 
 @pytest.mark.parametrize("pos_shape", [(1, 3, 3), (1, 9)])
 def test_xtb_water(pos_shape, ctx):
-    _ = pytest.importorskip("xtb")
     unit = pytest.importorskip("openmm.unit")
     temperature = 300
     numbers = np.array([8, 1, 1])
@@ -36,3 +43,29 @@ def test_xtb_water(pos_shape, ctx):
     assert torch.allclose(energy.flatten(), expected_energy.flatten(), atol=1e-5)
     assert torch.allclose(force.flatten(), expected_force.flatten(), atol=1e-5)
 
+
+def _eval_invalid(ctx, err_handling):
+    pos = torch.zeros(1, 3, 3, **ctx)
+    target = XTBEnergy(
+        XTBBridge(numbers=np.array([8, 1, 1]), temperature=300, err_handling=err_handling)
+    )
+    return target.energy(pos), target.force(pos)
+
+
+def test_xtb_error(ctx):
+    from xtb.interface import XTBException
+    with pytest.raises(XTBException):
+        _eval_invalid(ctx, err_handling="error")
+
+
+def test_xtb_warning(ctx):
+    with pytest.warns(UserWarning, match="Caught exception in xtb"):
+        e, f = _eval_invalid(ctx, err_handling="warning")
+        assert torch.isinf(e).all()
+        assert torch.allclose(f, torch.zeros_like(f))
+
+
+def test_xtb_ignore(ctx):
+    e, f = _eval_invalid(ctx, err_handling="ignore")
+    assert torch.isinf(e).all()
+    assert torch.allclose(f, torch.zeros_like(f))
