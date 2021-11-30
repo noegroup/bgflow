@@ -123,10 +123,10 @@ class XTBBridge:
         from xtb.interface import Calculator, XTBException
         from xtb.utils import get_method, get_solvent
         positions = _nm2angstrom(positions)
-        calc = Calculator(get_method(self.method), self.numbers, positions)
-        calc.set_solvent(get_solvent(self.solvent))
-        calc.set_verbosity(self.verbosity)
         try:
+            calc = Calculator(get_method(self.method), self.numbers, positions)
+            calc.set_solvent(get_solvent(self.solvent))
+            calc.set_verbosity(self.verbosity)
             res = calc.singlepoint()
             energy = res.get_energy()
             force = -res.get_gradient()
