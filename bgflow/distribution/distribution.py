@@ -112,3 +112,6 @@ class UniformDistribution(TorchDistribution):
             return y
         except (ValueError, AssertionError):
             return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape[:-1]))[:,None]
+
+    def _sample_with_temperature(self, n_samples, temperature):
+        return self._sample(n_samples)
