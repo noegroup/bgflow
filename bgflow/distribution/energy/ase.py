@@ -6,7 +6,6 @@ __all__ = ["ASEBridge", "ASEEnergy"]
 import warnings
 import torch
 import numpy as np
-from ...utils import assert_numpy
 from .base import _BridgeEnergy, _Bridge
 
 
