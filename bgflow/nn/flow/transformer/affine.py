@@ -55,7 +55,7 @@ class AffineTransformer(Transformer):
         dlogp = (log_sigma).sum(dim=-1, keepdim=True)
         y = sigma * y + mu
         if self._is_circular:
-            y = torch.fmod(y, 1.0)
+            y = y % 1.0
         return y, dlogp
 
     def _inverse(self, x, y, *cond, **kwargs):
@@ -66,5 +66,5 @@ class AffineTransformer(Transformer):
         dlogp = (-log_sigma).sum(dim=-1, keepdim=True)
         y = sigma_inv * (y - mu)
         if self._is_circular:
-            y = torch.fmod(y, 1.0)
+            y = y % 1.0
         return y, dlogp
