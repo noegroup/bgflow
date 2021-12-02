@@ -25,7 +25,6 @@ class AffineTransformer(Transformer):
     ):
         if scale_transformation is not None and is_circular:
             raise ValueError("Scaling is not compatible with periodicity.")
-
         super().__init__()
         self._shift_transformation = shift_transformation
         self._scale_transformation = scale_transformation
