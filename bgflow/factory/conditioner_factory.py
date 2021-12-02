@@ -74,8 +74,7 @@ def _spline_out_dims(what, shape_info, transformer_kwargs={}, num_bins=8):
     return {"params_net": dim_out}
 
 
-def _affine_out_dims(what, shape_info, transformer_kwargs={}):
-    use_scaling = transformer_kwargs.pop("use_scaling", True)
+def _affine_out_dims(what, shape_info, transformer_kwargs={}, use_scaling=True):
     dim_out = shape_info.dim_all(what)
     out_dims = {"shift_transformation": dim_out}
     if use_scaling:

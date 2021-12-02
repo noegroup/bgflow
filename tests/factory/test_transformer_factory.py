@@ -38,7 +38,7 @@ def test_circular_affine(crd_trafo):
 
     conditioners = make_conditioners(
         bgflow.AffineTransformer,
-        (TORSIONS,), (FIXED,), transformer_kwargs=dict(use_scaling=False), shape_info=shape_info
+        (TORSIONS,), (FIXED,), shape_info=shape_info, use_scaling=False
     )
     assert list(conditioners.keys()) == ["shift_transformation"]
     transformer = make_transformer(bgflow.AffineTransformer, (TORSIONS,), shape_info, conditioners=conditioners)
