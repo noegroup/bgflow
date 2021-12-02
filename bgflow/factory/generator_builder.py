@@ -328,6 +328,7 @@ class BoltzmannGeneratorBuilder:
         param_groups : Sequence[str]
             A list of group names.
         """
+        what = _tuple(what)
         if inverse:
             flow = InverseFlow(flow)
         if what is not None:
