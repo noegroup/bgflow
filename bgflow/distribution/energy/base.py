@@ -1,11 +1,14 @@
+
+__all__ = ["Energy"]
+
+
 from typing import Union, Optional, Sequence
 from collections.abc import Sequence as _Sequence
 import warnings
 
 import torch
 import numpy as np
-
-__all__ = ["Energy"]
+from ...utils.types import assert_numpy
 
 
 def _is_non_empty_sequence_of_integers(x):
@@ -233,6 +236,52 @@ class _Bridge:
     def __init__(self):
         self.last_energies = None
         self.last_forces = None
+
+    def evaluate(
+            self,
+            positions: torch.Tensor,
+            *args,
+            evaluate_force: bool = True,
+            evaluate_energy: bool = True,
+            **kwargs
+    ):
+        shape = positions.shape
+        assert shape[-2:] == (self.n_atoms, 3) or shape[-1] == self.n_atoms * 3
+        energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
+        # the stupid last dim
+        energy_shape = [*energy_shape, 1]
+        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=self._FLOATING_TYPE)
+
+        energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
+        force_batch = np.zeros_like(position_batch)
+
+        for i, pos in enumerate(position_batch):
+            energy_batch[i], force_batch[i] = self._evaluate_single(
+                pos,
+                *args,
+                evaluate_energy=evaluate_energy,
+                evaluate_force=evaluate_force,
+                **kwargs
+            )
+
+        energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
+        forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
+
+        # store
+        self.last_energies = energies
+        self.last_forces = forces
+
+        return energies, forces
+
+    def _evaluate_single(
+            self,
+            positions: torch.Tensor,
+            *args,
+            evaluate_force=True,
+            evaluate_energy=True,
+            **kwargs
+    ):
+        raise NotImplementedError
 
     @property
     def n_atoms(self):

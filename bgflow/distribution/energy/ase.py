@@ -15,6 +15,8 @@ class ASEBridge(_Bridge):
 
     Parameters
     ----------
+    atoms : ase.Atoms
+        An `Atoms` object that has a calculator attached to it.
     temperature : float
         Temperature in Kelvin.
     err_handling : str
@@ -41,45 +43,30 @@ class ASEBridge(_Bridge):
     def n_atoms(self):
         return len(self.atoms)
 
-    def evaluate(self, positions: torch.Tensor):
-        shape = positions.shape
-        assert shape[-2:] == (self.n_atoms, 3) or shape[-1] == self.n_atoms * 3
-        energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
-        # the stupid last dim
-        energy_shape = [*energy_shape, 1]
-        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=self._FLOATING_TYPE)
-
-        energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
-        force_batch = np.zeros_like(position_batch)
-
-        for i, pos in enumerate(position_batch):
-            energy_batch[i], force_batch[i] = self._evaluate_single(pos)
-
-        energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
-        forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
-
-        # store
-        self.last_energies = energies
-        self.last_forces = forces
-
-        return energies, forces
-
-    def _evaluate_single(self, positions):
+    def _evaluate_single(
+            self,
+            positions: torch.Tensor,
+            evaluate_force=True,
+            evaluate_energy=True,
+    ):
         from ase.units import kB, nm
+        kbt = kB * self.temperature
+        energy, force = None, None
         try:
             self.atoms.positions = positions * nm
-            energy = self.atoms.get_potential_energy()
-            force = self.atoms.get_forces()
+            if evaluate_energy:
+                energy = self.atoms.get_potential_energy() / kbt
+            if evaluate_force:
+                force = self.atoms.get_forces() / (kbt / nm)
             assert not np.isnan(energy)
             assert not np.isnan(force).any()
-        except AssertionError:
+        except AssertionError as e:
             force[np.isnan(force)] = 0.
             energy = np.infty
-            if self.err_handling in ["error", "warning"]:
+            if self.err_handling == "warning":
                 warnings.warn("Found nan in ase force or energy. Returning infinite energy and zero force.")
-        kbt = kB * 300
-        energy = energy / kbt
-        force = force / (kbt / nm)
+            elif self.err_handling == "error":
+                raise e
         return energy, force
 
 

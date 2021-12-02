@@ -7,7 +7,6 @@ __all__ = ["XTBEnergy", "XTBBridge"]
 import warnings
 import torch
 import numpy as np
-from ...utils.types import assert_numpy
 from .base import _BridgeEnergy, _Bridge
 
 
@@ -87,33 +86,16 @@ class XTBBridge(_Bridge):
         from xtb.utils import _methods
         return list(_methods.keys())
 
-    def evaluate(self, positions: torch.Tensor):
-        shape = positions.shape
-        assert shape[-2:] == (self.n_atoms, 3) or shape[-1] == self.n_atoms * 3
-        energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
-        # the stupid last dim
-        energy_shape = [*energy_shape, 1]
-        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=self._FLOATING_TYPE)
-
-        energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
-        force_batch = np.zeros_like(position_batch)
-
-        for i, pos in enumerate(position_batch):
-            energy_batch[i], force_batch[i] = self._evaluate_single(pos)
-
-        energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
-        forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
-
-        # store
-        self.last_energies = energies
-        self.last_forces = forces
-
-        return energies, forces
-
-    def _evaluate_single(self, positions):
+    def _evaluate_single(
+            self,
+            positions: torch.Tensor,
+            evaluate_force=True,
+            evaluate_energy=True,
+    ):
         from xtb.interface import Calculator, XTBException
         from xtb.utils import get_method, get_solvent
         positions = _nm2bohr(positions)
+        energy, force = None, None
         try:
             calc = Calculator(get_method(self.method), self.numbers, positions)
             calc.set_solvent(get_solvent(self.solvent))
@@ -127,8 +109,13 @@ class XTBBridge(_Bridge):
                 res = calc.singlepoint()
                 calc.set_electronic_temperature(self.temperature)
                 res = calc.singlepoint(res)
-            energy = res.get_energy()
-            force = -res.get_gradient()
+            if evaluate_energy:
+                energy = _hartree2kbt(res.get_energy(), self.temperature)
+            if evaluate_force:
+                force = _hartree_per_bohr2kbt_per_nm(
+                    -res.get_gradient(),
+                    self.temperature
+                )
             assert not np.isnan(energy)
             assert not np.isnan(force).any()
         except XTBException as e:
@@ -151,8 +138,6 @@ class XTBBridge(_Bridge):
             if self.err_handling in ["error", "warning"]:
                 warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
 
-        energy = _hartree2kbt(energy, self.temperature)
-        force = _hartree_per_bohr2kbt_per_nm(force, self.temperature)
         return energy, force
 
 

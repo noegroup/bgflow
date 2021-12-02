@@ -513,7 +513,7 @@ class OpenMMEnergy(_BridgeEnergy):
     def __init__(self, dimension=None, bridge=None, two_event_dims=False):
         if dimension is not None:
             warnings.warn(
-                "dimension argument in OpenMMEnergy is deprectated and will be ignored. "
+                "dimension argument in OpenMMEnergy is deprecated and will be ignored. "
                 "The dimension is directly inferred from the system.",
                 DeprecationWarning
             )
