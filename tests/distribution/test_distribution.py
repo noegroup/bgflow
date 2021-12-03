@@ -60,7 +60,7 @@ def test_sample_product_with_temperature(ctx):
     x1, y1 = product.sample(20, temperature=1.)
     x2, y2 = product.sample(20, temperature=100.)
 
-    assert x1.std() / x2.std() == pytest.approx(0.1, abs=0.05)
-    assert y1.std() / y2.std() == pytest.approx(0.1, abs=0.05)
+    assert (x1.std() / x2.std()).item() == pytest.approx(0.1, abs=0.05)
+    assert (y1.std() / y2.std()).item() == pytest.approx(0.1, abs=0.05)
 
 
