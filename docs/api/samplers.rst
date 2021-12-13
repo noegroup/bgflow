@@ -1,8 +1,8 @@
-Samplers
+Sampling
 ========
 
 
-.. automodule:: bgflow.distribution.sampling
+.. automodule:: bgflow.distribution
 
 .. toctree::
    :maxdepth: 1
