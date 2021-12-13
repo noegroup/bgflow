@@ -16,7 +16,7 @@ class MultiDoubleWellPotential(Energy):
     dim : int
         Number of degrees of freedom ( = space dimension x n_particles)
     n_particles : int
-        Number of Lennard-Jones particles
+        Number of particles
     a, b, c, offset : float
         parameters of the potential
     """
