@@ -18,4 +18,4 @@ from .rbf_kernels import (
 
 from .free_energy import *
 
-from plot import *
+from .plot import *
