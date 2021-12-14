@@ -1,5 +1,5 @@
 Energies
-=======
+=========
 
 
 .. automodule:: bgflow.distribution.energy

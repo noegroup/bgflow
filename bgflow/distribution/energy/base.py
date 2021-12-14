@@ -72,7 +72,7 @@ class Energy(torch.nn.Module):
             a tuple of tensors of shape ([..., 1, 3], [..., 5, 3, 6])
 
     Parameters:
-    ----------
+    -----------
     dim: Union[int, Sequence[int], Sequence[Sequence[int]]]
         The event shape of the states for which energies/forces ar computed.
 

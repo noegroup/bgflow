@@ -29,7 +29,7 @@ Distributions
     MeanFreeNormalDistribution
     ProductEnergy
     ProductSampler
-    ProductDistribution"
+    ProductDistribution
 
 """
 
