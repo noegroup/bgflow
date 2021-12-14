@@ -2,7 +2,7 @@
 Minimal Boltzmann Generator Example
 ====================================
 
-In this example a simple Boltzmann Gnerator is created using coupling layers.
+In this example a simple Boltzmann Generator is created using coupling layers.
 """
 
 import torch
