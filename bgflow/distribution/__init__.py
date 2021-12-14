@@ -33,7 +33,7 @@ Distributions
 
 """
 
-from .distribution import *
+from .distributions import *
 from .energy import *
 from .sampling import *
 from .normal import *
