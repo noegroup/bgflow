@@ -4,7 +4,7 @@ import torch
 
 from .tensor_info import BONDS, ANGLES, TORSIONS, FIXED, AUGMENTED
 from ..distribution.normal import TruncatedNormalDistribution
-from ..distribution.distribution import SloppyUniform
+from ..distribution.distributions import SloppyUniform
 from ..nn.flow.inverted import InverseFlow
 #from ..utils.ff import lookup_bonds, lookup_angles
 

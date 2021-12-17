@@ -16,7 +16,7 @@ from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
 from ..nn.flow.torchtransform import TorchTransform
-from ..distribution.distribution import UniformDistribution
+from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
 from ..distribution.product import ProductDistribution, ProductEnergy
 from ..bg import BoltzmannGenerator
@@ -68,7 +68,7 @@ class BoltzmannGeneratorBuilder:
         The default keyword arguments for the transformer construction (default: {}).
     default_conditioner_kwargs: dict
         The default keyword arguments for the conditioner construction (default: {}).
-    default_prior_type : bgflow.distribution.distribution.Distribution
+    default_prior_type : bgflow.distribution.distributions.Distribution
         The transformer type that is used by default (default: bgflow.UniformDistribution).
     default_prior_kwargs: dict
         The default keyword arguments for the prior construction (default: {}).
