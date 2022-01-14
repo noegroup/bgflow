@@ -2,7 +2,7 @@ try:
     import jax
     import jax.numpy as jnp
     import jax2torch
-except:
+except ImportError:
     jax = None
     jnp = None
     jax2torch = None

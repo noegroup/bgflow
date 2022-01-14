@@ -3,7 +3,7 @@ import functools
 try:
     import jax
     import jax.numpy as jnp
-except:
+except ImportError:
     jax = None
     jnp = None
 

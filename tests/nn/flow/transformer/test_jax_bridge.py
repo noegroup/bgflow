@@ -2,12 +2,13 @@
 
 try:
     import jax
-except:
+except ImportError:
     jax = None
 try:
     import jax2torch
-except:
+except ImportError:
     jax2torch = None
+
 import pytest
 import torch
 from bgflow.nn.flow.transformer.jax_bridge import (
