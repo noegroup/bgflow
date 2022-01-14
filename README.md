@@ -137,6 +137,8 @@ pytest
   * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)
   * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
   * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
+  * [jax](https://github.com/google/jax) (for smooth flows / implicit backprop)
+  * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
 
 ***
 ## [License](#dependencies)
