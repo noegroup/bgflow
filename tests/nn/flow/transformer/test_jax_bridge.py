@@ -2,9 +2,11 @@
 
 try:
     import jax
-    import jax2torch
 except:
     jax = None
+try:
+    import jax2torch
+except:
     jax2torch = None
 import pytest
 import torch
@@ -22,7 +24,10 @@ from bgflow.nn.flow.transformer.jax import (
 )
 
 
-@pytest.mark.skipif(jax is None or jax2torch is None)
+@pytest.mark.skipif(jax is None,
+                    reason='skipping test due missing jax installation')
+@pytest.mark.skipif(jax2torch is None,
+                    reason='skipping test due to missing jax2torch installation')
 def test_simple_mixture_transformer():
     bijector = chain(
         mixture,
