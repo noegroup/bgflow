@@ -1,5 +1,12 @@
 """Test spline transformer"""
 
+try:
+    import jax
+    import jax2torch
+except:
+    jax = None
+    jax2torch = None
+import pytest
 import torch
 from bgflow.nn.flow.transformer.jax_bridge import (
     chain,
@@ -15,6 +22,7 @@ from bgflow.nn.flow.transformer.jax import (
 )
 
 
+@pytest.mark.skipif(jax is None or jax2torch is None)
 def test_simple_mixture_transformer():
     bijector = chain(
         mixture,
