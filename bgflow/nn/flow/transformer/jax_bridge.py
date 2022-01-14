@@ -137,7 +137,7 @@ def bijector_with_approx_inverse(bijector, domain=None):
     return _forward, _inverse
 
 
-def to_bgflow(bijector):
+def to_bgflow(bijector, domain=None):
     """Wraps simple JAX bijector into a transformer,
        that can be used within the bgflow eco-system."""
     return map(compose(
@@ -145,4 +145,4 @@ def to_bgflow(bijector):
         jax2torch.jax2torch,
         jax.jit,
         jax.vmap),
-        bijector_with_approx_inverse(bijector))
+        bijector_with_approx_inverse(bijector, domain))
