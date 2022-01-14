@@ -49,8 +49,10 @@ def affine_sigmoid(sigmoid, eps=1e-8):
     return _affine_sigmoid
 
 
-def wrap_sigmoid(sigmoid, sheaves=jnp.array([-1, 0, 1])):
+def wrap_sigmoid(sigmoid, sheaves=None):
     """Wraps affine sigmoid around circle."""
+    if sheaves is None:
+        sheaves = jnp.array([-1, 0, 1])
     wrapped = mixture(sigmoid)
 
     def _wrapped_sigmoid(x, shift, slope, mix):
