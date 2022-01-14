@@ -1,6 +1,11 @@
 import functools
-import jax
-import jax.numpy as jnp
+
+try:
+    import jax
+    import jax.numpy as jnp
+except:
+    jax = None
+    jnp = None
 
 
 def affine_transform(x, a, b):
