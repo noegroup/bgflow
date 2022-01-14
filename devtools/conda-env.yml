@@ -13,3 +13,5 @@ dependencies:
   - openmm
   - openmmtools
   - pytorch
+  - jax
+  - jax2torch
