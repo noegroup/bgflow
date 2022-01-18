@@ -13,15 +13,16 @@ def affine_transform(x, a, b):
     return x * jnp.exp(a) + b
 
 
-def smooth_ramp(x, power=1, eps=1e-8):
+def smooth_ramp(x, logalpha, power=1, eps=1e-8):
     """Smooth ramp."""
     assert power > 0
     assert eps > 0
+    alpha = jnp.exp(logalpha)
     # double `where` trick to avoid NaN in backward pass
     z = jnp.where(x > eps, x, jnp.ones_like(x) * eps)
     return jnp.where(
         x > eps,
-        jnp.exp(-jnp.power(z, -power)),
+        jnp.exp(-alpha*jnp.power(z, -power)),
         jnp.zeros_like(z))
 
 
@@ -32,8 +33,8 @@ def monomial_ramp(x, order=2):
 
 def ramp_to_sigmoid(ramp):
     """Generalized sigmoid, given a ramp."""
-    def _sigmoid(x):
-        return ramp(x) / (ramp(x) + ramp(1. - x))
+    def _sigmoid(x, *args):
+        return ramp(x, *args) / (ramp(x, *args) + ramp(1. - x, *args))
     return _sigmoid
 
 

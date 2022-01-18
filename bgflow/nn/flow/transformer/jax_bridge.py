@@ -1,3 +1,7 @@
+import torch
+
+import bgflow
+
 try:
     import jax
     import jax.numpy as jnp
@@ -39,8 +43,8 @@ def bisect(bijector, left_bound, right_bound, eps=1e-6):
                 jnp.ones_like(target) * right_bound)
         n_iters = jnp.ceil(-jnp.log2(eps)).astype(int)
 
-        def _body(_, val):
-            left_bound, right_bound = val
+        def _body(_, left_right):
+            left_bound, right_bound = left_right
             cand = (left_bound + right_bound) / 2
             pred = bijector(cand)
             left_bound = jnp.where(pred < target, cand, left_bound)
@@ -52,7 +56,7 @@ def bisect(bijector, left_bound, right_bound, eps=1e-6):
     return _inverted
 
 
-def invert(bijector, root_finder):
+def invert_bijector(bijector, root_finder):
     """Inverts a bijector with a root finder
        and computes correct gradients using
        implicit differentation."""
@@ -124,7 +128,7 @@ def bijector_with_approx_inverse(bijector, domain=None):
         left_bound=domain[0],
         right_bound=domain[1])
     invert_ = functools.partial(
-        invert,
+        invert_bijector,
         root_finder=root_finder)
     bijector = with_ldj(jax.vmap(bijector))
 
@@ -137,12 +141,31 @@ def bijector_with_approx_inverse(bijector, domain=None):
     return _forward, _inverse
 
 
-def to_bgflow(bijector, domain=None):
+def assert_float32(fn):
+    def _inner(x, *args):
+        if x.dtype != torch.float32:
+            raise ValueError(f'dtype {x.dtype} currently not supported by jax bridge')
+        # if we want to support this, enable x64 globally during compile via a context mgr such as:
+        # >>> from jax.config import config
+        # >>> config.update("jax_enable_x64", True)
+        # >>> yield
+        # >>> config.update("jax_enable_x64", False)
+
+        return fn(x, *args)
+    return _inner
+
+
+def to_torch(bijector, domain=None):
     """Wraps simple JAX bijector into a transformer,
        that can be used within the bgflow eco-system."""
-    return map(compose(
-        functools.wraps(bijector),
-        jax2torch.jax2torch,
-        jax.jit,
-        jax.vmap),
-        bijector_with_approx_inverse(bijector, domain))
+    return map(assert_float32,
+               map(compose(
+                   functools.wraps(bijector),
+                   jax2torch.jax2torch,
+                   jax.jit,
+                   jax.vmap),
+                   bijector_with_approx_inverse(bijector, domain)))
+
+
+class JaxTransformer(bgflow.Transformer):
+    pass
