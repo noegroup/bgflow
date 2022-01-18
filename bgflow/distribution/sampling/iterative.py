@@ -26,7 +26,7 @@ An MCMC sampler is set up as follows
 
 import torch
 import dataclasses
-from typing import Tuple
+from typing import Sequence
 from .base import Sampler
 from ...utils.types import pack_tensor_in_tuple
 from ._iterative_helpers import AbstractSamplerState, default_set_samples_hook, default_extract_sample_hook
@@ -36,11 +36,11 @@ __all__ = ["SamplerState", "IterativeSampler", "SamplerStep"]
 
 @dataclasses.dataclass(frozen=True)
 class _SamplerStateData:
-    samples: Tuple[torch.Tensor]
-    velocities: Tuple[torch.Tensor] = None
+    samples: Sequence[torch.Tensor]
+    velocities: Sequence[torch.Tensor] = None
     energies: torch.Tensor = None
-    forces: Tuple[torch.Tensor] = None
-    box_vectors: Tuple[torch.Tensor] = None
+    forces: Sequence[torch.Tensor] = None
+    box_vectors: Sequence[torch.Tensor] = None
     energies_up_to_date: bool = False
     forces_up_to_date: bool = False
 
