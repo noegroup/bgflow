@@ -13,15 +13,16 @@ def affine_transform(x, a, b):
     return x * jnp.exp(a) + b
 
 
-def smooth_ramp(x, power=1, eps=1e-8):
+def smooth_ramp(x, logalpha, power=1, eps=1e-8):
     """Smooth ramp."""
     assert power > 0
     assert eps > 0
+    alpha = jnp.exp(logalpha)
     # double `where` trick to avoid NaN in backward pass
     z = jnp.where(x > eps, x, jnp.ones_like(x) * eps)
     return jnp.where(
         x > eps,
-        jnp.exp(-jnp.power(z, -power)),
+        jnp.exp(-alpha * jnp.power(z, -power)),
         jnp.zeros_like(z))
 
 
@@ -51,17 +52,19 @@ def affine_sigmoid(sigmoid, eps=1e-8):
     return _affine_sigmoid
 
 
-def wrap_around(bijector, sheaves=None):
+def wrap_around(bijector, sheaves=None, weights=None):
     """Wraps affine sigmoid around circle."""
     if sheaves is None:
         sheaves = jnp.array([-1, 0, 1])
+    if weights is None:
+        weights = jnp.zeros_like(sheaves)
+    mixture_ = mixture(bijector)
 
     def _wrapped(x, *params):
-        weights = jnp.zeros_like(sheaves)
-        x = x - sheaves
-        params = [jnp.tile(p, [len(sheaves)]) for p in params]
-        return mixture(bijector)(x, *params)
-    return _wrapped
+        x = x - sheaves[None]
+        params = [jnp.repeat(p[..., None], len(sheaves), axis=-1) for p in params]
+        return mixture_(x, weights, *params)
+    return remap_to_unit(_wrapped)
 
 
 def remap_to_unit(fun):
@@ -70,7 +73,7 @@ def remap_to_unit(fun):
     def _remapped(x, *params):
         y1 = fun(jnp.ones_like(x), *params)
         y0 = fun(jnp.zeros_like(x), *params)
-        return (fun(x, *args) - y0) / (y1 - y0)
+        return (fun(x, *params) - y0) / (y1 - y0)
     return _remapped
 
 
