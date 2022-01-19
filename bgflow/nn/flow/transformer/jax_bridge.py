@@ -14,8 +14,13 @@ import functools
 
 
 def apply_r(f, g):
-    """Function application from right."""
-    # (A -> B) (A -> B -> C) => (A -> C)
+    """Function application from right.
+
+       Takes a higher order function g: (A -> B) -> C
+       and applies it to the function f: A -> B.
+
+       The result is the fungtion g(f): A -> C.
+    """
     return lambda *args, **kwargs: g(f)(*args, **kwargs)
 
 

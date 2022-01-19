@@ -16,6 +16,7 @@ def affine_transform(x, a, b):
 def smooth_ramp(x, logalpha, power=1, eps=1e-8):
     """Smooth ramp."""
     assert power > 0
+    assert isinstance(power, int)
     assert eps > 0
     alpha = jnp.exp(logalpha)
     # double `where` trick to avoid NaN in backward pass
