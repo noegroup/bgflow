@@ -16,3 +16,6 @@ from .rbf_kernels import (
     rbf_kernels
 )
 
+from .free_energy import *
+
+from .plot import *
