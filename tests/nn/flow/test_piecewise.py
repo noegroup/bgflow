@@ -69,7 +69,7 @@ def test_zero_yields_identity(trafo_type):
 
 @pytest.mark.parametrize("trafo_type", ["rqs", "linear"])
 @pytest.mark.parametrize("temperature", [1.0, 2.0])
-@pytest.mark.parametrize("n_bins", [1, 2])
+@pytest.mark.parametrize("n_bins", [1, 20])
 def test_rational_quadratic(trafo_type, temperature, n_bins):
     batch_size = 2
     dim = 2

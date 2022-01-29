@@ -82,7 +82,7 @@ def piecewise_rational_quadratic(
                        slope_right=slopes_right
                        )
     _inverse = partial(piecewise_transform,
-                       bin_edges=cumwidths,
+                       bin_edges=cumheights,
                        bin_transform=inverse_rational_quadratic_piece,
                        width=widths,
                        cumwidth=cumwidths,
