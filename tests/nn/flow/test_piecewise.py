@@ -5,7 +5,7 @@ import pytest
 import torch
 from bgflow.nn.flow.piecewise import (
     piecewise_transform, linear_piece, piecewise_rational_quadratic,
-    piecewise_linear, bucketize_batch
+    piecewise_linear, bucketize_batch, PiecewiseLinearTransform, PeriodicPiecewiseRationalQuadraticTransform
 )
 
 
@@ -25,24 +25,28 @@ def test_batch_bucketize():
         assert bucketize_batch(t(x), edges) == t(i)
     assert (edges == e).all()
 
-    
-def test_piecewise_transform(ctx):
+
+def simple_linear(ctx):
     bin_edges = torch.tensor([0.0, 0.5, 1.0], **ctx)
     slope = torch.tensor([1.0, 2.0], **ctx)
-    function = partial(
+    return partial(
         piecewise_transform,
         bin_edges=bin_edges,
         bin_transform=linear_piece,
         slope=slope,
         x0=bin_edges[..., :-1],
-        y0=torch.zeros(2, **ctx)
-    )
-    z = torch.linspace(0.0, 1.0, 99, **ctx)
+        y0=torch.tensor([0.0, 1.0], **ctx)
+    ), slope, bin_edges
+
+
+def test_piecewise_transform(ctx):
+    function, slope, bin_edges = simple_linear(ctx)
+    z = torch.linspace(0.0, 1.0, 99).to(slope)
     bin0 = (z < 0.5)
     bin1 = (z >= 0.5)
     y, dlogp = function(z)
     assert torch.allclose(y[bin0], z[bin0])
-    assert torch.allclose(y[bin1], slope[1]*(z[bin1] - 0.5))
+    assert torch.allclose(y[bin1], slope[1]*(z[bin1] - 0.5) + 1.0)
     assert torch.allclose(dlogp[bin0], torch.zeros_like(dlogp[bin0]))
     assert torch.allclose(dlogp[bin1], np.log(2) * torch.ones_like(dlogp[bin1]))
 
@@ -86,3 +90,25 @@ def test_rational_quadratic(trafo_type, temperature, n_bins):
     z2, dlogp2 = inverse(x)
     assert torch.allclose(z, z2, atol=1e-4)
     assert torch.allclose(dlogp, -dlogp2, atol=1e-4)
+
+
+def test_out_of_bounds(ctx):
+    function, slope, bin_edges = simple_linear(ctx)
+    with pytest.raises(AssertionError):
+        function(torch.tensor([-1.0]))
+    # TODO make this more general
+
+
+@pytest.mark.parametrize("TransformType", [PiecewiseLinearTransform, PeriodicPiecewiseRationalQuadraticTransform])
+@pytest.mark.parametrize("temperature", [1.0, 2.0])
+def test_transforms(ctx, TransformType, temperature):
+    transform = TransformType(dim=4, n_bins=12)
+    transform.to(**ctx)
+    z = torch.rand(10, 4, **ctx)
+    x, dlogp = transform.forward(z, temperature=temperature)
+    z2, dlogp2 = transform.forward(x, temperature=temperature, inverse=True)
+
+    atol = {torch.float32: 1e-4, torch.float64: 1e-8}[ctx["dtype"]]
+    assert torch.allclose(z, z2, atol=atol)
+    atol = {torch.float32: 1e-3, torch.float64: 1e-8}[ctx["dtype"]]
+    assert torch.allclose(dlogp, -dlogp2, atol=atol)

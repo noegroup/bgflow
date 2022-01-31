@@ -11,33 +11,46 @@ MIN_BIN_WIDTH = 1e-6
 MIN_SLOPE = 1e-6
 
 
-def piecewise_transform(inputs, bin_edges, bin_transform, **bin_parameters):
-    """Apply piecewise 1D transforms to some input.
-    The function `bin_transform` is applied to each input. The `bin_parameters`
-    are keyword arguments to the `bin_transform`.
 
-    Parameters
-    ----------
-    inputs: (*batch_dims, )
-    bin_edges: (*batch_dims, n_bins + 1)
-    bin_transform: callable: (*batch_dims, **parameters) -> (*batch_dims)
-        each parameter has shape (*batch_dims, n_bins)
-    bin_parameters: torch.Tensor
-        additional keyword arguments for the bin_transform.
-        Each tensor has to have shape `(*batch_dims, n_bins)`.
-    """
-    bin_indices = bucketize_batch(inputs, bin_edges)
-    assert (bin_indices >= 0).all()
-    assert (bin_indices < bin_edges.shape[-1] - 1).all()
-    input_parameters = {
-        name: pick_along_last_dim(parameter, bin_indices)
-        for name, parameter in bin_parameters.items()
-    }
-    output, logdet = bin_transform(
-        inputs,
-        **input_parameters
-    )
-    return output, logdet
+from bgflow.nn.flow.base import Flow
+
+class PiecewiseLinearTransform(Flow):
+    def __init__(self, dim, n_bins, left=0.0, right=1.0, low=0.0, high=1.0):
+        super().__init__()
+        self.unnormalized_widths = torch.nn.Parameter(torch.randn(dim, n_bins))
+        self.energies = torch.nn.Parameter(torch.randn(dim, n_bins))
+        self.kwargs = dict(left=left, right=right, low=low, high=high)
+
+    def _forward(self, *xs, temperature=1.0):
+        f, i = piecewise_linear(self.unnormalized_widths, self.energies, temperature=temperature, **self.kwargs)
+        out, dlogp = f(*xs)
+        return  out, dlogp.sum(dim=-1, keepdims=True)
+
+    def _inverse(self, *xs, temperature=1.0):
+        f, i = piecewise_linear(self.unnormalized_widths, self.energies, temperature=temperature, **self.kwargs)
+        out, dlogp = i(*xs)
+        return  out, dlogp.sum(dim=-1, keepdims=True)
+
+
+class PeriodicPiecewiseRationalQuadraticTransform(Flow):
+    def __init__(self, dim, n_bins, left=0.0, right=1.0, low=0.0, high=1.0):
+        super().__init__()
+        self.unnormalized_widths = torch.nn.Parameter(torch.randn(dim, n_bins))
+        self.energies = torch.nn.Parameter(torch.randn(dim, n_bins))
+        self.unnormalized_slopes = torch.nn.Parameter(torch.randn(dim, n_bins))
+        self.kwargs = dict(left=left, right=right, low=low, high=high)
+
+    def _forward(self, *xs, temperature=1.0):
+        unnormalized_slopes = torch.cat([self.unnormalized_slopes, self.unnormalized_slopes[...,[0]]], dim=-1)
+        f, i = piecewise_rational_quadratic(self.unnormalized_widths, self.energies, unnormalized_slopes, temperature=temperature, **self.kwargs)
+        out, dlogp = f(*xs)
+        return  out, dlogp.sum(dim=-1, keepdims=True)
+
+    def _inverse(self, *xs, temperature=1.0):
+        unnormalized_slopes = torch.cat([self.unnormalized_slopes, self.unnormalized_slopes[...,[0]]], dim=-1)
+        f, i = piecewise_rational_quadratic(self.unnormalized_widths, self.energies, unnormalized_slopes, temperature=temperature, **self.kwargs)
+        out, dlogp = i(*xs)
+        return  out, dlogp.sum(dim=-1, keepdims=True)
 
 
 def piecewise_linear(unnormalized_widths, energies, temperature=1.0, left=0.0, right=1.0, low=0.0, high=1.0):
@@ -94,10 +107,39 @@ def piecewise_rational_quadratic(
     return _forward, _inverse
 
 
+def piecewise_transform(inputs, bin_edges, bin_transform, **bin_parameters):
+    """Apply piecewise 1D transforms to some input.
+    The function `bin_transform` is applied to each input. The `bin_parameters`
+    are keyword arguments to the `bin_transform`.
+
+    Parameters
+    ----------
+    inputs: (*batch_dims, )
+    bin_edges: (*batch_dims, n_bins + 1)
+    bin_transform: callable: (*batch_dims, **parameters) -> (*batch_dims)
+        each parameter has shape (*batch_dims, n_bins)
+    bin_parameters: torch.Tensor
+        additional keyword arguments for the bin_transform.
+        Each tensor has to have shape `(*batch_dims, n_bins)`.
+    """
+    bin_indices = bucketize_batch(inputs, bin_edges)
+    in_bounds = (bin_indices >= 0) & (bin_indices < bin_edges.shape[-1] - 1)
+    assert in_bounds.all()
+    input_parameters = {
+        name: pick_along_last_dim(parameter, bin_indices)
+        for name, parameter in bin_parameters.items()
+    }
+    output, logdet = bin_transform(
+        inputs,
+        **input_parameters
+    )
+    return output, logdet
+
+
 # === Tools ===
 
 def pick_along_last_dim(tensor, indices):
-    """Select value .
+    """Select value
     Parameters
     ----------
     tensor: (*batch_dims, n_bins) or (*broadcastable_dims, n_bins) or (n_bins, )
