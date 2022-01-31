@@ -13,7 +13,7 @@ def affine_transform(x, a, b):
     return x * jnp.exp(a) + b
 
 
-def smooth_ramp(x, logalpha, power=1, eps=1e-8):
+def smooth_ramp(x, logalpha, power=1, eps=1e-9):
     """Smooth ramp."""
     assert power > 0
     assert isinstance(power, int)
@@ -21,9 +21,10 @@ def smooth_ramp(x, logalpha, power=1, eps=1e-8):
     alpha = jnp.exp(logalpha)
     # double `where` trick to avoid NaN in backward pass
     z = jnp.where(x > eps, x, jnp.ones_like(x) * eps)
+    normalizer = jnp.exp(-alpha * 1.)
     return jnp.where(
         x > eps,
-        jnp.exp(-alpha * jnp.power(z, -power)),
+        jnp.exp(-alpha * jnp.power(z, -power)) / normalizer,
         jnp.zeros_like(z))
 
 

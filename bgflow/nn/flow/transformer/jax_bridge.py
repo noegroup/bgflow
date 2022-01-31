@@ -39,7 +39,7 @@ def compose(*fs):
     return functools.reduce(compose2, fs)
 
 
-def bisect(bijector, left_bound, right_bound, eps=1e-6):
+def bisect(bijector, left_bound, right_bound, eps=1e-8):
     """Bisection search."""
 
     @jax.jit
@@ -121,7 +121,7 @@ def with_ldj(bijector):
     """Wraps bijector with automatic log jacobian determinant computation."""
     def _call(x, *params):
         y, vjp_bijector = jax.vjp(lambda x: bijector(x, *params), x)
-        ldj = jnp.log(jnp.abs(vjp_bijector(jnp.ones_like(y))[0]))
+        ldj = jnp.log(vjp_bijector(jnp.ones_like(y))[0])
         return y, ldj
     return _call
 

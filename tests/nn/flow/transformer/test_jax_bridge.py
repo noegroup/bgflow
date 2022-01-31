@@ -37,7 +37,6 @@ def test_simple_mixture_transformer(ctx):
         bijector = chain(
             wrap_around,
             mixture,
-            # remap_to_unit,
             affine_sigmoid,
             ramp_to_sigmoid,
             smooth_ramp)
@@ -65,6 +64,11 @@ def test_simple_mixture_transformer(ctx):
         assert torch.allclose(x, z, rtol=1e-4, atol=1e-4)
         assert torch.allclose(ldjy + ldjz, torch.zeros_like(ldjz),
                               rtol=1e-4, atol=1e-4)
+
+        def inv(y):
+            return inverse(y, (weights, shift, scale, mix, logalpha))
+        y = y.requires_grad_(True)
+        assert torch.autograd.gradcheck(inv, y)
 
 
 @contextlib.contextmanager
