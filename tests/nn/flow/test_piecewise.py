@@ -112,3 +112,27 @@ def test_transforms(ctx, TransformType, temperature):
     assert torch.allclose(z, z2, atol=atol)
     atol = {torch.float32: 1e-3, torch.float64: 1e-8}[ctx["dtype"]]
     assert torch.allclose(dlogp, -dlogp2, atol=atol)
+
+
+
+@pytest.mark.parametrize("TransformType", [PiecewiseLinearTransform, PeriodicPiecewiseRationalQuadraticTransform])
+def test_temperature_scaling(ctx, TransformType):
+    transform = TransformType(dim=4, n_bins=12)
+    transform.to(**ctx)
+    x = torch.rand(10, 4, **ctx)
+    z1, dlogp = transform.forward(x, temperature=1.0, inverse=True)
+    z2, dlogp2 = transform.forward(x, temperature=2.0, inverse=True)
+    boltzmann_indicator = dlogp - 1/2 *  dlogp2
+    print(boltzmann_indicator)
+    mean = boltzmann_indicator.mean()
+    assert torch.allclose(boltzmann_indicator, mean * torch.ones_like(boltzmann_indicator))
+
+
+
+def test_temperature_tensor():
+    transform = TransformType(dim=4, n_bins=12)
+    transform.to(**ctx)
+    z = torch.rand(10, 4, **ctx)
+    temperature = 2*torch.rand(10, 1)
+    x, dlogp = transform.forward(z, temperature=temperature)
+    z2, dlogp2 = transform.forward(x, temperature=temperature, inverse=True)
