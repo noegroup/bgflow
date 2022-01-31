@@ -16,7 +16,7 @@ class Sampler(torch.nn.Module):
         raise NotImplementedError()
     
     def sample(self, n_samples, temperature=1.0, *args, **kwargs):
-        if temperature != 1.0:
-            return self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
-        else:
+        if isinstance(temperature, float) and temperature == 1.0:
             return self._sample(n_samples, *args, **kwargs)
+        else:
+            return self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
