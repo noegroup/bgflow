@@ -30,7 +30,7 @@ def smooth_ramp(x, logalpha, power=1, eps=1e-9):
 
 def monomial_ramp(x, order=2):
     assert order > 0 and isinstance(order, int)
-    return x.pow(order)
+    return jnp.power(x, order)
 
 
 def ramp_to_sigmoid(ramp):
