@@ -26,6 +26,7 @@ from bgflow.nn.flow.transformer.jax_bridge import (
     with_ldj,
     invert_bijector,
     wrap_params,
+    JaxTransformer
 )
 from bgflow.nn.flow.transformer.jax import (
     affine_sigmoid,
@@ -158,6 +159,54 @@ def test_approx_inv_gradients():
                 jnp.max, jax.tree_multimap(
                     err_fn, get_grads(inv, y, cond), get_grads(approx_inv, y, cond))))[0])
             assert err_val < threshold, f"{label}: {err_val} > {threshold}"
+
+    jax_config.update("jax_enable_x64", False)
+
+
+@pytest.mark.skipif(jax is None or jnp is None,
+                    reason='skipping test due missing jax installation')
+@pytest.mark.skipif(jax2torch is None,
+                    reason='skipping test due to missing jax2torch installation')
+def test_bgflow_interface(ctx):
+    with double_raises(ctx["dtype"]):
+        dimx = 2
+        dimy = 2
+        num_mixtures = 7
+        num_params = 4
+
+        net = torch.nn.Sequential(
+            torch.nn.Linear(dimx, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, num_params * dimy * num_mixtures),
+        ).to(**ctx)
+
+        def compute_params(x, y_shape):
+            params = net(x).chunk(num_params, dim=-1)
+            return tuple(p.view(*p.shape[:-1], y_shape[-1], num_mixtures)
+                         for p in params)
+
+        transformer = JaxTransformer(
+            chain(
+                functools.partial(wrap_around, sheaves=jnp.linspace(-10, 10, 21), weights=jnp.exp(-jnp.linspace(-10, 10, 21))),
+                mixture,
+                affine_sigmoid,
+                jax.nn.tanh
+            ),
+            compute_params
+        )
+
+        print(ctx)
+        x = torch.rand(103, dimx).to(**ctx)
+        y = torch.rand(103, dimy).to(**ctx)
+        print(x.dtype)
+
+        y1, ldj1 = transformer(x, y, inverse=False)
+        print(y1.dtype)
+        y2, ldj2 = transformer(x, y1, inverse=True)
+        print(y2.dtype)
+
+        assert torch.allclose(y, y2, atol=1e-5, rtol=1e-3), (y - y2).abs().max()
+        assert torch.allclose(ldj1, -ldj2, atol=1e-5, rtol=1e-3), (ldj1 + ldj2).abs().max()
 
 
 @contextlib.contextmanager
