@@ -11,7 +11,6 @@ MIN_BIN_WIDTH = 1e-6
 MIN_SLOPE = 1e-6
 
 
-
 from bgflow.nn.flow.base import Flow
 
 class PiecewiseLinearTransform(Flow):
@@ -88,9 +87,9 @@ def piecewise_rational_quadratic(
                        bin_edges=cumwidths,
                        bin_transform=rational_quadratic_piece,
                        width=widths,
-                       cumwidth=cumwidths,
+                       cumwidth=cumwidths[..., :-1],
                        height=heights,
-                       cumheight=cumheights,
+                       cumheight=cumheights[..., :-1],
                        slope_left=slopes_left,
                        slope_right=slopes_right
                        )
@@ -98,9 +97,9 @@ def piecewise_rational_quadratic(
                        bin_edges=cumheights,
                        bin_transform=inverse_rational_quadratic_piece,
                        width=widths,
-                       cumwidth=cumwidths,
+                       cumwidth=cumwidths[..., :-1],
                        height=heights,
-                       cumheight=cumheights,
+                       cumheight=cumheights[..., :-1],
                        slope_left=slopes_left,
                        slope_right=slopes_right
                        )
@@ -196,6 +195,7 @@ def inverse_rational_quadratic_piece(
     c = - delta * (inputs - cumheight)
 
     discriminant = b.pow(2) - 4 * a * c
+    discriminant = discriminant.clip(min=.0)
     assert (discriminant >= 0).all()
 
     root = (2 * c) / (-b - torch.sqrt(discriminant))
@@ -268,6 +268,9 @@ def energies2heights(energies, widths, temperature=1.0, low=0.0, high=1.0, min_b
     """
     # F = \int_low^x f = \int_low^x e^(-u/T) / int_low^high e^(-u/T)
     #   = \sum_{i<k} e^(-u/T) * dx / \sum_{i} e^(-u/T) * dx
+    if isinstance(temperature, torch.Tensor):
+        # broadcast temperature across bins
+        temperature = temperature[..., None]
     heights = F.softmax(-energies/temperature + torch.log(widths), dim=-1)
     return scale_and_cumsum(heights, low=low, high=high, min_bin_width=min_bin_width)
 
@@ -279,10 +282,20 @@ def normalize_slopes(unconstrained, mean_slope=1.0, temperature=1.0, min_slope=M
     -----
     This is defined such that if `unconstrained = zeros` the output is the mean slope.
     """
+    if isinstance(temperature, torch.Tensor):
+        # broadcast temperature across bins
+        temperature = temperature[..., None]
     slopes = F.softplus(unconstrained, beta=np.log(2) / (1 - min_slope))
-    slopes = (min_slope + slopes) * mean_slope
-    slopes = slopes ** (1 / temperature)
+    slopes = slopes * mean_slope
+    max_slope = 1/min_slope
+
+    # f(x) = m * (1 - c/(x+1))
+    # f(0) = 0.5 * m => 0.5  = 1 - c/(0+1) => 0.5 = c
+    recip = lambda x: max_slope * (1 - 0.5/(x+1))
+    # stability goes over temperature steerability; s^(1/t) should not violate the constraints
+    slopes = torch.minimum(min_slope + slopes**(1 / temperature), recip(slopes))
     assert slopes.min() >= min_slope
+    assert slopes.max() <= max_slope
     return slopes
 
 
