@@ -8,6 +8,18 @@ except ImportError:
     jnp = None
 
 
+__all__ = [
+    'affine_transform',
+    'smooth_ramp',
+    'monomial_ramp',
+    'ramp_to_sigmoid',
+    'affine_sigmoid',
+    'wrap_around',
+    'remap_to_unit',
+    'mixture',
+]
+
+
 def affine_transform(x, a, b):
     """Affine transform."""
     return x * jnp.exp(a) + b

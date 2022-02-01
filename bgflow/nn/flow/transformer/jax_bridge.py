@@ -1,7 +1,4 @@
 import torch
-
-import bgflow
-
 try:
     import jax
     import jax.numpy as jnp
@@ -11,6 +8,14 @@ except ImportError:
     jnp = None
     jax2torch = None
 import functools
+
+from .base import Transformer
+
+
+__all__ = [
+    'JaxTransformer',
+    'chain',
+]
 
 
 def apply_r(f, g):
@@ -228,7 +233,7 @@ def to_torch(bijector, vmap_indices=None):
     return _fwd, _bwd
 
 
-class JaxTransformer(bgflow.Transformer):
+class JaxTransformer(Transformer):
     """Simple wrapper to make bijectors usable in coupling
        layers of bgflow.
 
