@@ -2,11 +2,9 @@ import torch
 try:
     import jax
     import jax.numpy as jnp
-    import jax2torch
 except ImportError:
     jax = None
     jnp = None
-    jax2torch = None
 import functools
 
 from .base import Transformer
@@ -44,7 +42,7 @@ def compose(*fs):
     return functools.reduce(compose2, fs)
 
 
-def bisect(bijector, left_bound, right_bound, eps=1e-8):
+def bisect(bijector, left_bound, right_bound, eps=1e-6):
     """Bisection search."""
 
     @jax.jit
@@ -131,14 +129,15 @@ def with_ldj(bijector):
     return _call
 
 
-def bijector_with_approx_inverse(bijector, domain=None):
+def bijector_with_approx_inverse(bijector, domain=None, eps=1e-8):
     """Wraps bijector with approximate inverse."""
     if domain is None:
         domain = (0, 1)
     root_finder = functools.partial(
         bisect,
         left_bound=domain[0],
-        right_bound=domain[1])
+        right_bound=domain[1],
+        eps=eps)
     invert = functools.partial(
         invert_bijector,
         root_finder=root_finder)
@@ -147,13 +146,70 @@ def bijector_with_approx_inverse(bijector, domain=None):
     return forward, inverse
 
 
-def assert_contiguous(x, params):
-    if not x.is_contiguous():
-        x = x.contiguous()
-    params = tuple(
-        p.contiguous() if not p.is_contiguous() else p
-        for p in params)
-    return x, params
+def flip(fn, permutation=(1, 0)):
+    """Flips argument order of function according to permutation."""
+    def inner(*args, **kwargs):
+        n = len(permutation)
+        args = tuple(args[p] for p in permutation) + args[len(permutation):]
+        return fn(*args, **kwargs)
+    return inner
+
+
+def map_if(predicate):
+    def wrap(fn):
+        def inner(x):
+            if predicate(x):
+                return fn(x)
+            else:
+                return x
+        return inner
+    return wrap
+
+
+@functools.wraps(functools.reduce)
+def tree_reduce(*args):
+    assert len(args) >= 2
+    args = list(args)
+    args[1] = jax.tree_flatten(args[1])[0]
+    return functools.reduce(*args)
+
+
+def assert_contiguous(x):
+    return x.contiguous()
+
+
+is_torch_tensor = functools.partial(flip(isinstance), torch.Tensor)
+is_jax_ndarray = functools.partial(flip(isinstance), jnp.ndarray)
+to_torch_tensor = compose(torch.utils.dlpack.from_dlpack, jax.dlpack.to_dlpack)
+to_jax_ndarray = compose(jax.dlpack.from_dlpack, torch.utils.dlpack.to_dlpack, assert_contiguous)
+
+
+class JaxWrapper(torch.autograd.Function):
+
+        @staticmethod
+        def forward(ctx, fn, *args):
+            args = jax.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), args)
+            result, ctx.fun_vjp = jax.vjp(fn, *args)
+            result_flat, result_tree = jax.tree_flatten(result)
+            ctx.result_tree = result_tree
+            return (*jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), result_flat),
+                    result_tree)
+
+        @staticmethod
+        def backward(ctx, *tangents):
+            tangents = jax.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), tangents)
+            tangents = jax.tree_unflatten(ctx.result_tree, tangents[:-1])
+            grads = ctx.fun_vjp(tangents)
+            return None, *jax.tree_flatten(jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), grads))[0]
+
+
+def wrap_jax_fun(fn):
+    @functools.wraps(fn)
+    def inner(*args):
+        args_flat, args_tree = jax.tree_flatten(args)
+        *result_flat, result_tree = JaxWrapper.apply(fn, *args_flat)
+        return jax.tree_unflatten(result_tree, result_flat)
+    return inner
 
 
 def assert_float32(x):
@@ -173,18 +229,11 @@ def nested_vmap(fn, indices):
     return fn
 
 
-def wrap_params(fn):
-    """Makes signature compatible with jax2torch."""
-    def _call(x, params):
-        return fn(x, *params)
-    return _call
-
-
-def jax_compile(bijector, vmap_indices, backend, domain=None,):
+def jax_compile(bijector, vmap_indices, backend, domain=None, bisection_eps=1e-8):
     """Wraps simple JAX bijector into a transformer,
        that can be used within the bgflow eco-system."""
-    compile_bijector = compose(functools.partial(jax.jit, backend=backend), wrap_params)
-    fwd, bwd = bijector_with_approx_inverse(nested_vmap(bijector, vmap_indices), domain)
+    compile_bijector = compose(functools.partial(jax.jit, backend=backend))
+    fwd, bwd = bijector_with_approx_inverse(nested_vmap(bijector, vmap_indices), domain, bisection_eps)
     return tuple(map(compile_bijector, (fwd, bwd)))
 
 
@@ -195,14 +244,14 @@ def torch_to_jax_backend(backend):
     return backend
 
 
-def to_torch_impl_(bijector, vmap_indices, backend):
+def to_torch_impl_(bijector, vmap_indices, backend, domain=None, bisection_eps=1e-8):
     """Helper impl function that can be cashed according
        to `vmap_indices` and `backend`"""
-    fwd, bwd = jax_compile(bijector, vmap_indices, backend)
-    return tuple(map(jax2torch.jax2torch, (fwd, bwd)))
+    fwd, bwd = jax_compile(bijector, vmap_indices, backend, domain, bisection_eps)
+    return tuple(map(wrap_jax_fun, (fwd, bwd)))
 
 
-def to_torch(bijector, vmap_indices=None):
+def to_torch(bijector, vmap_indices=None, domain=None, bisection_eps=1e-8):
     """Converts a simple JAX bijector into a torch bijector with
         - numerical inverses
         - automatic computation of log det jac
@@ -215,20 +264,18 @@ def to_torch(bijector, vmap_indices=None):
         indices = vmap_indices
         if indices is None:
             indices = tuple(range(len(x.shape)))
-        device = torch_to_jax_backend(x.device.type)
-        return cached_compile(indices, device)
+        backend = torch_to_jax_backend(x.device.type)
+        return cached_compile(indices, backend, domain, bisection_eps)
 
-    def _fwd(x, params):
+    def _fwd(x, *params):
         assert_float32(x)
-        x, params = assert_contiguous(x, params)
         fwd, _ = _cached(x)
-        return fwd(x, params)
+        return fwd(x, *params)
 
-    def _bwd(x, params):
+    def _bwd(x, *params):
         assert_float32(x)
-        x, params = assert_contiguous(x, params)
         _, bwd = _cached(x)
-        return bwd(x, params)
+        return bwd(x, *params)
 
     return _fwd, _bwd
 
@@ -241,17 +288,25 @@ class JaxTransformer(Transformer):
        compute_params: function producing params for the
                        bijector."""
 
-    def __init__(self, bijector, compute_params):
+    def __init__(self, bijector, compute_params, reduce_jacobian=True,
+                 domain=None, bisection_eps=1e-8):
         super().__init__()
         self._compute_params = compute_params
         fwd, bwd = to_torch(bijector)
         self.fwd = fwd
         self.bwd = bwd
+        self.reduce_jacobian = reduce_jacobian
 
     def _forward(self, x, y, *args, **kwargs):
         params = self._compute_params(x, y.shape, *args, **kwargs)
-        return self.fwd(y, params)
+        newy, ldj = self.fwd(y, *params)
+        if self.reduce_jacobian:
+            ldj = ldj.sum(dim=-1, keepdim=True)
+        return newy, ldj
 
     def _inverse(self, x, y, *args, **kwargs):
         params = self._compute_params(x, y.shape, *args, **kwargs)
-        return self.bwd(y, params)
+        newy, ldj = self.bwd(y, *params)
+        if self.reduce_jacobian:
+            ldj = ldj.sum(dim=-1, keepdim=True)
+        return newy, ldj

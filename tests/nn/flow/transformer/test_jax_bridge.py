@@ -25,7 +25,6 @@ from bgflow.nn.flow.transformer.jax_bridge import (
     to_torch,
     with_ldj,
     invert_bijector,
-    wrap_params,
     JaxTransformer
 )
 from bgflow.nn.flow.transformer.jax import (
@@ -100,8 +99,8 @@ def monomial_bijector_inv(x, a, b, power=3):
     return jnp.power((x - b) / a, 1 / power)
 
 
-def get_grads(bijector, x, cond):
-    (out_y, out_ldj), vjp_fun = jax.vjp(bijector, x, cond)
+def get_grads(bijector, x, *cond):
+    (out_y, out_ldj), vjp_fun = jax.vjp(bijector, x, *cond)
     vjp_fun = jax.jit(vjp_fun)
     return (vjp_fun((jnp.ones_like(out_y), jnp.zeros_like(out_ldj))),
             vjp_fun((jnp.zeros_like(out_y), jnp.ones_like(out_ldj))))
@@ -134,10 +133,6 @@ def test_approx_inv_gradients():
         approx_inv = invert_bijector(fwd, functools.partial(bisect, left_bound=-10, right_bound=10., eps=1e-20))
         inv = with_ldj(jax.vmap(inv))
 
-        fwd = wrap_params(fwd)
-        approx_inv = wrap_params(approx_inv)
-        inv = wrap_params(inv)
-
         fwd = jax.jit(fwd)
         approx_inv = jax.jit(approx_inv)
         inv = jax.jit(inv)
@@ -146,18 +141,16 @@ def test_approx_inv_gradients():
         a = jnp.array(np.random.uniform(low=0.1, high=10., size=(1000)))
         b = jnp.array(np.random.uniform(low=0., high=1., size=(1000)))
 
-        cond = (a, b)
+        y, ldjy = fwd(x, a, b)
+        z, ldjz = inv(y, a, b)
+        z_, ldjz_ = approx_inv(y, a, b)
 
-        y, ldjy = fwd(x, cond)
-        z, ldjz = inv(y, cond)
-        z_, ldjz_ = approx_inv(y, cond)
-
-        (out_y, out_ldj), vjp_fun = jax.vjp(approx_inv, y, cond)
+        (out_y, out_ldj), vjp_fun = jax.vjp(approx_inv, y, a, b)
 
         for label, err_fn in zip(['abs err', 'rel err'], [abs_err, functools.partial(rel_err, eps=threshold)]):
             err_val = np.max(jax.tree_flatten(jax.tree_map(
                 jnp.max, jax.tree_multimap(
-                    err_fn, get_grads(inv, y, cond), get_grads(approx_inv, y, cond))))[0])
+                    err_fn, get_grads(inv, y, a, b), get_grads(approx_inv, y, a, b))))[0])
             assert err_val < threshold, f"{label}: {err_val} > {threshold}"
 
     jax_config.update("jax_enable_x64", False)
@@ -192,8 +185,9 @@ def test_bgflow_interface(ctx):
                 affine_sigmoid,
                 jax.nn.tanh
             ),
-            compute_params
-        )
+            compute_params,
+            bisection_eps=1e-20
+        ).to(**ctx)
 
         print(ctx)
         x = torch.rand(103, dimx).to(**ctx)
