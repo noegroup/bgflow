@@ -2,7 +2,7 @@ import torch
 try:
     import jax
     import jax.numpy as jnp
-    from jax import dlpack as jax_dlpack
+    import jax.dlpack
 except ImportError:
     jax = None
     jnp = None
@@ -182,9 +182,9 @@ def assert_contiguous(x):
 is_torch_tensor = functools.partial(flip(isinstance), torch.Tensor)
 if jnp is not None:
     is_jax_ndarray = functools.partial(flip(isinstance), jnp.ndarray)
-if jax is not None and jax_dlpack is not None:
+if jax is not None and jax.dlpack is not None:
     to_torch_tensor = compose(torch.utils.dlpack.from_dlpack, jax.dlpack.to_dlpack)
-    to_jax_ndarray = compose(jax_dlpack.from_dlpack, torch.utils.dlpack.to_dlpack, assert_contiguous)
+    to_jax_ndarray = compose(jax.dlpack.from_dlpack, torch.utils.dlpack.to_dlpack, assert_contiguous)
 
 
 class JaxWrapper(torch.autograd.Function):
