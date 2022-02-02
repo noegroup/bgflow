@@ -179,9 +179,11 @@ def assert_contiguous(x):
 
 
 is_torch_tensor = functools.partial(flip(isinstance), torch.Tensor)
-is_jax_ndarray = functools.partial(flip(isinstance), jnp.ndarray)
-to_torch_tensor = compose(torch.utils.dlpack.from_dlpack, jax.dlpack.to_dlpack)
-to_jax_ndarray = compose(jax.dlpack.from_dlpack, torch.utils.dlpack.to_dlpack, assert_contiguous)
+if jnp is not None:
+    is_jax_ndarray = functools.partial(flip(isinstance), jnp.ndarray)
+if jax is not None:
+    to_torch_tensor = compose(torch.utils.dlpack.from_dlpack, jax.dlpack.to_dlpack)
+    to_jax_ndarray = compose(jax.dlpack.from_dlpack, torch.utils.dlpack.to_dlpack, assert_contiguous)
 
 
 class JaxWrapper(torch.autograd.Function):
