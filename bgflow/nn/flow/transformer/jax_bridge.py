@@ -151,7 +151,6 @@ def bijector_with_approx_inverse(bijector, domain=None, eps=1e-8):
 def flip(fn, permutation=(1, 0)):
     """Flips argument order of function according to permutation."""
     def inner(*args, **kwargs):
-        n = len(permutation)
         args = tuple(args[p] for p in permutation) + args[len(permutation):]
         return fn(*args, **kwargs)
     return inner
