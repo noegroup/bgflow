@@ -204,7 +204,7 @@ class JaxWrapper(torch.autograd.Function):
             tangents = jax.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), tangents)
             tangents = jax.tree_unflatten(ctx.result_tree, tangents[:-1])
             grads = ctx.fun_vjp(tangents)
-            return None, *jax.tree_flatten(jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), grads))[0]
+            return (None, *jax.tree_flatten(jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), grads))[0])
 
 
 def wrap_jax_fun(fn):
