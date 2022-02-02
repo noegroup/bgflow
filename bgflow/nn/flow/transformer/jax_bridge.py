@@ -47,7 +47,6 @@ def compose(*fs):
 def bisect(bijector, left_bound, right_bound, eps=1e-6):
     """Bisection search."""
 
-    @jax.jit
     def _inverted(target):
         init = (jnp.ones_like(target) * left_bound,
                 jnp.ones_like(target) * right_bound)
@@ -235,7 +234,7 @@ def nested_vmap(fn, indices):
 def jax_compile(bijector, vmap_indices, backend, domain=None, bisection_eps=1e-8):
     """Wraps simple JAX bijector into a transformer,
        that can be used within the bgflow eco-system."""
-    compile_bijector = compose(functools.partial(jax.jit, backend=backend))
+    compile_bijector = compose(functools.partial(jax.jit))
     fwd, bwd = bijector_with_approx_inverse(nested_vmap(bijector, vmap_indices), domain, bisection_eps)
     return tuple(map(compile_bijector, (fwd, bwd)))
 
