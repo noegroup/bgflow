@@ -8,10 +8,6 @@ except ImportError:
     jax = None
     jnp = None
     jax_config = None
-try:
-    import jax2torch
-except ImportError:
-    jax2torch = None
 
 import contextlib
 import functools
@@ -39,8 +35,6 @@ from bgflow.nn.flow.transformer.jax import (
 
 @pytest.mark.skipif(jax is None or jnp is None,
                     reason='skipping test due missing jax installation')
-@pytest.mark.skipif(jax2torch is None,
-                    reason='skipping test due to missing jax2torch installation')
 def test_simple_mixture_transformer(ctx):
     with double_raises(ctx["dtype"]):
         bijector = chain(
@@ -118,8 +112,6 @@ def rel_err(x, y, eps=1e-10):
 
 @pytest.mark.skipif(jax is None or jnp is None,
                     reason='skipping test due missing jax installation')
-@pytest.mark.skipif(jax2torch is None,
-                    reason='skipping test due to missing jax2torch installation')
 def test_approx_inv_gradients():
     jax_config.update("jax_enable_x64", True)
 
@@ -158,8 +150,6 @@ def test_approx_inv_gradients():
 
 @pytest.mark.skipif(jax is None or jnp is None,
                     reason='skipping test due missing jax installation')
-@pytest.mark.skipif(jax2torch is None,
-                    reason='skipping test due to missing jax2torch installation')
 def test_bgflow_interface(ctx):
     with double_raises(ctx["dtype"]):
         dimx = 2
