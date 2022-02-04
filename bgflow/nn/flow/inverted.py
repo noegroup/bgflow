@@ -1,4 +1,3 @@
-
 from .base import Flow
 
 __all__ = ["InverseFlow"]
@@ -12,12 +11,13 @@ class InverseFlow(Flow):
     delegate : Flow
         The flow to invert.
     """
+
     def __init__(self, delegate):
         super().__init__()
         self._delegate = delegate
 
     def _forward(self, *xs, **kwargs):
-        return self._delegate._inverse(*xs, **kwargs)
-    
+        return self._delegate(*xs, inverse=True, **kwargs)
+
     def _inverse(self, *xs, **kwargs):
-        return self._delegate._forward(*xs, **kwargs)
+        return self._delegate(*xs, inverse=False, **kwargs)

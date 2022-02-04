@@ -1,10 +1,17 @@
 import torch
+from typing import NamedTuple
 
 from .base import Transformer
 
 __all__ = [
     "ConditionalSplineTransformer",
+    "DomainExtension",
 ]
+
+
+class DomainExtension(NamedTuple):
+    tails: str = "linear"
+    tail_bound: float = 1.0
 
 
 class ConditionalSplineTransformer(Transformer):
@@ -16,6 +23,7 @@ class ConditionalSplineTransformer(Transformer):
         right: float = 1.0,
         bottom: float = 0.0,
         top: float = 1.0,
+        domain_extension: DomainExtension = None,
     ):
         """
         Spline transformer transforming variables in [left, right) into variables in [bottom, top).
@@ -61,6 +69,7 @@ class ConditionalSplineTransformer(Transformer):
         self._right = right
         self._bottom = bottom
         self._top = top
+        self._domain_extension = domain_extension
 
     def _compute_params(self, x, y_dim):
         """Compute widths, heights, and slopes from x through the params_net.
@@ -90,8 +99,13 @@ class ConditionalSplineTransformer(Transformer):
         n_bins = params.shape[-1] // (y_dim * 3)
         widths, heights, slopes, noncircular_slopes = torch.split(
             params,
-            [n_bins * y_dim, n_bins * y_dim, n_bins * y_dim, self._n_noncircular(y_dim)],
-            dim=-1
+            [
+                n_bins * y_dim,
+                n_bins * y_dim,
+                n_bins * y_dim,
+                self._n_noncircular(y_dim),
+            ],
+            dim=-1,
         )
         widths = widths.reshape(*batch_shape, y_dim, n_bins)
         heights = heights.reshape(*batch_shape, y_dim, n_bins)
@@ -103,38 +117,38 @@ class ConditionalSplineTransformer(Transformer):
         slopes[..., self._noncircular_indices(y_dim), -1] = noncircular_slopes
         return widths, heights, slopes
 
-    def _forward(self, x, y, *args, **kwargs):
-        from nflows.transforms.splines import rational_quadratic_spline
+    def forward(self, x, y, *args, inverse=False, **ignored_kwargs):
+        from nflows.transforms.splines import (
+            rational_quadratic_spline,
+            unconstrained_rational_quadratic_spline,
+        )
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(
-            y,
-            widths,
-            heights,
-            slopes,
-            inverse=True,
-            left=self._left,
-            right=self._right,
-            top=self._top,
-            bottom=self._bottom,
-        )
-        return z, dlogp.sum(dim=-1, keepdim=True)
 
-    def _inverse(self, x, y, *args, **kwargs):
-        from nflows.transforms.splines import rational_quadratic_spline
+        kwargs = {
+            "unnormalized_widths": widths,
+            "unnormalized_heights": heights,
+            "unnormalized_derivatives": slopes,
+            "inverse": inverse,
+        }
 
-        widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(
-            y,
-            widths,
-            heights,
-            slopes,
-            inverse=False,
-            left=self._left,
-            right=self._right,
-            top=self._top,
-            bottom=self._bottom,
-        )
+        if self._domain_extension is None:
+            kwargs = {
+                **kwargs,
+                "left": self._left,
+                "right": self._right,
+                "top": self._top,
+                "bottom": self._bottom,
+            }
+            z, dlogp = rational_quadratic_spline(y, **kwargs)
+        else:
+            kwargs = {
+                **kwargs,
+                "tails": self._domain_extension.tails,
+                "tail_bound": self._domain_extension.tail_bound,
+            }
+            z, dlogp = unconstrained_rational_quadratic_spline(y, **kwargs)
+
         return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _n_noncircular(self, y_dim):
