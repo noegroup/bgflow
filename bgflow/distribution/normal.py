@@ -32,7 +32,8 @@ class NormalDistribution(Energy, Sampler):
         if self._has_cov:
             diag = torch.exp(-0.5 * self._log_diag)
             x = x @ self._rot
-            x = x * diag / (temperature ** 0.5)
+            x = x * diag
+        x = x / (temperature ** 0.5)
         return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) + self._log_Z(temperature)
 
     def _log_Z(self, temperature=1.0):
