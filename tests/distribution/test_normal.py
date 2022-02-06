@@ -123,11 +123,15 @@ def test_sample_energy_multi_temperature(ctx):
         assert du.std() < 1e-5
 
 
-@pytest.mark.parametrize("sigma", [1.0, 8.0])
+@pytest.mark.parametrize("sigma", [1, 8.0])
 @pytest.mark.parametrize("temperature", [1.0, 0.5, 10.0])
 def test_normalization_1d(ctx, sigma, temperature):
-    normal_1 = NormalDistribution(dim=1, cov=torch.tensor([[sigma**2]], **ctx))
-    normal_t = NormalDistribution(dim=1, cov=torch.tensor([[temperature*sigma**2]], **ctx))
+    if sigma == 1:
+        # to check without the cov argument
+        normal_1 = NormalDistribution(dim=1).to(**ctx)
+    else:
+        normal_1 = NormalDistribution(dim=1, cov=torch.tensor([[sigma**2]])).to(**ctx)
+    normal_t = NormalDistribution(dim=1, cov=torch.tensor([[temperature*sigma**2]])).to(**ctx)
     nbins = 10000
     xmax = 3*sigma*np.sqrt(temperature)
     x = torch.linspace(-xmax, xmax, nbins, **ctx)[..., None]
@@ -140,7 +144,7 @@ def test_normalization_1d(ctx, sigma, temperature):
     assert(u1 / temperature - ut).std() == pytest.approx(0.0, abs=atol)
     assert ut == pytest.approx(ut1, abs=atol)
     # check that the integral(e^-u) = 1
-    assert (np.exp(-ut) * dx).sum() == pytest.approx(1., abs=1e-2)
+    assert (np.exp(-ut1) * dx).sum() == pytest.approx(1., abs=1e-2)
 
 
 @pytest.mark.parametrize("temperature", [1.0, 0.5, 2.0, 31.41, torch.tensor([[1.0], [2.0]])])
