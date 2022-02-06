@@ -112,7 +112,7 @@ def test_sample_energy_multi_temperature(ctx):
 
     assert samples.shape == torch.Size([n_samples, dim])
     assert samples.mean().item() == pytest.approx(1.0, abs=5e-2, rel=0)
-    assert as_numpy(samples.var(dim=1)) == pytest.approx(np.array(temperature.flatten()), abs=0.2, rel=0)
+    assert as_numpy(samples.var(dim=1)) == pytest.approx(as_numpy(temperature.flatten()), abs=0.2, rel=0)
 
     x = torch.randn(1, 1000, **ctx).expand(3, 1000)
     energy = normal_distribution.energy(x, temperature=temperature)
@@ -161,4 +161,4 @@ def test_normalization_2d(ctx, temperature):
     )
     logp = as_numpy(ref.log_prob(samples))[..., None]
     u = as_numpy(normal_distribution.energy(samples, temperature=temperature))
-    assert u == pytest.approx(-logp)
+    assert u == pytest.approx(-logp, abs=1e-4)
