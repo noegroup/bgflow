@@ -161,4 +161,5 @@ def test_normalization_2d(ctx, temperature):
     )
     logp = as_numpy(ref.log_prob(samples))[..., None]
     u = as_numpy(normal_distribution.energy(samples, temperature=temperature))
-    assert u == pytest.approx(-logp, abs=1e-4)
+    atol = 4e-3 if ctx["dtype"] == torch.float32 else 1e-5
+    assert u == pytest.approx(-logp, abs=atol)
