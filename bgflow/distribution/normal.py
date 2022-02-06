@@ -13,7 +13,6 @@ def _is_symmetric_matrix(m):
 
 
 class NormalDistribution(Energy, Sampler):
-
     def __init__(self, dim, mean=None, cov=None):
         super().__init__(dim=dim)
         self._has_mean = mean is not None
@@ -26,21 +25,22 @@ class NormalDistribution(Energy, Sampler):
         self._has_cov = False
         if cov is not None:
             self.set_cov(cov)
-        self._compute_Z()
 
-    def _energy(self, x):
+    def energy(self, x, temperature=1.0):
         if self._has_mean:
             x = x - self._mean
         if self._has_cov:
             diag = torch.exp(-0.5 * self._log_diag)
             x = x @ self._rot
-            x = x * diag
-        return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) + self._log_Z
+            x = x * diag / (temperature ** 0.5)
+        return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) + self._log_Z(temperature)
 
-    def _compute_Z(self):
-        self._log_Z = self.dim / 2 * np.log(2 * np.pi)
+    def _log_Z(self, temperature=1.0):
+        temperature = torch.as_tensor(temperature, dtype=self._mean.dtype, device=self._mean.device)
+        log_z = self.dim / 2 * torch.log(2 * np.pi * temperature)
         if self._has_cov:
-            self._log_Z += 1 / 2 * self._log_diag.sum()  # * torch.slogdet(cov)[1]
+            log_z = log_z + 1 / 2 * self._log_diag.sum()
+        return log_z
 
     @staticmethod
     def _eigen(cov):
@@ -54,7 +54,6 @@ class NormalDistribution(Energy, Sampler):
             assert (diag[:,1].abs() < 1e-6).all(), "`cov` possesses complex valued eigenvalues"
             diag = diag[:,0] 
         return diag + 1e-6, rot
-
             
     def set_cov(self, cov):
         self._has_cov = True
@@ -80,7 +79,7 @@ class NormalDistribution(Energy, Sampler):
         if isinstance(temperature, torch.Tensor):
             samples = samples * temperature.sqrt()
         else:
-            samples = samples * np.sqrt(temperature)
+            samples = samples * (temperature ** 0.5)
         if self._has_mean:
             samples = samples.to(self._mean)
             samples = samples + self._mean
@@ -247,6 +246,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
     def __len__(self):
         return self._dim
 
+
 class MeanFreeNormalDistribution(Energy, Sampler):
     """ Mean-free normal distribution. """
 
@@ -263,6 +263,7 @@ class MeanFreeNormalDistribution(Energy, Sampler):
 
     def _energy(self, x):
         x = self._remove_mean(x).view(-1, self._dim)
+        # TODO: make consistent
         return 0.5 * x.pow(2).sum(dim=-1, keepdim=True) / self._std ** 2
 
     def sample(self, n_samples, temperature=1.):
