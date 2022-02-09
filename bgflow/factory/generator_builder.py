@@ -16,7 +16,7 @@ from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
 from ..nn.flow.torchtransform import TorchTransform
-from ..distribution.distribution import UniformDistribution
+from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
 from ..distribution.product import ProductDistribution, ProductEnergy
 from ..bg import BoltzmannGenerator
@@ -68,7 +68,7 @@ class BoltzmannGeneratorBuilder:
         The default keyword arguments for the transformer construction (default: {}).
     default_conditioner_kwargs: dict
         The default keyword arguments for the conditioner construction (default: {}).
-    default_prior_type : bgflow.distribution.distribution.Distribution
+    default_prior_type : bgflow.distribution.distributions.Distribution
         The transformer type that is used by default (default: bgflow.UniformDistribution).
     default_prior_kwargs: dict
         The default keyword arguments for the prior construction (default: {}).
@@ -106,6 +106,7 @@ class BoltzmannGeneratorBuilder:
     """
     def __init__(self, prior_dims, target=None, device=None, dtype=None):
         self.default_transformer_type = ConditionalSplineTransformer
+        self.default_conditioner_type = "dense"
         self.default_transformer_kwargs = dict()
         self.default_conditioner_kwargs = dict()
         self.default_prior_type = UniformDistribution
@@ -118,6 +119,8 @@ class BoltzmannGeneratorBuilder:
         # transformer and prior factories  (use defaults everwhere)
         self.transformer_type = dict()
         self.transformer_kwargs = dict()
+        self.conditioner_type = dict()
+        self.conditioner_kwargs = dict()
         self.prior_type = dict()
         self.prior_kwargs = dict()
         # default targets
@@ -231,7 +234,16 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"--------------- cleared builder ----------------")
         self.current_dims = self.prior_dims.copy()
 
-    def add_condition(self, what, on=tuple(), param_groups=tuple(), **kwargs):
+    def add_condition(
+            self,
+            what,
+            on=tuple(),
+            param_groups=tuple(),
+            conditioner_type=None,
+            transformer_type=None,
+            transformer_kwargs=dict(),
+            **conditioner_kwargs
+    ):
         """Add a coupling layer, i.e. a transformation of the tensor `what`
         that is conditioned on the tensors `on`.
 
@@ -256,19 +268,33 @@ class BoltzmannGeneratorBuilder:
         if len(what) == 0:
             raise ValueError("Need to transform something.")
 
-        transformer_types = [self.transformer_type.get(el, self.default_transformer_type) for el in what]
-        transformer_type = transformer_types[0]
-        if not all(ttype == transformer_type for ttype in transformer_types):
-            raise ValueError("Fields with different transformer_type cannot be transformed together.")
-        transformer_kwargss = [self.transformer_kwargs.get(el, self.default_transformer_kwargs) for el in what]
-        transformer_kwargs = transformer_kwargss[0]
-        if not all(tkwargs == transformer_kwargs for tkwargs in transformer_kwargss):
-            raise ValueError("Fields with different transformer_kwargs cannot be transformed together.")
+        if transformer_type is None:
+            transformer_types = [self.transformer_type.get(el, self.default_transformer_type) for el in what]
+            if not all(ttype == transformer_types[0] for ttype in transformer_types):
+                raise ValueError("Fields with different transformer_type cannot be transformed together.")
+            transformer_type = transformer_types[0]
 
-        conditioner_kwargs = copy.copy(self.default_conditioner_kwargs)
-        conditioner_kwargs.update(kwargs)
+        transformer_kwargss = [self.transformer_kwargs.get(el, self.default_transformer_kwargs) for el in what]
+        transformer_kwargss = [{**defaults, **transformer_kwargs} for defaults in transformer_kwargss]
+        if not all(tkwargs == transformer_kwargss[0] for tkwargs in transformer_kwargss):
+            raise ValueError("Fields with different transformer_kwargs cannot be transformed together.")
+        transformer_kwargs = transformer_kwargss[0]
+
+        if conditioner_type is None:
+            conditioner_types = [self.conditioner_type.get(el, self.default_conditioner_type) for el in what]
+            if not all(ttype == conditioner_types[0] for ttype in conditioner_types):
+                raise ValueError("Fields with different conditioner_type cannot be transformed together.")
+            conditioner_type = conditioner_types[0]
+
+        conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
+        conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+            raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
+        conditioner_kwargs = conditioner_kwargss[0]
+
         conditioners = make_conditioners(
             transformer_type=transformer_type,
+            conditioner_type=conditioner_type,
             transformer_kwargs=transformer_kwargs,
             what=what,
             on=on,
@@ -328,6 +354,8 @@ class BoltzmannGeneratorBuilder:
         param_groups : Sequence[str]
             A list of group names.
         """
+        if what is not None:
+            what = _tuple(what)
         if inverse:
             flow = InverseFlow(flow)
         if what is not None:
@@ -467,7 +495,7 @@ class BoltzmannGeneratorBuilder:
             sizes_or_indices=(unconstrained_indices, constrained_indices)
         )
 
-    def add_constrain_chirality(self, halpha_torsion_indices, torsions=TORSIONS):
+    def add_constrain_chirality(self, halpha_torsion_indices, right_handed=False, torsions=TORSIONS):
         """Constrain the chirality of aminoacids
          by constraining their normalized halpha torsions to [0.5,1] instead of [0,1].
 
@@ -480,7 +508,7 @@ class BoltzmannGeneratorBuilder:
         """
         loc = torch.zeros(*self.current_dims[TORSIONS], **self.ctx)
         scale = torch.ones(*self.current_dims[TORSIONS], **self.ctx)
-        loc[halpha_torsion_indices] = 0.5
+        loc[halpha_torsion_indices] = 0.5 * (1 - right_handed)
         scale[halpha_torsion_indices] = 0.5
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
@@ -491,6 +519,5 @@ class BoltzmannGeneratorBuilder:
             if group not in self.param_groups:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
-
 
 

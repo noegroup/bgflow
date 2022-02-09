@@ -4,7 +4,7 @@ import numpy as np
 
 from .energy.base import Energy
 from .sampling.base import Sampler
-from .distribution import CustomDistribution
+from .distributions import CustomDistribution
 
 
 __all__ = ["ProductEnergy", "ProductSampler", "ProductDistribution"]
@@ -87,7 +87,7 @@ class ProductSampler(Sampler):
         return self._components[index]
 
     def __iter__(self):
-        return self._components.__iter__()
+        return self._components.__ixter__()
 
     def __len__(self):
         return self._components.__len__()

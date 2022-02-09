@@ -33,10 +33,14 @@ def _make_spline_transformer(what, shape_info, conditioners, **kwargs):
 
 
 def _make_affine_transformer(what, shape_info, conditioners, **kwargs):
-    if shape_info.dim_circular(what) > 0:
-        raise NotImplementedError("Circular affine transformers are currently not supported.")
+    if shape_info.dim_circular(what) not in [0, shape_info[what[0]][-1]]:
+        raise NotImplementedError(
+            "Circular affine transformers are currently "
+            "not supported for partly circular indices."
+        )
     return AffineTransformer(
         **conditioners,
+        is_circular=shape_info.dim_circular(what) > 0,
         **kwargs
     )
 

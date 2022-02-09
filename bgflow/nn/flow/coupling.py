@@ -206,7 +206,7 @@ class WrapFlow(Flow):
     def _forward(self, *xs, **kwargs):
         inp = (xs[i] for i in self._indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._indices]
-        *yi, dlogp = self._flow(*inp)
+        *yi, dlogp = self._flow(*inp, **kwargs)
         for i in self._argsort_out_indices:
             index = self._out_indices[i]
             output.insert(index, yi[i])
@@ -215,7 +215,7 @@ class WrapFlow(Flow):
     def _inverse(self, *xs, **kwargs):
         inp = (xs[i] for i in self._out_indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._out_indices]
-        *yi, dlogp = self._flow(*inp, inverse=True)
+        *yi, dlogp = self._flow(*inp, inverse=True, **kwargs)
         for i in self._argsort_indices:
             index = self._indices[i]
             output.insert(index, yi[i])

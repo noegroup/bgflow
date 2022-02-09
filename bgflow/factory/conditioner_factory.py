@@ -15,8 +15,7 @@ def make_conditioners(
         on,
         shape_info,
         transformer_kwargs={},
-        hidden=(128,128),
-        activation=torch.nn.SiLU(),
+        conditioner_type="dense",
         **kwargs
 ):
     """Create coupling layer conditioners for a given transformer type,
@@ -46,40 +45,63 @@ def make_conditioners(
     -------
     transformer : bg.Transformer
     """
-    if _is_sin(activation):
-        scale_first_weights = kwargs.pop("siren_scale_first_weights", False)
-        initialize = kwargs.pop("siren_initialize", False)
+    net_factory = CONDITIONER_FACTORIES[conditioner_type]
     dim_out_factory = CONDITIONER_OUT_DIMS[transformer_type]
+
     dim_out = dim_out_factory(what=what, shape_info=shape_info, transformer_kwargs=transformer_kwargs, **kwargs)
     dim_in = shape_info.dim_noncircular(on) + 2 * shape_info.dim_circular(on)
     conditioners = {}
-    for name in dim_out:
-        if _is_sin(activation):
-            dense_net = bg.SirenDenseNet(
-                [dim_in, *hidden, dim_out[name]],
-                scale_first_weights=scale_first_weights,
-                initialize=initialize
-            )
-        else:
-            dense_net = bg.DenseNet([dim_in, *hidden, dim_out[name]], activation=activation)
+    for name, dim in dim_out.items():
+        conditioner = net_factory(dim_in, dim, **kwargs)
         if shape_info.dim_circular(on) > 0:
-            dense_net = WrapPeriodic(dense_net, indices=shape_info.circular_indices(on))
-        conditioners[name] = dense_net
+            conditioner = WrapPeriodic(conditioner, indices=shape_info.circular_indices(on))
+        conditioners[name] = conditioner
     return conditioners
 
 
-def _spline_out_dims(what, shape_info, transformer_kwargs={}, num_bins=8):
+def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
+    return bg.DenseNet(
+        [dim_in, *hidden, dim_out],
+        activation=activation
+    )
+
+
+def _make_siren_conditioner(
+        dim_in,
+        dim_out,
+        hidden=(128, 128),
+        siren_initialize=False,
+        siren_scale_first_weights=False,
+        **kwargs
+):
+    return bg.SirenDenseNet(
+        [dim_in, *hidden, dim_out],
+        scale_first_weights=siren_scale_first_weights,
+        initialize=siren_initialize
+    )
+
+
+CONDITIONER_FACTORIES = {
+    "dense": _make_dense_conditioner,
+    "siren": _make_siren_conditioner,
+}
+
+
+def _spline_out_dims(what, shape_info, transformer_kwargs={}, num_bins=8, **kwargs):
     # input for conditioner
     dim_out = 3 * num_bins * shape_info.dim_all(what) + shape_info.dim_noncircular(what)
     return {"params_net": dim_out}
 
 
-def _affine_out_dims(what, shape_info, transformer_kwargs={}):
+def _affine_out_dims(what, shape_info, transformer_kwargs={}, use_scaling=True, **kwargs):
     dim_out = shape_info.dim_all(what)
-    return {"shift_transformation": dim_out, "scale_transformation": dim_out}
+    out_dims = {"shift_transformation": dim_out}
+    if use_scaling:
+        out_dims["scale_transformation"] = dim_out
+    return out_dims
 
 
-def _mixture_out_dims(what, shape_info, transformer_kwargs={}, num_components=8):
+def _mixture_out_dims(what, shape_info, transformer_kwargs={}, num_components=8, **kwargs):
     dim_out1 = num_components * shape_info.dim_all(what)
     # TODO distinguish between different trasnsformers
     return {"weights": dim_out1, "alphas": dim_out1, "params": 3*dim_out1}
@@ -90,14 +112,3 @@ CONDITIONER_OUT_DIMS = {
     bg.AffineTransformer: _affine_out_dims,
     bg.MixtureCDFTransformer: _mixture_out_dims
 }
-
-
-def _is_sin(f):
-    test_points = torch.arange(100., dtype=torch.float32)
-    try:
-        if torch.allclose(f(test_points), torch.sin(test_points)):
-            return True
-        else:
-            return False
-    except:
-        return False
