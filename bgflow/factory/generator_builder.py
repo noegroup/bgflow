@@ -106,6 +106,7 @@ class BoltzmannGeneratorBuilder:
     """
     def __init__(self, prior_dims, target=None, device=None, dtype=None):
         self.default_transformer_type = ConditionalSplineTransformer
+        self.default_conditioner_type = "dense"
         self.default_transformer_kwargs = dict()
         self.default_conditioner_kwargs = dict()
         self.default_prior_type = UniformDistribution
@@ -118,6 +119,8 @@ class BoltzmannGeneratorBuilder:
         # transformer and prior factories  (use defaults everwhere)
         self.transformer_type = dict()
         self.transformer_kwargs = dict()
+        self.conditioner_type = dict()
+        self.conditioner_kwargs = dict()
         self.prior_type = dict()
         self.prior_kwargs = dict()
         # default targets
@@ -231,7 +234,16 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"--------------- cleared builder ----------------")
         self.current_dims = self.prior_dims.copy()
 
-    def add_condition(self, what, on=tuple(), param_groups=tuple(), **kwargs):
+    def add_condition(
+            self,
+            what,
+            on=tuple(),
+            param_groups=tuple(),
+            conditioner_type=None,
+            transformer_type=None,
+            transformer_kwargs=dict(),
+            **conditioner_kwargs
+    ):
         """Add a coupling layer, i.e. a transformation of the tensor `what`
         that is conditioned on the tensors `on`.
 
@@ -256,19 +268,33 @@ class BoltzmannGeneratorBuilder:
         if len(what) == 0:
             raise ValueError("Need to transform something.")
 
-        transformer_types = [self.transformer_type.get(el, self.default_transformer_type) for el in what]
-        transformer_type = transformer_types[0]
-        if not all(ttype == transformer_type for ttype in transformer_types):
-            raise ValueError("Fields with different transformer_type cannot be transformed together.")
-        transformer_kwargss = [self.transformer_kwargs.get(el, self.default_transformer_kwargs) for el in what]
-        transformer_kwargs = transformer_kwargss[0]
-        if not all(tkwargs == transformer_kwargs for tkwargs in transformer_kwargss):
-            raise ValueError("Fields with different transformer_kwargs cannot be transformed together.")
+        if transformer_type is None:
+            transformer_types = [self.transformer_type.get(el, self.default_transformer_type) for el in what]
+            if not all(ttype == transformer_types[0] for ttype in transformer_types):
+                raise ValueError("Fields with different transformer_type cannot be transformed together.")
+            transformer_type = transformer_types[0]
 
-        conditioner_kwargs = copy.copy(self.default_conditioner_kwargs)
-        conditioner_kwargs.update(kwargs)
+        transformer_kwargss = [self.transformer_kwargs.get(el, self.default_transformer_kwargs) for el in what]
+        transformer_kwargss = [{**defaults, **transformer_kwargs} for defaults in transformer_kwargss]
+        if not all(tkwargs == transformer_kwargss[0] for tkwargs in transformer_kwargss):
+            raise ValueError("Fields with different transformer_kwargs cannot be transformed together.")
+        transformer_kwargs = transformer_kwargss[0]
+
+        if conditioner_type is None:
+            conditioner_types = [self.conditioner_type.get(el, self.default_conditioner_type) for el in what]
+            if not all(ttype == conditioner_types[0] for ttype in conditioner_types):
+                raise ValueError("Fields with different conditioner_type cannot be transformed together.")
+            conditioner_type = conditioner_types[0]
+
+        conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
+        conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+            raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
+        conditioner_kwargs = conditioner_kwargss[0]
+
         conditioners = make_conditioners(
             transformer_type=transformer_type,
+            conditioner_type=conditioner_type,
             transformer_kwargs=transformer_kwargs,
             what=what,
             on=on,
@@ -493,6 +519,5 @@ class BoltzmannGeneratorBuilder:
             if group not in self.param_groups:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
-
 
 
