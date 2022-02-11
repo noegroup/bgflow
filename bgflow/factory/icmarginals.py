@@ -116,7 +116,7 @@ class InternalCoordinateMarginals(dict):
             constrained_bond_indices=None,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=TORSIONS,
+            torsions=None,
     ):
         bond_values, angle_values, torsion_values, *_ = coordinate_transform.forward(data)
 
@@ -124,8 +124,9 @@ class InternalCoordinateMarginals(dict):
             bond_mu = bond_values.mean(axis=0)
             bond_sigma = bond_values.std(axis=0)
             if constrained_bond_indices is not None:
-                bond_mu = bond_mu[constrained_bond_indices]
-                bond_sigma = bond_sigma[constrained_bond_indices]
+                unconstrained_bond_indices = np.array([i for i in range(len(bond_mu)) if i not in constrained_bond_indices])
+                bond_mu = bond_mu[unconstrained_bond_indices]
+                bond_sigma = bond_sigma[unconstrained_bond_indices]
             self[bonds] = TruncatedNormalDistribution(
                 mu=torch.as_tensor(bond_mu, **self.ctx),
                 sigma=torch.as_tensor(bond_sigma, **self.ctx),
@@ -143,12 +144,18 @@ class InternalCoordinateMarginals(dict):
                 upper_bound=torch.as_tensor(angle_upper, **self.ctx),
             )
 
-        torsion_values = torsion_values.detach().cpu().numpy()
-        density, edges = np.histogram(torsion_values, range=(torsion_lower, torsion_upper), density=True)
-        density
-        edges
+#        torsion_values = torsion_values.detach().cpu().numpy()
+#        density, edges = np.histogram(torsion_values, range=(torsion_lower, torsion_upper), density=True)
+#        density
+#        edges
 
-
-        
-
+        if torsions in self.current_dims:
+            torsion_mu = torsion_values.mean(axis=0)
+            torsion_sigma = torsion_values.std(axis=0)
+            self[torsions] = TruncatedNormalDistribution(
+                mu=torch.as_tensor(torsion_mu, **self.ctx),
+                sigma=torch.as_tensor(torsion_sigma, **self.ctx),
+                lower_bound=torch.as_tensor(torsion_lower, **self.ctx),
+                upper_bound=torch.as_tensor(torsion_upper, **self.ctx),
+            )
 
