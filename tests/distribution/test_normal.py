@@ -2,6 +2,7 @@ import torch
 import pytest
 import numpy as np
 from bgflow.distribution import NormalDistribution, TruncatedNormalDistribution, MeanFreeNormalDistribution
+from bgflow.utils import as_numpy
 
 @pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("n_samples", [10000])
@@ -97,3 +98,24 @@ def test_mean_free_normal_distribution(two_event_dims, device):
         assert samples.shape == (n_samples, 8)
         mean_deviation = samples.mean(dim=(1))
         assert torch.all(mean_deviation.abs() < threshold)
+
+
+def test_sample_energy_multi_temperature(ctx):
+    dim = 1000
+    torch.manual_seed(123445)
+    temperature = torch.tensor([0.5, 1.0, 2], **ctx)[..., None]
+    n_samples = len(temperature)
+    mean = torch.ones(dim, **ctx)
+    normal_distribution = NormalDistribution(dim, mean=mean, cov=torch.eye(dim, **ctx))
+
+    samples = normal_distribution.sample(3  , temperature=temperature)
+
+    assert samples.shape == torch.Size([n_samples, dim])
+    assert samples.mean().item() == pytest.approx(1.0, abs=5e-2, rel=0)
+    assert as_numpy(samples.var(dim=1)) == pytest.approx(np.array(temperature.flatten()), abs=0.2, rel=0)
+
+    energy = normal_distribution.energy(torch.randn(3, 1000), temperature=temperature)
+    energy_t0 = energy[1]
+    assert as_numpy(energy.mean(dim=-1)) == pytest.approx(energy_t0 / temperature.flatten(), rel=0.1)
+
+

@@ -4,7 +4,7 @@ import numpy as np
 
 from .energy.base import Energy
 from .sampling.base import Sampler
-from .distribution import CustomDistribution
+from .distributions import CustomDistribution
 
 
 __all__ = ["ProductEnergy", "ProductSampler", "ProductDistribution"]
