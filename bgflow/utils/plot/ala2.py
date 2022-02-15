@@ -1,12 +1,12 @@
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import numpy as np
 
 
 def plot_2ala_ramachandran(traj, ax=None, weights=None):
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
     import mdtraj as md
 
-    if ax == None:
+    if ax is None:
         ax = plt.gca()
 
     if isinstance(weights, np.ndarray):
