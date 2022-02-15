@@ -264,5 +264,5 @@ def test_bg_basic_multiple(device, dtype):
     sampler = bg.ProductSampler([
         bg.DataSetSampler(samples[0]),
         bg.DataSetSampler(samples[1])
-    ])
+    ]).to(device=device, dtype=dtype)
     trainer.train(100, sampler)

@@ -1,8 +1,8 @@
 
 import pytest
 import torch
-from torch.distributions import MultivariateNormal, Normal, Independent
-from bgflow.distribution import TorchDistribution, NormalDistribution
+from torch.distributions import MultivariateNormal
+from bgflow.distribution import TorchDistribution, NormalDistribution, UniformDistribution, ProductDistribution
 
 
 def _random_mean_cov(dim, device, dtype):
@@ -46,3 +46,21 @@ def test_distribution_samples(dim, sample_shape, device, dtype):
                             (-p.energy(x) + q.energy(y))
                         )
                         assert torch.abs(div) < 5e-2
+
+
+def test_sample_uniform_with_temperature(ctx):
+    uniform = UniformDistribution(low=torch.zeros(100, **ctx), high=torch.ones(100, **ctx))
+    assert uniform.sample(20).mean().item() == pytest.approx(0.5, abs=0.05)
+    assert uniform.sample(20, temperature=100.).mean().item() == pytest.approx(0.5, abs=0.05)
+
+
+def test_sample_product_with_temperature(ctx):
+    normal = NormalDistribution(dim=100, mean=torch.zeros(100, **ctx))
+    product = ProductDistribution([normal, normal])
+    x1, y1 = product.sample(20, temperature=1.)
+    x2, y2 = product.sample(20, temperature=100.)
+
+    assert (x1.std() / x2.std()).item() == pytest.approx(0.1, abs=0.05)
+    assert (y1.std() / y2.std()).item() == pytest.approx(0.1, abs=0.05)
+
+

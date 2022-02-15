@@ -39,13 +39,13 @@ main = (__name__ == "__main__")
 # 
 # ## Load the Data and the Molecular System
 # 
-# Molecular trajectories and their corresponding potential energy functions are available from the `openmmsystems` repository.
+# Molecular trajectories and their corresponding potential energy functions are available from the `bgmol` repository.
 
-# In[4]:
+# In[5]:
 
 
 import os
-from openmmsystems.datasets import Ala2TSF300
+from bgmol.datasets import Ala2TSF300
 
 is_data_here = os.path.isfile("Ala2TSF300.npy")
 dataset = Ala2TSF300(download=(not is_data_here), read=True)
@@ -57,7 +57,7 @@ dim = dataset.dim
 
 # The energy model is a `bgflow.Energy` that wraps around OpenMM. The `n_workers` argument determines the number of openmm contexts that are used for energy evaluations. In notebooks, we set `n_workers=1` to avoid hickups. In production, we can omit this argument so that `n_workers` is automatically set to the number of CPU cores.
 
-# In[5]:
+# In[6]:
 
 
 target_energy = dataset.get_energy_model(n_workers=1)
@@ -65,7 +65,7 @@ target_energy = dataset.get_energy_model(n_workers=1)
 
 # ### Visualize Data: Ramachandran Plot for the Backbone Angles
 
-# In[6]:
+# In[7]:
 
 
 import numpy as np
@@ -76,7 +76,7 @@ from matplotlib.colors import LogNorm
 def plot_phi_psi(ax, trajectory, system):
     if not isinstance(trajectory, md.Trajectory):
         trajectory = md.Trajectory(
-            xyz=samples.cpu().detach().numpy().reshape(-1, 22, 3), 
+            xyz=trajectory.cpu().detach().numpy().reshape(-1, 22, 3), 
             topology=system.mdtraj_topology
         )
     phi, psi = system.compute_phi_psi(trajectory)
@@ -90,7 +90,7 @@ def plot_phi_psi(ax, trajectory, system):
     return trajectory
 
 
-# In[7]:
+# In[8]:
 
 
 if main:
@@ -100,7 +100,7 @@ if main:
 
 # ## Split Data and Randomly Permute Samples
 
-# In[8]:
+# In[9]:
 
 
 n_train = len(dataset)//2
@@ -115,15 +115,15 @@ test_data = torch.tensor(all_data[permutation + n_train]).to(ctx)
 # ## Define the Internal Coordinate Transform
 # 
 # Rather than generating all-Cartesian coordinates, we use a mixed internal coordinate transform.
-# The five central alanine atoms will serve as a Cartesian "anchor", from which all other atoms are placed with respect to internal coordinates (IC) defined through a z-matrix. We have deposited a valid `z_matrix` and the corresponding `rigid_block` in the `dataset.system` from `openmmsystems`.
+# The five central alanine atoms will serve as a Cartesian "anchor", from which all other atoms are placed with respect to internal coordinates (IC) defined through a z-matrix. We have deposited a valid `z_matrix` and the corresponding `rigid_block` in the `dataset.system` from `bgmol`.
 
-# In[9]:
+# In[10]:
 
 
 import bgflow as bg
 
 
-# In[10]:
+# In[11]:
 
 
 # throw away 6 degrees of freedom (rotation and translation)
@@ -133,7 +133,7 @@ dim_angles = dim_bonds
 dim_torsions = dim_bonds
 
 
-# In[11]:
+# In[12]:
 
 
 coordinate_transform = bg.MixedCoordinateTransformation(
@@ -147,7 +147,7 @@ coordinate_transform = bg.MixedCoordinateTransformation(
 
 # For demonstration, we transform the first 3 samples from the training data set into internal coordinates as follows:
 
-# In[12]:
+# In[13]:
 
 
 bonds, angles, torsions, cartesian, dlogp = coordinate_transform.forward(training_data[:3])
@@ -158,7 +158,7 @@ bonds.shape, angles.shape, torsions.shape, cartesian.shape, dlogp.shape
 # 
 # The next step is to define a prior distribution that we can easily sample from. The normalizing flow will be trained to transform such latent samples into molecular coordinates. Here, we just take a normal distribution, which is a rather naive choice for reasons that will be discussed in other notebooks.
 
-# In[13]:
+# In[14]:
 
 
 dim_ics = dim_bonds + dim_angles + dim_torsions + dim_cartesian
@@ -173,13 +173,13 @@ prior = bg.NormalDistribution(dim_ics, mean=mean)
 # 
 # ### Split Layer
 
-# In[14]:
+# In[15]:
 
 
 split_into_ics_flow = bg.SplitFlow(dim_bonds, dim_angles, dim_torsions, dim_cartesian)
 
 
-# In[15]:
+# In[16]:
 
 
 # test
@@ -191,7 +191,7 @@ coordinate_transform.forward(*_ics, inverse=True)[0].shape
 # 
 # Next, we will set up so-called RealNVP coupling layers, which split the input into two channels and then learn affine transformations of channel 1 conditioned on channel 2. Here we will do the split naively between the first and second half of the degrees of freedom.
 
-# In[16]:
+# In[17]:
 
 
 class RealNVP(bg.SequentialFlow):
@@ -232,7 +232,7 @@ class RealNVP(bg.SequentialFlow):
     
 
 
-# In[17]:
+# In[18]:
 
 
 RealNVP(dim_ics, hidden=[128]).to(ctx).forward(prior.sample(3))[0].shape
@@ -248,7 +248,7 @@ RealNVP(dim_ics, hidden=[128]).to(ctx).forward(prior.sample(3))[0].shape
 # 3. splitting the output of the network into blocks that define the internal coordinates, and
 # 4. transforming the internal coordinates into Cartesian coordinates through the inverse IC transform.
 
-# In[18]:
+# In[19]:
 
 
 n_realnvp_blocks = 5
@@ -262,21 +262,21 @@ layers.append(bg.InverseFlow(coordinate_transform))
 flow = bg.SequentialFlow(layers).to(ctx)
 
 
-# In[19]:
+# In[20]:
 
 
 # test
 flow.forward(prior.sample(3))[0].shape
 
 
-# In[20]:
+# In[21]:
 
 
 # print number of trainable parameters
 "#Parameters:", np.sum([np.prod(p.size()) for p in flow.parameters()])
 
 
-# In[21]:
+# In[22]:
 
 
 generator = bg.BoltzmannGenerator(
@@ -296,7 +296,7 @@ generator = bg.BoltzmannGenerator(
 # 
 # ### NLL Training
 
-# In[22]:
+# In[23]:
 
 
 nll_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-3)
@@ -337,8 +337,8 @@ def plot_energies(ax, samples, target_energy, test_data):
     
     ax2.hist(sample_energies, range=(-50, cut), bins=40, density=False, label="BG")
     ax2.hist(md_energies, range=(-50, cut), bins=40, density=False, label="MD")
-    ax2.set_ylabel(f"Count   [#Samples / {n_samples}]")
-    ax.legend()
+    ax2.set_ylabel(f"Count   [#Samples / {len(samples)}]")
+    ax2.legend()
 
 
 # In[ ]:

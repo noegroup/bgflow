@@ -7,14 +7,16 @@ __all__ = ["MultiDoubleWellPotential"]
 class MultiDoubleWellPotential(Energy):
     """Energy for a many particle system with pair wise double-well interactions.
     The energy of the double-well is given via
-    .. math:: E_{DW}(d) = a * (d-offset)^4 + b * (d-offset)^2 + c.
+
+    .. math::
+        E_{DW}(d) = a \cdot (d-d_{\text{offset})^4 + b \cdot (d-d_{\text{offset})^2 + c.
 
     Parameters
     ----------
     dim : int
         Number of degrees of freedom ( = space dimension x n_particles)
     n_particles : int
-        Number of Lennard-Jones particles
+        Number of particles
     a, b, c, offset : float
         parameters of the potential
     """

@@ -1,7 +1,10 @@
+import logging
+import numpy as np
 import torch
 
 from .base import Flow
-from ...utils.types import is_list_or_tuple
+
+logger = logging.getLogger('bgflow')
 
 
 class SequentialFlow(Flow):
@@ -43,15 +46,23 @@ class SequentialFlow(Flow):
             Total volume change as a result of the transformation.
             Corresponds to the log determinant of the Jacobian matrix.
         """
-        n_batch = xs[0].shape[0]
-        dlogp = torch.zeros(n_batch, 1).to(xs[0])
+        dlogp = 0.0
         blocks = self._blocks
         if inverse:
             blocks = reversed(blocks)
-        for block in blocks:
+        for i, block in enumerate(blocks):
+            logger.debug(f"Input shapes {[x.shape for x in xs]}")
             *xs, ddlogp = block(*xs, inverse=inverse, **kwargs)
+            logger.debug(f"Flow block {i} (inverse={inverse}):  {block}")
+            logger.debug(f"Output shapes {[x.shape for x in xs]}")
             dlogp += ddlogp
         return (*xs, dlogp)
+
+    def _forward(self, *args, **kwargs):
+        return self.forward(*args, **kwargs, inverse=False)
+
+    def _inverse(self, *args, **kwargs):
+        return self.forward(*args, **kwargs, inverse=True)
 
     def trigger(self, function_name):
         """
@@ -71,4 +82,11 @@ class SequentialFlow(Flow):
         return iter(self._blocks)
 
     def __getitem__(self, index):
-        return self._blocks[index]
+        if isinstance(index, int):
+            return self._blocks[index]
+        else:
+            indices = np.arange(len(self))[index]
+            return SequentialFlow([self._blocks[i] for i in indices])
+
+    def __len__(self):
+        return len(self._blocks)
