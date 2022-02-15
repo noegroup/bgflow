@@ -139,6 +139,7 @@ pytest
   * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)
   * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
   * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
+  * [netCDF4](https://unidata.github.io/netcdf4-python/) (for the `ReplayBufferReporter`)
   * [jax](https://github.com/google/jax) (for smooth flows / implicit backprop)
   * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
 
