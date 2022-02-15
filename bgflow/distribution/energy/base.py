@@ -1,10 +1,14 @@
+
+__all__ = ["Energy"]
+
+
 from typing import Union, Optional, Sequence
 from collections.abc import Sequence as _Sequence
 import warnings
 
 import torch
-
-__all__ = ["Energy"]
+import numpy as np
+from ...utils.types import assert_numpy
 
 
 def _is_non_empty_sequence_of_integers(x):
@@ -208,3 +212,112 @@ class Energy(torch.nn.Module):
         if len(self._event_shapes) == 1:
             forces = forces[0]
         return forces
+
+
+class _BridgeEnergyWrapper(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, bridge):
+        energy, force, *_ = bridge.evaluate(input)
+        ctx.save_for_backward(-force)
+        return energy
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        neg_force, = ctx.saved_tensors
+        grad_input = grad_output * neg_force
+        return grad_input, None
+
+
+_evaluate_bridge_energy = _BridgeEnergyWrapper.apply
+
+
+class _Bridge:
+    _FLOATING_TYPE = np.float64
+    _SPATIAL_DIM = 3
+
+    def __init__(self):
+        self.last_energies = None
+        self.last_forces = None
+
+    def evaluate(
+            self,
+            positions: torch.Tensor,
+            *args,
+            evaluate_force: bool = True,
+            evaluate_energy: bool = True,
+            **kwargs
+    ):
+        shape = positions.shape
+        assert shape[-2:] == (self.n_atoms, 3) or shape[-1] == self.n_atoms * 3
+        energy_shape = shape[:-2] if shape[-2:] == (self.n_atoms, 3) else shape[:-1]
+        # the stupid last dim
+        energy_shape = [*energy_shape, 1]
+        position_batch = assert_numpy(positions.reshape(-1, self.n_atoms, 3), arr_type=self._FLOATING_TYPE)
+
+        energy_batch = np.zeros(energy_shape, dtype=position_batch.dtype)
+        force_batch = np.zeros_like(position_batch)
+
+        for i, pos in enumerate(position_batch):
+            energy_batch[i], force_batch[i] = self._evaluate_single(
+                pos,
+                *args,
+                evaluate_energy=evaluate_energy,
+                evaluate_force=evaluate_force,
+                **kwargs
+            )
+
+        energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
+        forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
+
+        # store
+        self.last_energies = energies
+        self.last_forces = forces
+
+        return energies, forces
+
+    def _evaluate_single(
+            self,
+            positions: torch.Tensor,
+            *args,
+            evaluate_force=True,
+            evaluate_energy=True,
+            **kwargs
+    ):
+        raise NotImplementedError
+
+    @property
+    def n_atoms(self):
+        raise NotImplementedError()
+
+
+class _BridgeEnergy(Energy):
+
+    def __init__(self, bridge, two_event_dims=True):
+        event_shape = (bridge.n_atoms, 3) if two_event_dims else (bridge.n_atoms * 3, )
+        super().__init__(event_shape)
+        self._bridge = bridge
+        self._last_batch = None
+
+    @property
+    def last_batch(self):
+        return self._last_batch
+
+    @property
+    def bridge(self):
+        return self._bridge
+
+    def _energy(self, batch, no_grads=False):
+        # check if we have already computed this energy (hash of string representation should be sufficient)
+        if hash(str(batch)) == self._last_batch:
+            return self._bridge.last_energies
+        else:
+            self._last_batch = hash(str(batch))
+            return _evaluate_bridge_energy(batch, self._bridge)
+
+    def force(self, batch, temperature=None):
+        # check if we have already computed this energy
+        if hash(str(batch)) == self.last_batch:
+            return self.bridge.last_forces
+        else:
+            self._last_batch = hash(str(batch))
+            return self._bridge.evaluate(batch)[1]
