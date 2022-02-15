@@ -108,14 +108,62 @@ def test_sample_energy_multi_temperature(ctx):
     mean = torch.ones(dim, **ctx)
     normal_distribution = NormalDistribution(dim, mean=mean, cov=torch.eye(dim, **ctx))
 
-    samples = normal_distribution.sample(3  , temperature=temperature)
+    samples = normal_distribution.sample(3, temperature=temperature)
 
     assert samples.shape == torch.Size([n_samples, dim])
     assert samples.mean().item() == pytest.approx(1.0, abs=5e-2, rel=0)
-    assert as_numpy(samples.var(dim=1)) == pytest.approx(np.array(temperature.flatten()), abs=0.2, rel=0)
+    assert as_numpy(samples.var(dim=1)) == pytest.approx(as_numpy(temperature.flatten()), abs=0.2, rel=0)
 
-    energy = normal_distribution.energy(torch.randn(3, 1000), temperature=temperature)
+    x = torch.randn(1, 1000, **ctx).expand(3, 1000)
+    energy = normal_distribution.energy(x, temperature=temperature)
     energy_t0 = energy[1]
-    assert as_numpy(energy.mean(dim=-1)) == pytest.approx(energy_t0 / temperature.flatten(), rel=0.1)
+    for i in [0, 2]:
+        du = energy[i] - energy_t0 / temperature[i]
+        du = as_numpy(du)
+        assert du.std() < 1e-5
 
 
+@pytest.mark.parametrize("sigma", [1, 8.0])
+@pytest.mark.parametrize("temperature", [1.0, 0.5, 10.0])
+def test_normalization_1d(ctx, sigma, temperature):
+    if sigma == 1:
+        # to check without the cov argument
+        normal_1 = NormalDistribution(dim=1).to(**ctx)
+    else:
+        normal_1 = NormalDistribution(dim=1, cov=torch.tensor([[sigma**2]])).to(**ctx)
+    normal_t = NormalDistribution(dim=1, cov=torch.tensor([[temperature*sigma**2]])).to(**ctx)
+    nbins = 10000
+    xmax = 3*sigma*np.sqrt(temperature)
+    x = torch.linspace(-xmax, xmax, nbins, **ctx)[..., None]
+    dx = 2 * xmax / nbins
+    u1 = as_numpy(normal_1.energy(x))
+    ut1 = as_numpy(normal_1.energy(x, temperature=temperature))
+    ut = as_numpy(normal_t.energy(x))
+    atol = 1e-4 if ctx["dtype"] is torch.float32 else 1e-5
+    # check that the u_T = u_1 / T + const
+    assert(u1 / temperature - ut).std() == pytest.approx(0.0, abs=atol)
+    assert ut == pytest.approx(ut1, abs=atol)
+    # check that the integral(e^-u) = 1
+    assert (np.exp(-ut1) * dx).sum() == pytest.approx(1., abs=1e-2)
+
+
+@pytest.mark.parametrize("temperature", [1.0, 0.5, 2.0, 31.41, torch.tensor([[1.0], [2.0]])])
+def test_normalization_2d(ctx, temperature):
+    """check the normalization constant at different temperatures"""
+    if isinstance(temperature, torch.Tensor):
+        temperature = temperature.to(**ctx)
+    dim = 2
+    n_samples = 2
+    cov = torch.tensor([[1, 0.3], [0.3, 2]], **ctx)
+    mean = torch.ones(dim, **ctx)
+    normal_distribution = NormalDistribution(dim, mean=mean, cov=cov)
+    samples = normal_distribution.sample(n_samples, temperature=temperature)
+
+    tt = torch.as_tensor(temperature)[..., None] if isinstance(temperature, torch.Tensor) else temperature
+    ref = torch.distributions.MultivariateNormal(
+        loc=mean, covariance_matrix=tt*cov
+    )
+    logp = as_numpy(ref.log_prob(samples))[..., None]
+    u = as_numpy(normal_distribution.energy(samples, temperature=temperature))
+    atol = 4e-3 if ctx["dtype"] == torch.float32 else 1e-5
+    assert u == pytest.approx(-logp, abs=atol)

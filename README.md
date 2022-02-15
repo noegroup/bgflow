@@ -1,5 +1,7 @@
 # bgflow
 
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/noegroup/bgflow.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/noegroup/bgflow/context:python)
+
 Bgflow is a [pytorch](https://github.com/pytorch/pytorch) framework for
 [Boltzmann Generators](https://science.sciencemag.org/content/365/6457/eaaw1147) (BG) and other sampling methods.
 
@@ -137,6 +139,8 @@ pytest
   * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)
   * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
   * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
+  * [jax](https://github.com/google/jax) (for smooth flows / implicit backprop)
+  * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
 
 ***
 ## [License](#dependencies)

@@ -1,0 +1,25 @@
+name: docs
+channels:
+dependencies:
+  # Base depends
+  - python
+  - pip
+  - numpy
+  - nflows
+  - torchdiffeq
+  - einops
+  - torch
+  #  Doc depends
+  - sphinx
+  - sphinx-gallery
+  - sphinx-nbexamples
+  - sphinx-rtd-theme
+  - sphinxcontrib-applehelp
+  - sphinxcontrib-bibtex
+  - sphinxcontrib-devhelp
+  - sphinxcontrib-htmlhelp
+  - sphinxcontrib-katex
+  - sphinxcontrib-jsmath
+  - sphinxcontrib-qthelp
+  - sphinxcontrib-serializinghtml
+
