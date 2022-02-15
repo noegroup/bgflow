@@ -177,12 +177,12 @@ def test_builder_multiple_crd(ala2, ctx):
 
 
 def test_builder_bond_constraints(ala2, ctx):
-    import logging
-    logger = logging.getLogger('bgflow')
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(
-        logging.StreamHandler()
-    )
+    # import logging
+    # logger = logging.getLogger('bgflow')
+    # logger.setLevel(logging.DEBUG)
+    # logger.addHandler(
+    #     logging.StreamHandler()
+    # )
     crd_transform = GlobalInternalCoordinateTransformation(ala2.system.global_z_matrix)
     shape_info = ShapeDictionary.from_coordinate_transform(
         crd_transform,
