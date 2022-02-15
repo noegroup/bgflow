@@ -36,7 +36,7 @@ def test_builder_api(ala2, ctx):
     generator = builder.build_generator()
     # play forward and backward
     samples = generator.sample(2)
-    energy = generator.energy(samples)
+    generator.energy(samples)
     generator.kldiv(10)
 
 
@@ -60,41 +60,6 @@ def test_builder_augmentation_and_global(ala2, ctx):
     assert len(samples) == 2
     generator.energy(*samples)
     generator.kldiv(10)
-
-
-def test_builder_custom(ala2, ctx):
-    """This would be cool. Three possible implementations:
-    - keep track of indices inside the factory. since layers are added in order, this is no problem.
-    - allow selecting tensors by name in the logistical flows (coupling, split, ...). Give the
-      `Flow` class two optional attributes names_in, names_out; then either
-        - (a) just set a custom tensor._name/tensor._info attribute - no idea where this may break in the future
-        - (b) give the flow
-
-    Is it clever to have the crd_transform as the central piece to all this?
-    Or can we somehow make it more general? Maybe start from the prior.
-    """
-    pytest.skip()
-    z_matrix = ala2.system.z_matrix
-    fixed_atoms = ala2.system.rigid_block
-    crd_transform = MixedCoordinateTransformation(torch.tensor(ala2.xyz, **ctx), z_matrix, fixed_atoms)
-    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
-    builder = BoltzmannGeneratorBuilder(shape_info)
-    builder.prior_type[BONDS] = bg.NormalDistribution
-    builder.transformer_type[BONDS] = bg.AffineTransformer
-    builder.add_condition(BONDS, on=ANGLES)
-    BONDS1 = TensorInfo("BONDS1")
-    BONDS2 = TensorInfo("BONDS2")
-    builder.add_split(BONDS, into=(BONDS1, BONDS2), sizes_or_indices=(14, 3))
-    builder.add_condition(BONDS1, on=BONDS2)
-    builder.add_merge((BONDS1, BONDS2), to=BONDS)
-
-    marginal_cdf = MarginalICTransform()
-    marginal_cdf = InformedMarginalICTransform(crd_transform, system, topology)
-    marginal_cdf.scan_data(data)
-    marginal_cdf.scan_torsions(temperature=300.)
-    builder.add_map_to_ic_domains(marginal_cdf)
-    builder.add_map_to_cartesian(crd_transform)
-    builder.build_generator()
 
 
 def test_builder_add_layer_and_param_groups(ctx):
