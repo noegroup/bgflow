@@ -69,10 +69,10 @@ class SamplerState(AbstractSamplerState):
 
     Parameters
     ----------
-    samples : Union[torch.Tensor, tuple[torch.Tensor]]
+    samples : Union[torch.Tensor, Tuple[torch.Tensor, ...]]
     energies : Union[torch.Tensor, NoneType], optional
-    velocities : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
-    forces : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
+    velocities : Union[torch.Tensor, Tuple[torch.Tensor, ...], NoneType], optional
+    forces : Union[torch.Tensor, Tuple[torch.Tensor, ...], NoneType], optional
     box_vectors : Union[torch.Tensor, NoneType], optional
         The box vectors are a 3x3 matrix (a b c) , whose columns denote the periodic box vectors.
         The first vector, a, has to be parallel to the x-axis. The second vector, b, has
