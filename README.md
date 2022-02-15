@@ -132,8 +132,8 @@ pytest
   * [einops](https://github.com/arogozhnikov/einops/)
   * [pytorch](https://github.com/pytorch/pytorch)
   * [numpy](https://github.com/numpy/numpy)
-  * [matplotlib](https://github.com/matplotlib/matplotlib)
 * Optional
+  * [matplotlib](https://github.com/matplotlib/matplotlib)
   * [pytest](https://github.com/pytest-dev/pytest) (for testing)
   * [nflows](https://github.com/bayesiains/nflows) (for Neural Spline Flows)
   * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)

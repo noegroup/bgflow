@@ -19,16 +19,6 @@ Geometry Utilities
     rbf_kernels
 
 ===============================================================================
-Evaluation Utilities
-===============================================================================
-
-.. autosummary::
-    :toctree: generated/
-    :template: class.rst
-
-    plot_2ala_ramachandran
-
-===============================================================================
 Jacobian Computation
 ===============================================================================
 
@@ -96,5 +86,3 @@ from .rbf_kernels import (
 )
 
 from .free_energy import *
-
-from .plot import *
