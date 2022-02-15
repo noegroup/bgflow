@@ -5,9 +5,14 @@ from ....utils import distance_vectors, distances_from_vectors, rbf_kernels
 
 class KernelDynamics(torch.nn.Module):
     """
-    Equivariant dynamics functions that allows an efficient and exact divergence computation [1].
-    [1] Equivariant Flows: Exact Likelihood Generative Learning for Symmetric Densities, Koehler et. al,
-        https://arxiv.org/abs/2006.02425
+    Equivariant dynamics functions.
+    Equivariant dynamics functions that allows an efficient
+    and exact divergence computation :footcite:`Khler2020EquivariantFE`.
+
+    References
+    ----------
+    .. footbibliography::
+
     """
 
     def __init__(self, n_particles, n_dimensions,

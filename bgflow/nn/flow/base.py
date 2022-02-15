@@ -15,6 +15,18 @@ class Flow(torch.nn.Module):
         raise NotImplementedError()
 
     def forward(self, *xs, inverse=False, **kwargs):
+        """
+        Forward method of the flow.
+        Computes the forward or inverse direction of the flow.
+
+        Parameters
+        ----------
+        xs : torch.Tensor
+            Input of the flow
+
+        inverse : boolean
+            Whether to compute the forward or inverse
+        """
         if inverse:
             return self._inverse(*xs, **kwargs)
         else:

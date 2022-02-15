@@ -45,10 +45,10 @@ class Sampler(torch.nn.Module):
             it returns a tuple of tensors, each of which have length n_samples.
             Otherwise it returns a single tensor of length n_samples.
         """
-        if temperature != 1.0:
-            samples = self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
-        else:
+        if isinstance(temperature, float) and temperature == 1.0:
             samples = self._sample(n_samples, *args, **kwargs)
+        else:
+            samples = self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
         samples = pack_tensor_in_list(samples)
         return unpack_tensor_tuple(self.return_hook(samples))
 
