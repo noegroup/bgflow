@@ -58,6 +58,12 @@ class SequentialFlow(Flow):
             dlogp += ddlogp
         return (*xs, dlogp)
 
+    def _forward(self, *args, **kwargs):
+        return self.forward(*args, **kwargs, inverse=False)
+
+    def _inverse(self, *args, **kwargs):
+        return self.forward(*args, **kwargs, inverse=True)
+
     def trigger(self, function_name):
         """
         Evaluate functions for all blocks that have a function with that name and return a tensor of the stacked results.
