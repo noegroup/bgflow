@@ -2,9 +2,10 @@
 import torch
 from .energy import Energy
 from .sampling import Sampler
+from torch.distributions import constraints
 
 
-__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution"]
+__all__ = ["TorchDistribution", "CustomDistribution", "UniformDistribution", "SloppyUniform"]
 
 
 class CustomDistribution(Energy, Sampler):
@@ -67,9 +68,50 @@ class TorchDistribution(Energy, Sampler):
             raise AttributeError(msg)
 
 
+class _SloppyUniform(torch.distributions.Uniform):
+    def __init__(self, *args, tol=1e-5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tol = tol
+
+    @constraints.dependent_property(is_discrete=False, event_dim=0)
+    def support(self):
+        return constraints.interval(self.low-self.tol, self.high+self.tol)
+
+
+class SloppyUniform(torch.nn.Module):
+    def __init__(self, low, high, validate_args=None, tol=1e-5):
+        super().__init__()
+        self.register_buffer("low", low)
+        self.register_buffer("high", high)
+        self.tol = tol
+        self.validate_args = validate_args
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name=name)
+        except AttributeError:
+            uniform = _SloppyUniform(self.low, self.high, self.validate_args, tol=self.tol)
+            if hasattr(uniform, name):
+                return getattr(uniform, name)
+        except:
+            raise AttributeError(f"SloppyUniform has no attribute {name}")
+
+
 class UniformDistribution(TorchDistribution):
     """Shortcut"""
-    def __init__(self, low, high, validate_args=None, n_event_dims=1):
-        uniform = torch.distributions.Uniform(low, high, validate_args)
+    def __init__(self, low, high, tol=1e-5, validate_args=None, n_event_dims=1):
+        uniform = SloppyUniform(low, high, validate_args, tol=tol)
         independent = torch.distributions.Independent(uniform, n_event_dims)
         super().__init__(independent)
+        self.uniform = uniform
+
+    def _energy(self, x):
+        try:
+            y = - self._delegate.log_prob(x)[:,None]
+            assert torch.all(torch.isfinite(y))
+            return y
+        except (ValueError, AssertionError):
+            return -self._delegate.log_prob(self._delegate.sample(sample_shape=x.shape[:-1]))[:,None]
+
+    def _sample_with_temperature(self, n_samples, temperature):
+        return self._sample(n_samples)

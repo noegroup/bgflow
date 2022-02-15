@@ -1,3 +1,5 @@
+import warnings
+import nflows.transforms.base
 import torch
 
 from .base import Transformer
@@ -107,24 +109,36 @@ class ConditionalSplineTransformer(Transformer):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(
-            y,
-            widths,
-            heights,
-            slopes,
-            inverse=True,
-            left=self._left,
-            right=self._right,
-            top=self._top,
-            bottom=self._bottom,
-        )
+        rqs = lambda y : rational_quadratic_spline(
+                y,
+                widths,
+                heights,
+                slopes,
+                inverse=True,
+                left=self._left,
+                right=self._right,
+                top=self._top,
+                bottom=self._bottom,
+            )
+        try:
+            z, dlogp = rqs(y)
+        except nflows.transforms.base.InputOutsideDomain:
+            exceeded_left = (y - self._left).min()
+            exceeded_right = (y - self._right).max()
+            warnings.warn(
+                f"InputOutsideDomain: min {exceeded_left.item()}; "
+                f"max {self._right} + {exceeded_right.item()}",
+                UserWarning
+            )
+            z, dlogp = rqs(y.clamp(self._left, self._right))
+
         return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _inverse(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
-        z, dlogp = rational_quadratic_spline(
+        rqs = lambda y: rational_quadratic_spline(
             y,
             widths,
             heights,
@@ -135,6 +149,18 @@ class ConditionalSplineTransformer(Transformer):
             top=self._top,
             bottom=self._bottom,
         )
+        try:
+            z, dlogp = rqs(y)
+        except nflows.transforms.base.InputOutsideDomain:
+            exceeded_left = (y - self._left).min()
+            exceeded_right = (y - self._right).max()
+            warnings.warn(
+                f"InputOutsideDomain: min {exceeded_left.item()}; "
+                f"max {self._right} + {exceeded_right.item()}",
+                UserWarning
+            )
+            z, dlogp = rqs(y.clamp(self._left, self._right))
+
         return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _n_noncircular(self, y_dim):
