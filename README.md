@@ -1,5 +1,7 @@
 # bgflow
 
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/noegroup/bgflow.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/noegroup/bgflow/context:python)
+
 Bgflow is a [pytorch](https://github.com/pytorch/pytorch) framework for
 [Boltzmann Generators](https://science.sciencemag.org/content/365/6457/eaaw1147) (BG) and other sampling methods.
 
