@@ -135,7 +135,7 @@ class ReferenceSystemTransformation(Flow):
 
 
     Parameters:
-    ----------
+    ------------
     normalize_angles : bool
         bring angles and torsions into (0, 1) interval
     eps : float

@@ -10,14 +10,14 @@ from .dynamics import (
 
 class DiffEqFlow(Flow):
     """
-    Neural Ordinary Differential Equations flow [1]
+    Neural Ordinary Differential Equations flow :footcite:`chen2018neural`
     with the choice of optimize than discretize (use_checkpoints=False)
-    and discretize than optimize [2](use_checkpoints=True) for the ODE solver.
+    and discretize than optimize :footcite:`gholami2019anode` (use_checkpoints=True) for the ODE solver.
 
-    [1] Neural Ordinary Differential Equations, Ricky T. Q. Chen et. al,
-        https://arxiv.org/abs/1806.07366
-    [2] ANODE: Unconditionally Accurate Memory-Efficient Gradients for Neural ODEs, Amir Gholami et. al,
-        https://arxiv.org/abs/1902.10298
+    References
+    ----------
+    .. footbibliography::
+
     """
 
     def __init__(
