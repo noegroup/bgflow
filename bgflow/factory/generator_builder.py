@@ -149,7 +149,6 @@ class BoltzmannGeneratorBuilder:
         generator : bgflow.bg.BoltzmannGenerator
             The Boltzmann generator.
         """
-        # TODO (Jonas): if build_target returns None -> return Generator
         generator = BoltzmannGenerator(
             prior=self.build_prior(),
             flow=self.build_flow(zero_parameters=zero_parameters),

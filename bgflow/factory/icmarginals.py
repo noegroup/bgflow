@@ -85,7 +85,7 @@ class InternalCoordinateMarginals(dict):
             temperature,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=TORSIONS
+            torsions=None
     ):
         import bgmol
         if bonds in self.current_dims:

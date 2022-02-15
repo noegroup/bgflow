@@ -84,6 +84,6 @@ def _make_sigmoid_transformer(
 TRANSFORMER_FACTORIES = {
     ConditionalSplineTransformer: _make_spline_transformer,
     AffineTransformer: _make_affine_transformer,
-    #TODO: MixtureCDFTransformer: _make_sigmoid_transformer
+    # MixtureCDFTransformer: _make_sigmoid_transformer
 }
 

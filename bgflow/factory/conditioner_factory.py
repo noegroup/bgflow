@@ -66,24 +66,8 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
     )
 
 
-def _make_siren_conditioner(
-        dim_in,
-        dim_out,
-        hidden=(128, 128),
-        siren_initialize=False,
-        siren_scale_first_weights=False,
-        **kwargs
-):
-    return bg.SirenDenseNet(
-        [dim_in, *hidden, dim_out],
-        scale_first_weights=siren_scale_first_weights,
-        initialize=siren_initialize
-    )
-
-
 CONDITIONER_FACTORIES = {
     "dense": _make_dense_conditioner,
-    "siren": _make_siren_conditioner,
 }
 
 

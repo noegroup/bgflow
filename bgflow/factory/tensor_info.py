@@ -46,7 +46,7 @@ FIXED = TensorInfo("FIXED", False)
 #: Default tensor info for global origin in global coordinate transform
 ORIGIN = TensorInfo("ORIGIN", False)
 #: Default tensor info for global rotation in global coordinate transform
-ROTATION = TensorInfo("ROTATION", False)  # TODO: at some point this has to be a different (SO3)
+ROTATION = TensorInfo("ROTATION", False)
 #: Default tensor info for augmented dimensions
 AUGMENTED = TensorInfo("AUGMENTED", False)
 #: Default tensor info for the target space (e.g., Cartesian atom positions)
