@@ -33,7 +33,7 @@ class BentIdentity(Flow):
         dlogp : torch.tensor
             Natural log of the Jacobian determinant.
         """
-        dlogp = torch.log(self.derivative(x)).sum(dim=-1)[:, None]
+        dlogp = torch.log(self.derivative(x)).sum(dim=-1, keepdim=True)
         return (torch.sqrt(x ** 2 + 1) - 1) / 2 + x, dlogp
 
     def _inverse(self, x, **kwargs):
@@ -55,7 +55,7 @@ class BentIdentity(Flow):
         dlogp : torch.tensor
             Natural log of the Jacobian determinant.
         """
-        dlogp = torch.log(self.inverse_derivative(x)).sum(dim=-1)[:, None]
+        dlogp = torch.log(self.inverse_derivative(x)).sum(dim=-1, keepdim=True)
         return 2 / 3 * (2 * x + 1 - torch.sqrt(x ** 2 + x + 1)), dlogp
 
     @staticmethod
