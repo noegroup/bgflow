@@ -1,7 +1,6 @@
 """High-level Builder API for Boltzmann generators."""
 
 import warnings
-import copy
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -362,8 +361,6 @@ class BoltzmannGeneratorBuilder:
             input_indices = [self.current_dims.index(el) for el in what]
             output_indices = input_indices
             flow = WrapFlow(flow, input_indices, output_indices)
-        else:
-            what = list(self.current_dims.keys())
         self._add_to_param_groups(flow.parameters(), param_groups)
         self.layers.append(flow)
 
