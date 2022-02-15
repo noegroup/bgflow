@@ -80,6 +80,7 @@ class DataSetSampler(_ToDeviceSampler, torch.utils.data.Dataset):
 
         self.data = pack_tensor_in_list(data)
         self._current_index = 0
+        self._shuffle = shuffle
         if shuffle:
             self._idxs = np.random.permutation(len(data[0]))
         else:
@@ -103,7 +104,8 @@ class DataSetSampler(_ToDeviceSampler, torch.utils.data.Dataset):
             for i in range(len(self.data)):
                 samples[i] = torch.cat([samples[i], self.data[i][idxs]], dim=0)
             # reset
-            np.random.shuffle(self._idxs)
+            if self._shuffle:
+                np.random.shuffle(self._idxs)
             self._current_index = 0
             # recurse
             remaining = self._sample(n_samples - len(samples[0]))
