@@ -317,7 +317,6 @@ def _determinant_from_permutations(mat, permutations, signs):
         where the sum is over all possible permutation \\sigma of {1, ..., N}
 
         If we know the non-vanishing permutations and their signs, we can compute it explicitly.
-
         The function takes a matrix, all non-vanishing permutations with corresponding signs and
         uses it to compute the determinant of it.
     """

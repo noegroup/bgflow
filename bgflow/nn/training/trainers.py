@@ -183,7 +183,7 @@ class KLTrainer(object):
                 if iter % n_print == 0:
                     self.reporter.print(*reports)
             
-            if any(torch.any(torch.isnan(p.grad)) for p in self.bg.parameters()):
+            if any(torch.any(torch.isnan(p.grad)) for p in self.bg.parameters() if p.grad is not None):
                 print("found nan in grad; skipping optimization step")
             else:
                 self.optim.step()
