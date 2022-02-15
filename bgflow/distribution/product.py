@@ -87,7 +87,7 @@ class ProductSampler(Sampler):
         return self._components[index]
 
     def __iter__(self):
-        return self._components.__ixter__()
+        return self._components.__iter__()
 
     def __len__(self):
         return self._components.__len__()
