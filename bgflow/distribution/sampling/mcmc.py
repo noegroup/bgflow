@@ -255,7 +255,6 @@ Instead try using:
         self._reset(init_state)
 
     def _step(self):
-        shape = self._x_curr.shape
         noise = self._noise_std * torch.Tensor(self._x_curr.shape).normal_()
         x_prop = self._x_curr + noise
         e_prop = self._energy_function.energy(x_prop, temperature=self._temperature)

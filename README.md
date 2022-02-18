@@ -1,5 +1,7 @@
 # bgflow
 
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/noegroup/bgflow.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/noegroup/bgflow/context:python)
+
 Bgflow is a [pytorch](https://github.com/pytorch/pytorch) framework for
 [Boltzmann Generators](https://science.sciencemag.org/content/365/6457/eaaw1147) (BG) and other sampling methods.
 
@@ -130,14 +132,20 @@ pytest
   * [einops](https://github.com/arogozhnikov/einops/)
   * [pytorch](https://github.com/pytorch/pytorch)
   * [numpy](https://github.com/numpy/numpy)
-  * [matplotlib](https://github.com/matplotlib/matplotlib)
 * Optional
+  * [matplotlib](https://github.com/matplotlib/matplotlib)
   * [pytest](https://github.com/pytest-dev/pytest) (for testing)
   * [nflows](https://github.com/bayesiains/nflows) (for Neural Spline Flows)
-  * [OpenMM](https://github.com/openmm/openmm) (for molecular examples)
   * [torchdiffeq](https://github.com/rtqichen/torchdiffeq) (for neural ODEs)
   * [ANODE](https://github.com/amirgholami/anode) (for neural ODEs)
+  * [OpenMM](https://github.com/openmm/openmm) (for molecular mechanics energies)
+  * [ase](https://wiki.fysik.dtu.dk/ase/index.html) (for quantum and molecular mechanics energies through the atomic simulation environment)
+  * [xtb-python](https://xtb-python.readthedocs.io) (for semi-empirical GFN quantum energies)
   * [netCDF4](https://unidata.github.io/netcdf4-python/) (for the `ReplayBufferReporter`)
+  * [jax](https://github.com/google/jax) (for smooth flows / implicit backprop)
+  * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
+
+
 ***
 ## [License](#dependencies)
 [MIT License](LICENSE)
