@@ -1,4 +1,4 @@
-name: CI with OpenMM and jax
+name: CI with OpenMM on conda
 
 on:
   push:
@@ -43,6 +43,7 @@ jobs:
         run: |
           pip install einops
           pip install nflows
+          pip install jax
 
       - name: Install package
         shell: bash -l {0}

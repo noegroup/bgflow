@@ -15,4 +15,3 @@ dependencies:
   - ase
   - openmmtools
   - pytorch
-  - jax
