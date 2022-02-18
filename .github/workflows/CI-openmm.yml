@@ -1,4 +1,4 @@
-name: CI with OpenMM and jax
+name: CI with OpenMM on conda
 
 on:
   push:

@@ -116,6 +116,7 @@ def test_approx_inv_gradients():
     jax_config.update("jax_enable_x64", True)
 
     threshold = 1e-6
+    np.random.seed(44)
 
     bijectors = [exp_bijector, sin_bijector, monomial_bijector]
     inverses = [exp_bijector_inv, sin_bijector_inv, monomial_bijector_inv]
@@ -157,6 +158,10 @@ def test_bgflow_interface(ctx):
         num_mixtures = 7
         num_params = 4
 
+        rtol = 1e-2 if ctx["dtype"] == torch.float32 else 1e-4
+        atol = 1e-4 if ctx["dtype"] == torch.float32 else 1e-6
+        np.random.seed(45)
+
         net = torch.nn.Sequential(
             torch.nn.Linear(dimx, 128),
             torch.nn.ReLU(),
@@ -179,14 +184,12 @@ def test_bgflow_interface(ctx):
             bisection_eps=1e-20
         ).to(**ctx)
 
-        x = torch.rand(103, dimx).to(**ctx)
-        y = torch.rand(103, dimy).to(**ctx)
+        x = torch.tensor(np.random.uniform(0.0, 1.0, (103, dimx)), **ctx)
+        y = torch.tensor(np.random.uniform(0.0, 1.0, (103, dimy)), **ctx)
 
         y1, ldj1 = transformer(x, y, inverse=False)
         y2, ldj2 = transformer(x, y1, inverse=True)
 
-        rtol = 1e-2 if ctx["dtype"] == torch.float32 else 1e-4
-        atol = 1e-4 if ctx["dtype"] == torch.float32 else 1e-6
         assert torch.allclose(y, y2, atol=atol, rtol=rtol), (y - y2).abs().max()
         assert torch.allclose(ldj1, -ldj2, atol=atol, rtol=rtol), (ldj1 + ldj2).abs().max()
 
