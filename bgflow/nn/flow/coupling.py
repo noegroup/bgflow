@@ -6,8 +6,12 @@ import torch
 
 from .base import Flow
 from .inverted import InverseFlow
+from .transformer.affine import AffineTransformer
 
-__all__ = ["SplitFlow", "MergeFlow", "SwapFlow", "CouplingFlow", "WrapFlow", "SetConstantFlow"]
+__all__ = [
+    "SplitFlow", "MergeFlow", "SwapFlow", "CouplingFlow",
+    "WrapFlow", "SetConstantFlow", "VolumePreservingWrapFlow"
+]
 
 
 class SplitFlow(Flow):
@@ -207,6 +211,7 @@ class WrapFlow(Flow):
         inp = (xs[i] for i in self._indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._indices]
         *yi, dlogp = self._flow(*inp, **kwargs)
+        assert len(yi) == len(self._out_indices)
         for i in self._argsort_out_indices:
             index = self._out_indices[i]
             output.insert(index, yi[i])
@@ -216,10 +221,108 @@ class WrapFlow(Flow):
         inp = (xs[i] for i in self._out_indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._out_indices]
         *yi, dlogp = self._flow(*inp, inverse=True, **kwargs)
+        assert len(yi) == len(self._indices)
         for i in self._argsort_indices:
             index = self._indices[i]
             output.insert(index, yi[i])
         return (*tuple(output), dlogp)
+
+    def output_index(self, input_index):
+        """Output index of a non-transformed input."""
+        if input_index in self._indices:
+            raise ValueError("output_index is only defined for non-transformed inputs")
+        n_flow_non_inputs_before_sink = sum(i not in self._indices for i in range(input_index))
+        output_index = n_flow_non_inputs_before_sink
+        for i_out in sorted(self._out_indices):
+            if i_out <= output_index:
+                # "insert before"
+                output_index += 1
+            else:
+                # everything else is inserted after
+                break
+        return output_index
+
+
+class VolumePreservingWrapFlow(Flow):
+    def __init__(
+            self,
+            flow: Flow,
+            volume_sink_index: int,
+            out_volume_sink_index: int,
+            cond_indices: Sequence[int],
+            shift_transformation: torch.nn.Module = None,
+            scale_transformation: torch.nn.Module = None
+    ):
+        """Volume-preserving wrap layer.
+
+        This layer operates on two or more input tensors.
+
+        One of these tensors (as indexed by `volume_sink_index` and `out_volume_sink_index`)
+        acts as a volume sink, while the others are transformed by a flow.
+        Concretely, after applying the flow, an affine layer is applied to the volume sink
+        in such a way that the volume change of this affine "co-transform" (`co_dlogp`) counteracts
+        the volume change (`dlogp`) of the primary flow, `dlogp + co_dlogp = 0`.
+
+        The parameters of the co-transform (shift and scale)
+        can be conditioned on dlogp as well as the inputs and outputs
+        of the primary flow.
+
+        It is important that the primary transform does not use the volume sink in any way,
+        neither transform it nor condition on it.
+
+        Parameters
+        ----------
+        flow
+            The primary transform.
+        volume_sink_index
+            Input index of the volume sink tensor in the forward pass.
+        out_volume_sink_index
+            Input index of the volume sink tensor in the inverse pass.
+        cond_indices : Sequence[int]
+            This is a bit tricky. These indices refer to elements of the list
+            `[dlogp, *inputs, *outputs]`.
+        shift_transformation : torch.nn.Module, optional
+        scale_transformation : torch.nn.Module, optional
+        """
+        super().__init__()
+        self.flow = flow
+        self.volume_sink_index = volume_sink_index
+        self.out_volume_sink_index = out_volume_sink_index
+        co_transform = AffineTransformer(
+            shift_transformation=shift_transformation,
+            scale_transformation=scale_transformation,
+            preserve_volume=True,
+        )
+        self.co_flow = CouplingFlow(
+            transformer=co_transform,
+            transformed_indices=(1 + self.volume_sink_index, ),
+            cond_indices=cond_indices,
+            cat_dim=-1
+        )
+        assert all(i != 1 + self.volume_sink_index for i in cond_indices)
+
+    def _forward(self, *xs, **kwargs):
+        *ys, dlogp = self.flow.forward(*xs, **kwargs)
+        co_out, co_dlogp = self._apply_coflow(dlogp, xs, ys, inverse=False)
+        ys[self.out_volume_sink_index] = co_out
+        return (*ys, dlogp + co_dlogp)
+
+    def _inverse(self, *ys, **kwargs):
+        *xs, dlogp = self.flow.forward(*ys, inverse=True, **kwargs)
+        co_out, co_dlogp = self._apply_coflow(forward_dlogp=-dlogp, xs=xs, ys=ys, inverse=True)
+        xs[self.volume_sink_index] = co_out
+        return (*xs, dlogp + co_dlogp)
+
+    def _apply_coflow(self, forward_dlogp, xs, ys, inverse):
+        assert torch.allclose(xs[self.volume_sink_index], ys[self.out_volume_sink_index])
+        coflow_in = [
+            forward_dlogp,
+            *[x for i, x in enumerate(xs)],
+            *[y for i, y in enumerate(ys)]
+        ]
+        target_dlogp = forward_dlogp if inverse else -forward_dlogp
+        *co_out, co_dlogp = self.co_flow.forward(*coflow_in, target_dlogp=target_dlogp, inverse=inverse)
+        return co_out[1 + self.volume_sink_index], co_dlogp
 
 
 class SetConstantFlow(Flow):

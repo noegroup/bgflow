@@ -1,4 +1,5 @@
 
+from typing import Mapping
 import torch
 import bgflow as bg
 from ..nn.periodic import WrapPeriodic
@@ -17,7 +18,7 @@ def make_conditioners(
         transformer_kwargs={},
         conditioner_type="dense",
         **kwargs
-):
+) -> Mapping[str, torch.nn.Module]:
     """Create coupling layer conditioners for a given transformer type,
     taking care of circular and non-circular tensors.
 
@@ -43,7 +44,7 @@ def make_conditioners(
 
     Returns
     -------
-    transformer : bg.Transformer
+    conditioners : Mapping[str, torch.nn.Module]
     """
     net_factory = CONDITIONER_FACTORIES[conditioner_type]
     dim_out_factory = CONDITIONER_OUT_DIMS[transformer_type]

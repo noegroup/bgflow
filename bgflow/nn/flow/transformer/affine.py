@@ -1,4 +1,9 @@
+
+from typing import Union
+
+import warnings
 import torch
+import numpy as np
 
 from .base import Transformer
 
@@ -32,7 +37,7 @@ class AffineTransformer(Transformer):
         self._preserve_volume = preserve_volume
         self._is_circular = is_circular
 
-    def _get_mu_and_log_sigma(self, x, y, *cond):
+    def _get_mu_and_log_sigma(self, x, y, *cond, target_dlogp: Union[float, torch.Tensor] = None):
         if self._shift_transformation is not None:
             mu = self._shift_transformation(x, *cond)
         else:
@@ -42,13 +47,22 @@ class AffineTransformer(Transformer):
             log_sigma = torch.tanh(self._scale_transformation(x, *cond))
             log_sigma = log_sigma * alpha
             if self._preserve_volume:
-                log_sigma = log_sigma - log_sigma.mean(dim=-1, keepdim=True)
+                target_dlogp = 0.0 if target_dlogp is None else target_dlogp
+                target_scale = target_dlogp / np.prod(log_sigma[0].shape)
+                log_sigma = (
+                        log_sigma
+                        - log_sigma.mean(dim=-1, keepdim=True)
+                        + target_scale * torch.ones_like(log_sigma)
+                )
+            else:
+                if target_dlogp is not None:
+                    warnings.warn("target_dlogp is only effective is self.preserve_volume is enabled.")
         else:
             log_sigma = torch.zeros_like(y).to(x)
         return mu, log_sigma
 
-    def _forward(self, x, y, *cond, **kwargs):
-        mu, log_sigma = self._get_mu_and_log_sigma(x, y, *cond)
+    def _forward(self, x, y, *cond, target_dlogp=None, **kwargs):
+        mu, log_sigma = self._get_mu_and_log_sigma(x, y, *cond, target_dlogp=target_dlogp)
         assert mu.shape[-1] == y.shape[-1]
         assert log_sigma.shape[-1] == y.shape[-1]
         sigma = torch.exp(log_sigma)
@@ -58,8 +72,8 @@ class AffineTransformer(Transformer):
             y = y % 1.0
         return y, dlogp
 
-    def _inverse(self, x, y, *cond, **kwargs):
-        mu, log_sigma = self._get_mu_and_log_sigma(x, y, *cond)
+    def _inverse(self, x, y, *cond, target_dlogp=None, **kwargs):
+        mu, log_sigma = self._get_mu_and_log_sigma(x, y, *cond, target_dlogp=None if target_dlogp is None else -target_dlogp)
         assert mu.shape[-1] == y.shape[-1]
         assert log_sigma.shape[-1] == y.shape[-1]
         sigma_inv = torch.exp(-log_sigma)

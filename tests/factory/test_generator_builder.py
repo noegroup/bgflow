@@ -225,3 +225,33 @@ def test_constrain_chirality(ala2, ctx):
     b, a, t, *_ = crd_transform.forward(samples)
     assert torch.all(t[:, chiral_torsions] >= 0.5)
     assert torch.all(t[:, chiral_torsions] <= 1.0)
+
+
+def test_volume_preserving_context(ctx):
+    shape_info = ShapeDictionary()
+    shape_info[BONDS] = (10, )
+    shape_info[ANGLES] = (20, )
+    builder = BoltzmannGeneratorBuilder(
+        shape_info,
+        **ctx
+    )
+    builder.targets[BONDS] = NormalDistribution(10, torch.zeros(10, **ctx))
+    builder.targets[ANGLES] = NormalDistribution(20, torch.zeros(20, **ctx))
+    # transform some fields
+    with builder.volume_preserving_block(volume_sink=ANGLES):
+        builder.add_layer(
+            CDFTransform(
+                TruncatedNormalDistribution(
+                    torch.zeros(10, **ctx),
+                    lower_bound=-torch.tensor(np.infty, **ctx)
+                ),
+            ),
+            what=[BONDS],
+            inverse=True,
+            param_groups=("group1", )
+        )
+    generator = builder.build_generator()
+    results = generator.sample(10, with_latent=True, with_dlogp=True, with_energy=True)
+    x, z, dlogp, energy = results[:2], results[2], results[3], results[4]
+    assert torch.allclose(dlogp, torch.zeros_like(dlogp), atol=1e-5)
+    assert torch.allclose(generator.energy(*x), generator.prior.energy(*z), atol=1e-5)
