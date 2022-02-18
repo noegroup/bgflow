@@ -19,6 +19,8 @@ from bgflow import (
     ]
 )
 def test_transformers(crd_trafo, transformer_type):
+    pytest.importorskip("nflows")
+
     shape_info = ShapeDictionary.from_coordinate_transform(crd_trafo)
     conditioners = make_conditioners(transformer_type, (BONDS,), (FIXED,), shape_info)
     transformer = make_transformer(transformer_type, (BONDS,), shape_info, conditioners=conditioners)
