@@ -185,8 +185,8 @@ def test_bgflow_interface(ctx):
         y1, ldj1 = transformer(x, y, inverse=False)
         y2, ldj2 = transformer(x, y1, inverse=True)
 
-        rtol = 1e-2 if dtype == torch.float32 else 1e-4
-        atol = 1e-4 if dtype == torch.float32 else 1e-6
+        rtol = 1e-2 if ctx["dtype"] == torch.float32 else 1e-4
+        atol = 1e-4 if ctx["dtype"] == torch.float32 else 1e-6
         assert torch.allclose(y, y2, atol=atol, rtol=rtol), (y - y2).abs().max()
         assert torch.allclose(ldj1, -ldj2, atol=atol, rtol=rtol), (ldj1 + ldj2).abs().max()
 
