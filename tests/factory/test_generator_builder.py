@@ -18,6 +18,8 @@ pytestmark = pytest.mark.filterwarnings("ignore:singular ")
 
 
 def test_builder_api(ala2, ctx):
+    pytest.importorskip("nflows")
+
     z_matrix = ala2.system.z_matrix
     fixed_atoms = ala2.system.rigid_block
     crd_transform = MixedCoordinateTransformation(torch.tensor(ala2.xyz, **ctx), z_matrix, fixed_atoms)
@@ -41,6 +43,8 @@ def test_builder_api(ala2, ctx):
 
 
 def test_builder_augmentation_and_global(ala2, ctx):
+    pytest.importorskip("nflows")
+
     crd_transform = GlobalInternalCoordinateTransformation(ala2.system.global_z_matrix)
     shape_info = ShapeDictionary.from_coordinate_transform(crd_transform, dim_augmented=10)
     builder = BoltzmannGeneratorBuilder(shape_info, target=ala2.system.energy_model, **ctx)
@@ -95,6 +99,7 @@ def test_builder_add_layer_and_param_groups(ctx):
 
 
 def test_builder_split_merge(ctx):
+    pytest.importorskip("nflows")
     shape_info = ShapeDictionary()
     shape_info[BONDS] = (10, )
     shape_info[ANGLES] = (20, )
@@ -133,6 +138,8 @@ def test_builder_split_merge(ctx):
 
 def test_builder_multiple_crd(ala2, ctx):
     bgmol = pytest.importorskip("bgmol")
+    pytest.importorskip("nflows")
+
     # all-atom trafo
     z_matrix, fixed = bgmol.ZMatrixFactory(ala2.system.mdtraj_topology, cartesian=[6, 8, 10, 14, 16]).build_naive()
     crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed)
@@ -183,6 +190,7 @@ def test_builder_bond_constraints(ala2, ctx):
     # logger.addHandler(
     #     logging.StreamHandler()
     # )
+    pytest.importorskip("nflows")
     crd_transform = GlobalInternalCoordinateTransformation(ala2.system.global_z_matrix)
     shape_info = ShapeDictionary.from_coordinate_transform(
         crd_transform,
