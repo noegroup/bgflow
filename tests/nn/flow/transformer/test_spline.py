@@ -7,6 +7,7 @@ from bgflow import ConditionalSplineTransformer, CouplingFlow, SplitFlow, Normal
 
 @pytest.mark.parametrize("is_circular", [True, False])
 def test_conditional_spline_transformer_api(is_circular, ctx):
+    pytest.importorskip("nflows")
 
     n_bins = 4
     dim_trans = 10
@@ -36,6 +37,7 @@ def test_conditional_spline_transformer_api(is_circular, ctx):
     "is_circular", [torch.tensor(True), torch.tensor(False), torch.tensor([True, False], dtype=torch.bool)]
 )
 def test_conditional_spline_continuity(is_circular, ctx):
+    pytest.importorskip("nflows")
     torch.manual_seed(2150)
 
     n_bins = 3
