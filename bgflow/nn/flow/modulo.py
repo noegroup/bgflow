@@ -26,14 +26,12 @@ class IncreaseMultiplicityFlow(Flow):
         sheaves = _randint(multiplicities)
         y = (x + sheaves) / self._multiplicities
         dlogp = torch.zeros_like(x[..., [0]])
-        dlogp = dlogp + torch.log(self._multiplicities)
         return y, dlogp
 
     def _inverse(self, x, **kwargs):
         _assert_in_unit_interval(x)
         y = (x % (1 / self._multiplicities)) * self._multiplicities
         dlogp = torch.zeros_like(x[..., [0]])
-        dlogp = dlogp - torch.log(self._multiplicities)
         return y, dlogp
 
 
@@ -45,3 +43,4 @@ def _randint(high):
 def _assert_in_unit_interval(x):
     if (x > 1 + 1e-6).any() or (x < - 1e-6).any():
         raise ValueError(f'IncreaseMultiplicityFlow operates on [0,1] but input was {x}')
+
