@@ -14,6 +14,7 @@ from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
+from ..nn.flow.modulo import IncreaseMultiplicityFlow
 from ..nn.flow.torchtransform import TorchTransform
 from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
@@ -508,6 +509,11 @@ class BoltzmannGeneratorBuilder:
         scale[halpha_torsion_indices] = 0.5
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
+
+    def add_torsion_multiplicities(self, multiplicities, torsions=TORSIONS):
+        """TODO:docs"""
+        fmod_layer = IncreaseMultiplicityFlow(multiplicities).to(**self.ctx)
+        return self.add_layer(fmod_layer, what=(torsions, ))
 
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)
