@@ -15,6 +15,7 @@ from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
 from ..nn.flow.modulo import IncreaseMultiplicityFlow
+from ..nn.flow.modulo import CircularShiftFlow
 from ..nn.flow.torchtransform import TorchTransform
 from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
@@ -513,6 +514,11 @@ class BoltzmannGeneratorBuilder:
     def add_torsion_multiplicities(self, multiplicities, torsions=TORSIONS):
         """TODO:docs"""
         fmod_layer = IncreaseMultiplicityFlow(multiplicities).to(**self.ctx)
+        return self.add_layer(fmod_layer, what=(torsions, ))
+
+    def add_torsion_shifts(self, shifts, torsions=TORSIONS):
+        """TODO:docs"""
+        fmod_layer = CircularShiftFlow(shifts).to(**self.ctx)
         return self.add_layer(fmod_layer, what=(torsions, ))
 
     def _add_to_param_groups(self, parameters, param_groups):
