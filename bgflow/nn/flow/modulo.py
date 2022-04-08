@@ -1,4 +1,4 @@
-__all__ = ["IncreaseMultiplicityFlow"]
+__all__ = ["IncreaseMultiplicityFlow", "CircularShiftFlow"]
 
 import torch
 from typing import Union
@@ -44,3 +44,30 @@ def _assert_in_unit_interval(x):
     if (x > 1 + 1e-6).any() or (x < - 1e-6).any():
         raise ValueError(f'IncreaseMultiplicityFlow operates on [0,1] but input was {x}')
 
+
+class CircularShiftFlow(Flow):
+    """A flow that shifts the position of torsional degrees of freedom.
+    The input and output tensors are expected to be in [0,1].
+    The output is a translated version of the input, respecting circulariry.
+
+    Parameters
+    ----------
+    shift : Union[torch.Tensor, float]
+        A tensor that defines the translation of the circular interval
+    """
+
+    def __init__(self, shift):
+        super().__init__()
+        self.register_buffer("_shift", torch.as_tensor(shift))
+
+    def _forward(self, x, **kwargs):
+        _assert_in_unit_interval(x)
+        y = (x + self._shift) % 1
+        dlogp = torch.zeros_like(x[..., [0]])
+        return y, dlogp
+
+    def _inverse(self, x, **kwargs):
+        _assert_in_unit_interval(x)
+        y = (x - self._shift) % 1
+        dlogp = torch.zeros_like(x[..., [0]])
+        return y, dlogp
