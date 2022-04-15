@@ -65,12 +65,28 @@ Training utilities
     IndexBatchIterator
     LossReporter
 
+
+===============================================================================
+Training utilities
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    NoClipping
+    ClipByValue
+    ClipByAtom
+    ClipBySample
+    ClipByBatch
+
 """
 
 from .train import IndexBatchIterator, LossReporter
 from .shape import tile
 from .types import *
 from .autograd import *
+from .clipping import *
 
 from .geometry import (
     distance_vectors,
