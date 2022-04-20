@@ -1,5 +1,4 @@
 import warnings
-import nflows.transforms.base
 import torch
 
 from .base import Transformer
@@ -107,6 +106,7 @@ class ConditionalSplineTransformer(Transformer):
 
     def _forward(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y : rational_quadratic_spline(
@@ -122,7 +122,7 @@ class ConditionalSplineTransformer(Transformer):
             )
         try:
             z, dlogp = rqs(y)
-        except nflows.transforms.base.InputOutsideDomain:
+        except InputOutsideDomain:
             exceeded_left = (y - self._left).min()
             exceeded_right = (y - self._right).max()
             warnings.warn(
@@ -136,6 +136,7 @@ class ConditionalSplineTransformer(Transformer):
 
     def _inverse(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y: rational_quadratic_spline(
@@ -151,7 +152,7 @@ class ConditionalSplineTransformer(Transformer):
         )
         try:
             z, dlogp = rqs(y)
-        except nflows.transforms.base.InputOutsideDomain:
+        except InputOutsideDomain:
             exceeded_left = (y - self._left).min()
             exceeded_right = (y - self._right).max()
             warnings.warn(
