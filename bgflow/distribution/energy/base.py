@@ -218,7 +218,9 @@ class _BridgeEnergyWrapper(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, bridge):
         energy, force, *_ = bridge.evaluate(input)
-        ctx.save_for_backward(-force)
+        #ctx.save_for_backward(-torch.zeros_like(force))
+        ctx.save_for_backward(-force.nan_to_num(0.0).clip(-3000, 3000))
+        #ctx.save_for_backward(-force)
         return energy
 
     @staticmethod
@@ -267,6 +269,7 @@ class _Bridge:
             )
 
         energies = torch.tensor(energy_batch.reshape(*energy_shape)).to(positions)
+        #forces = torch.zeros_like(torch.tensor(force_batch.reshape(*shape)).to(positions))
         forces = torch.tensor(force_batch.reshape(*shape)).to(positions)
 
         # store
