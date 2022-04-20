@@ -1,54 +1,44 @@
 import pytest
 import torch
 import warnings
-from bgflow.utils import NoClipping, ClipByBatch, ClipByAtom, ClipByValue, ClipBySample
+from bgflow.utils import ClipGradient
 
 
-@pytest.fixture
-def test_tensor(ctx):
-    t = torch.arange(24).reshape(2, 4, 3).to(**ctx)
-    t.requires_grad = True
-    return t
+def torch_example(grad_clipping, ctx):
+    positions = torch.arange(6).reshape(2, 3).to(**ctx)
+    positions.requires_grad = True
+    positions = grad_clipping.to(**ctx)(positions)
+    (0.5 * positions ** 2).sum().backward()
+    return positions.grad
 
 
-def test_no_clipping(test_tensor):
-    same = NoClipping()(test_tensor)
-    assert torch.allclose(test_tensor, same)
+def test_clip_by_val(ctx):
+    grad_clipping = ClipGradient(clip=3., norm_dim=1)
+    assert torch.allclose(
+        torch_example(grad_clipping, ctx),
+        torch.tensor([[0., 1., 2.], [3., 3., 3.]], **ctx)
+    )
 
 
-def test_clip_by_value(test_tensor):
-    clipped = ClipByValue(4.)(test_tensor)
-    assert torch.allclose(test_tensor.flatten()[:5], clipped.flatten()[:5])
-    assert torch.allclose(torch.ones_like(clipped.flatten()[4:]) * 4., clipped.flatten()[4:])
+def test_clip_by_atom(ctx):
+    grad_clipping = ClipGradient(clip=3., norm_dim=3)
+    norm2 = torch.linalg.norm(torch.arange(3, 6, **ctx)).item()
+    assert torch.allclose(
+        torch_example(grad_clipping, ctx),
+        torch.tensor([[0., 1., 2.], [3/norm2*3, 4/norm2*3, 5/norm2*3]], **ctx)
+    )
 
 
-def test_clip_by_atom(test_tensor):
-    clipped = ClipByAtom(4.)(test_tensor)
-    assert torch.allclose(test_tensor[0, 0, :], clipped[0, 0, :])
-    for i in range(2):
-        for j in range(3):
-            if i == 0 and j == 0:
-                continue
-            norm = torch.linalg.norm(clipped[i, j], dim=-1)
-            assert torch.allclose(norm, torch.tensor(4.).to(norm))
+def test_clip_by_batch(ctx):
+    grad_clipping = ClipGradient(clip=3., norm_dim=-1)
+    norm2 = torch.linalg.norm(torch.arange(6, **ctx)).item()
+    assert torch.allclose(
+        torch_example(grad_clipping, ctx),
+        (torch.arange(6, **ctx) / norm2 * 3.).reshape(2, 3)
+    )
 
 
-def test_clip_by_sample(test_tensor):
-    clipped = ClipBySample(40., n_event_dims=2)(test_tensor)
-    assert torch.allclose(test_tensor[0, :, :], clipped[0, :, :])
-    assert not torch.allclose(test_tensor[1, :, :], clipped[1, :, :])
-    assert torch.allclose(torch.norm(clipped[1].flatten()), torch.tensor(40.).to(clipped))
-    should_be_constant = (test_tensor[1, :, :] / clipped[1, :, :])
-    assert ((should_be_constant - should_be_constant[0, 0]).abs() < 1e-6).all()
-
-
-def test_clip_by_batch(test_tensor):
-    clipped = ClipByBatch(4.)(test_tensor)
-    norm_squared = (clipped * clipped).sum()
-    assert torch.allclose(norm_squared, torch.tensor(16.).to(norm_squared))
-
-
-def test_openmm_clip():
+def openmm_example(grad_clipping, ctx):
     try:
         with warnings.catch_warnings():
             warnings.simplefilter(
@@ -67,11 +57,36 @@ def test_openmm_clip():
     system.addForce(nonbonded)
 
     from bgflow import OpenMMEnergy, OpenMMBridge
-    bridge = OpenMMBridge(system, openmm.LangevinIntegrator(300., 0.1, 0.001))
+    bridge = OpenMMBridge(system, openmm.LangevinIntegrator(300., 0.1, 0.001), n_workers=1)
 
-    energy = OpenMMEnergy(bridge=bridge, two_event_dims=False, grad_clipping=NoClipping())
-    positions = torch.tensor([[0.0, 0.0, 0.0, 0.1, 0.2, 0.6]])
+    energy = OpenMMEnergy(bridge=bridge, two_event_dims=False)
+    positions = torch.tensor([[0.0, 0.0, 0.0, 0.1, 0.2, 0.6]]).to(**ctx)
     positions.requires_grad = True
+    positions = grad_clipping.to(**ctx)(positions)
     energy.energy(positions).sum().backward()
-    print(torch.linalg.norm(positions.grad), positions.grad)
-    assert torch.allclose(positions.grad, -energy.force(positions))
+    force = energy.force(positions)
+    return positions.grad, force
+    # force ([[-1908.0890,  -3816.1780, -11448.5342, 1908.0890, 3816.1780, 11448.5342]])
+
+
+def test_openmm_clip_by_value(ctx):
+    grad_clipping = ClipGradient(clip=3000.0, norm_dim=1)
+    grad, force = openmm_example(grad_clipping, ctx)
+    expected = - torch.as_tensor([[-1908.0890,  -3000., -3000., 1908.0890, 3000., 3000.]], **ctx)
+    assert torch.allclose(grad.flatten(), expected, atol=1e-3)
+
+
+def test_openmm_clip_by_atom(ctx):
+    grad_clipping = ClipGradient(clip=torch.as_tensor([3000.0, 1.0]), norm_dim=3)
+    grad, force = openmm_example(grad_clipping, ctx)
+    norm_ratio = torch.linalg.norm(grad[..., :3], dim=-1).item()
+    assert norm_ratio == pytest.approx(3000.)
+    assert torch.allclose(grad[..., :3] / 3000., - grad[..., 3:], atol=1e-6)
+
+
+def test_openmm_clip_by_batch(ctx):
+    grad_clipping = ClipGradient(clip=1.0, norm_dim=-1)
+    grad, force = openmm_example(grad_clipping, ctx)
+    ratio = force / grad
+    assert torch.allclose(ratio, ratio[0, 0] * torch.ones_like(ratio))
+    assert torch.linalg.norm(grad).item() == pytest.approx(1.)

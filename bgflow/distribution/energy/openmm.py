@@ -9,7 +9,6 @@ import pickle
 import torch
 
 from ...utils.types import assert_numpy
-from ...utils.clipping import NoClipping
 from .base import _BridgeEnergy, _Bridge
 
 
@@ -45,7 +44,7 @@ class OpenMMBridge(_Bridge):
         platform_name='CPU',
         err_handling="warning",
         n_workers=mp.cpu_count(),
-        n_simulation_steps=0,
+        n_simulation_steps=0
     ):
         from simtk import unit
         platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
@@ -511,23 +510,11 @@ class SingleContext:
 
 
 class OpenMMEnergy(_BridgeEnergy):
-    def __init__(
-            self,
-            dimension=None,
-            bridge=None,
-            two_event_dims=False,
-            grad_clipping=NoClipping()
-    ):
-        """
-        Parameters
-        ----------
-        grad_clipping : Callable
-            a clipping scheme to regularize energy-based training; a callable that takes a gradient and returns one
-        """
+    def __init__(self, dimension=None, bridge=None, two_event_dims=False):
         if dimension is not None:
             warnings.warn(
                 "dimension argument in OpenMMEnergy is deprecated and will be ignored. "
                 "The dimension is directly inferred from the system.",
                 DeprecationWarning
             )
-        super().__init__(bridge, two_event_dims=two_event_dims, grad_clipping=grad_clipping)
+        super().__init__(bridge, two_event_dims=two_event_dims)

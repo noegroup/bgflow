@@ -6,68 +6,46 @@ Examples
 
 """
 
-__all__ = ["NoClipping", "ClipByValue", "ClipByAtom", "ClipBySample", "ClipByBatch"]
+__all__ = ["ClipGradient"]
 
 
-import torch.linalg
+import torch
 from typing import Union
+from functools import partial
 
 
-class NoClipping:
-    """Does nothing."""
-    def __call__(self, grad):
-        return grad
+class ClipGradient(torch.nn.Module):
+    """A module that clips the gradients in the backward pass.
 
+    Parameters
+    ----------
+    clip
+        the max norm
+    norm_dim
+        the dimension of the space over which the norm is computed
+        - `1` corresponds to clipping by value
+        - `3` corresponds to clipping by atom
+        - `-1` corresponds to clipping the norm of the whole tensor
+    """
 
-class ClipByValue:
-    """Component-wise clipping."""
-    def __init__(self, clip: Union[float, torch.Tensor]):
-        self.clip = clip
+    def __init__(self, clip: Union[float, torch.Tensor], norm_dim: int = 1):
+        super().__init__()
+        self.register_buffer("clip", torch.as_tensor(clip))
+        self.norm_dim = norm_dim
 
-    def __call__(self, grad: torch.Tensor):
-        return torch.nan_to_num(grad, 0.0).clip(-self.clip, self.clip)
+    def forward(self, x):
+        x.register_hook(partial(ClipGradient.clip_tensor, clip=self.clip, last_dim=self.norm_dim))
+        return x
 
-
-class ClipByAtom:
-    """Clip atomic forces."""
-    def __init__(self, clip: Union[float, torch.Tensor], n_dim: int = 3):
-        self.clip = clip
-        self.n_dim = n_dim
-
-    def __call__(self, grad):
-        original_shape = grad.shape
-        grad = torch.nan_to_num(grad).reshape(-1, self.n_dim)
-        norm = torch.linalg.norm(grad.detach(), dim=-1, keepdim=True)
-        factor = torch.minimum(self.clip/norm, torch.ones_like(norm))
-        grad = (grad * factor).reshape(original_shape)
-        return grad
-
-
-class ClipBySample:
-    """Clip norm across event dims."""
-    def __init__(self, clip: Union[float, torch.Tensor], n_event_dims):
-        self.clip = clip
-        self.n_event_dims = n_event_dims
-
-    def __call__(self, grad):
-        original_shape = grad.shape
-        batch_shape = original_shape[:-self.n_event_dims]
-        grad = torch.nan_to_num(grad).reshape(*batch_shape, -1)
-        norm = torch.linalg.norm(grad.detach(), dim=-1, keepdim=True)
-        factor = torch.minimum(self.clip/norm, torch.ones_like(norm))
-        grad = (grad * factor).reshape(original_shape)
-        return grad
-
-
-class ClipByBatch:
-    """Clip norm of the whole gradient tensor."""
-    def __init__(self, clip: Union[float, torch.Tensor]):
-        self.clip = clip
-
-    def __call__(self, grad):
-        original_shape = grad.shape
-        grad = torch.nan_to_num(grad).reshape(-1)
-        norm = torch.linalg.norm(grad.detach())
-        factor = torch.minimum(self.clip/norm, torch.ones_like(norm))
-        grad = (grad * factor).reshape(original_shape)
-        return grad
+    @staticmethod
+    def clip_tensor(tensor, clip, last_dim):
+        clip.to(tensor)
+        original_shape = tensor.shape
+        last_dim = (-1, ) if last_dim == -1 else (-1, last_dim)
+        out = torch.nan_to_num(tensor, nan=0.0).flatten().reshape(*last_dim)
+        norm = torch.linalg.norm(out.detach(), dim=-1, keepdim=True)
+        factor = (clip.view(-1, *clip.shape) / norm.view(-1, *clip.shape)).view(-1)
+        factor = torch.minimum(factor, torch.ones_like(factor))
+        out = out.view(*last_dim) * factor.view(-1, 1)
+        out = out.reshape(original_shape)
+        return out

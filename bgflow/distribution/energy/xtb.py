@@ -152,9 +152,6 @@ class XTBEnergy(_BridgeEnergy):
         Whether to use two event dimensions.
         In this case, the energy call expects positions of shape (*batch_shape, n_atoms, 3).
         Otherwise, it expects positions of shape (*batch_shape, n_atoms * 3).
-    grad_clipping : Callable
-        a clipping scheme to regularize energy-based training; a callable that takes a gradient and returns one
-
     """
     pass
 

@@ -74,11 +74,7 @@ Training utilities
     :toctree: generated/
     :template: class.rst
 
-    NoClipping
-    ClipByValue
-    ClipByAtom
-    ClipBySample
-    ClipByBatch
+    ClipGradient
 
 """
 
