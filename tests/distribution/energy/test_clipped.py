@@ -1,41 +1,41 @@
+
 import pytest
-import torch
 import warnings
+import torch
+from bgflow import Energy, LinLogCutEnergy, GradientClippedEnergy
 from bgflow.utils import ClipGradient
 
 
-def torch_example(grad_clipping, ctx):
-    positions = torch.arange(6).reshape(2, 3).to(**ctx)
-    positions.requires_grad = True
-    positions = grad_clipping.to(**ctx)(positions)
-    (0.5 * positions ** 2).sum().backward()
-    return positions.grad
+class StrongRepulsion(Energy):
+    def __init__(self):
+        super().__init__([2, 2])
+
+    def _energy(self, x):
+        dist = torch.cdist(x, x)
+        return (dist ** -12)[..., 0, 1][:, None]
 
 
-def test_clip_by_val(ctx):
-    grad_clipping = ClipGradient(clip=3., norm_dim=1)
-    assert torch.allclose(
-        torch_example(grad_clipping, ctx),
-        torch.tensor([[0., 1., 2.], [3., 3., 3.]], **ctx)
-    )
+def test_linlogcut(ctx):
+    lj = StrongRepulsion()
+    llc = LinLogCutEnergy(lj, high_energy=1e3, max_energy=1e10)
+    x = torch.tensor([
+        [[0., 0.], [0.0, 0.0]],  # > max energy
+        [[0., 0.], [0.0, 0.3]],  # < max_energy, > high_energy
+        [[0., 0.], [0.0, 1.]],  # < high_energy
+    ], **ctx)
+    raw = lj.energy(x)[:, 0]
+    cut = llc.energy(x)[:, 0]
 
-
-def test_clip_by_atom(ctx):
-    grad_clipping = ClipGradient(clip=3., norm_dim=3)
-    norm2 = torch.linalg.norm(torch.arange(3, 6, **ctx)).item()
-    assert torch.allclose(
-        torch_example(grad_clipping, ctx),
-        torch.tensor([[0., 1., 2.], [3/norm2*3, 4/norm2*3, 5/norm2*3]], **ctx)
-    )
-
-
-def test_clip_by_batch(ctx):
-    grad_clipping = ClipGradient(clip=3., norm_dim=-1)
-    norm2 = torch.linalg.norm(torch.arange(6, **ctx)).item()
-    assert torch.allclose(
-        torch_example(grad_clipping, ctx),
-        (torch.arange(6, **ctx) / norm2 * 3.).reshape(2, 3)
-    )
+    # first energy is clamped
+    assert not (raw <= 1e10).all()
+    assert (cut <= 1e10).all()
+    assert cut[0].item() == pytest.approx(1e10, abs=1e-5)
+    # second energy is softened, but force points in the right direction
+    assert 1e3 < cut[1].item() < 1e10
+    assert llc.force(x)[1][1, 1] > 0.0
+    assert llc.force(x)[1][0, 1] < 0.0
+    # third energy is unchanged
+    assert torch.allclose(raw[2], cut[2], atol=1e-5)
 
 
 def openmm_example(grad_clipping, ctx):
@@ -60,13 +60,13 @@ def openmm_example(grad_clipping, ctx):
     bridge = OpenMMBridge(system, openmm.LangevinIntegrator(300., 0.1, 0.001), n_workers=1)
 
     energy = OpenMMEnergy(bridge=bridge, two_event_dims=False)
+    energy = GradientClippedEnergy(energy, grad_clipping)
     positions = torch.tensor([[0.0, 0.0, 0.0, 0.1, 0.2, 0.6]]).to(**ctx)
     positions.requires_grad = True
-    positions = grad_clipping.to(**ctx)(positions)
-    energy.energy(positions).sum().backward()
     force = energy.force(positions)
+    energy.energy(positions).sum().backward()
+    #force = torch.tensor([[-1908.0890,  -3816.1780, -11448.5342, 1908.0890, 3816.1780, 11448.5342]]).to(**ctx)
     return positions.grad, force
-    # force ([[-1908.0890,  -3816.1780, -11448.5342, 1908.0890, 3816.1780, 11448.5342]])
 
 
 def test_openmm_clip_by_value(ctx):

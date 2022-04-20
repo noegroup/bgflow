@@ -131,7 +131,7 @@ class KLTrainer(object):
         if clip_forces is not None:
             warnings.warn(
                 "clip_forces is deprecated and will be ignored. "
-                "Use direct clipping of _BridgeEnergy instances instead",
+                "Use GradientClippedEnergy instances instead",
                 DeprecationWarning
             )
 

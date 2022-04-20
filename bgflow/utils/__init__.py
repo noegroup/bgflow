@@ -78,11 +78,10 @@ Training utilities
 
 """
 
-from .train import IndexBatchIterator, LossReporter
+from .train import IndexBatchIterator, LossReporter, ClipGradient
 from .shape import tile
 from .types import *
 from .autograd import *
-from .clipping import *
 
 from .geometry import (
     distance_vectors,
