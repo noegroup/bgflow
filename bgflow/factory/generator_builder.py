@@ -14,8 +14,6 @@ from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
-from ..nn.flow.modulo import IncreaseMultiplicityFlow
-from ..nn.flow.modulo import CircularShiftFlow
 from ..nn.flow.torchtransform import TorchTransform
 from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
@@ -288,17 +286,16 @@ class BoltzmannGeneratorBuilder:
 
         conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
         conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
-        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
-
         conditioners = make_conditioners(
             transformer_type=transformer_type,
             conditioner_type=conditioner_type,
             transformer_kwargs=transformer_kwargs,
             what=what,
             on=on,
-            shape_info=self.current_dims,
+            shape_info=self.current_dims.copy(),
             **conditioner_kwargs
         )
         transformer = make_transformer(
@@ -336,6 +333,8 @@ class BoltzmannGeneratorBuilder:
         )
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
+    
+    
 
     def add_layer(self, flow, what=None, inverse=False, param_groups=tuple()):
         """Add a flow layer.
@@ -436,6 +435,8 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
+
+
     def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False):
         if len(cdfs) == 0:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
@@ -511,15 +512,6 @@ class BoltzmannGeneratorBuilder:
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
 
-    def add_torsion_multiplicities(self, multiplicities, torsions=TORSIONS):
-        """TODO:docs"""
-        fmod_layer = IncreaseMultiplicityFlow(multiplicities).to(**self.ctx)
-        return self.add_layer(fmod_layer, what=(torsions, ))
-
-    def add_torsion_shifts(self, shifts, torsions=TORSIONS):
-        """TODO:docs"""
-        fmod_layer = CircularShiftFlow(shifts).to(**self.ctx)
-        return self.add_layer(fmod_layer, what=(torsions, ))
 
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)
@@ -527,5 +519,7 @@ class BoltzmannGeneratorBuilder:
             if group not in self.param_groups:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
+            # remove duplicate parameters if parameters are shared between layers:
+            self.param_groups[group] = list(set(self.param_groups[group]))
 
 

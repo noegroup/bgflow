@@ -387,7 +387,6 @@ class RelativeInternalCoordinateTransformation(Flow):
 
         n_batch = x.shape[0]
         x = x.view(n_batch, -1, 3)
-
         # compute bonds, angles, torsions
         # together with jacobians (wrt. to diagonal atom)
         bonds, jbonds = dist_deriv(
@@ -616,7 +615,6 @@ class GlobalInternalCoordinateTransformation(Flow):
 
         # find initial atoms
         initial_atoms, z_matrix = slice_initial_atoms(z_matrix)
-
         self._rel_ic = RelativeInternalCoordinateTransformation(
             z_matrix=z_matrix,
             fixed_atoms=initial_atoms,

@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-
+from tqdm import tqdm
 from bgflow.utils.types import assert_numpy
 from bgflow.distribution.sampling import DataSetSampler
 
@@ -88,6 +88,7 @@ class KLTrainer(object):
         w_likelihood=None,
         w_energy=None,
         w_custom=None,
+        custom_loss_kwargs={},
         n_print=0,
         temperature=1.0,
         schedulers=(),
@@ -133,7 +134,7 @@ class KLTrainer(object):
         if isinstance(testdata, torch.Tensor):
             testdata = DataSetSampler(testdata)
 
-        for iter in range(n_iter):
+        for iter in tqdm(range(n_iter)):
             # invoke schedulers
             for interval, scheduler in schedulers:
                 if iter % interval == 0:
@@ -164,6 +165,7 @@ class KLTrainer(object):
                 if w_likelihood > 0:
                     l = w_likelihood / (w_likelihood + w_energy)
                     (l * nll).backward(retain_graph=True)
+                
             # compute NLL over test data 
             if self.test_likelihood:
                 testnll = torch.zeros_like(nll)
@@ -171,12 +173,14 @@ class KLTrainer(object):
                     testbatch = testdata.sample(batchsize)
                     if isinstance(testbatch, torch.Tensor):
                         testbatch = (testbatch,)
-                    testnll = self.bg.energy(*testbatch, temperature=temperature).mean()
+                    with torch.no_grad():
+                        testnll = self.bg.energy(*testbatch, temperature=temperature).mean()
                 reports.append(testnll)
 
             if w_custom is not None:
-                cl = self.custom_loss()
+                cl = self.custom_loss(**custom_loss_kwargs)
                 (w_custom * cl).backward(retain_graph=True)
+                reports.append(cl)
 
             self.reporter.report(*reports)
             if n_print > 0:
@@ -187,6 +191,7 @@ class KLTrainer(object):
                 print("found nan in grad; skipping optimization step")
             else:
                 self.optim.step()
+
 
     def losses(self, n_smooth=1):
         return self.reporter.losses(n_smooth=n_smooth)

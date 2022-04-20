@@ -2,9 +2,9 @@
 import numpy as np
 from bgflow.factory.tensor_info import ShapeDictionary, TensorInfo, BONDS, ANGLES, TORSIONS, FIXED
 
-
 def test_shape_info(crd_trafo):
     shape_info = ShapeDictionary.from_coordinate_transform(crd_trafo)
+
     for key in [BONDS, ANGLES, TORSIONS]:
         assert shape_info[key] == (len(crd_trafo.z_matrix), )
     assert shape_info[FIXED][0] == 3*len(crd_trafo.fixed_atoms)
@@ -27,6 +27,19 @@ def test_shape_info(crd_trafo):
     assert shape_info.dim_circular() == shape_info[TORSIONS][0]
     assert shape_info.dim_noncircular([ANGLES, BONDS]) == shape_info[ANGLES][0] + shape_info[BONDS][0]
     assert shape_info.dim_noncircular() == 66 - shape_info[TORSIONS][0]
+
+    assert shape_info.dim_cartesian([ANGLES, BONDS]) == 0
+    assert shape_info.dim_noncartesian([ANGLES, BONDS]) == shape_info[ANGLES][0] + shape_info[BONDS][0]
+    assert shape_info.dim_noncartesian([FIXED]) == 0
+    assert not (shape_info.is_cartesian([BONDS, FIXED])[: shape_info[BONDS][0]]).any()
+    assert (
+        shape_info.cartesian_indices()
+        == np.arange(shape_info[BONDS][0]+shape_info[ANGLES][0]+shape_info[TORSIONS][0],
+                     shape_info[BONDS][0]+shape_info[ANGLES][0]+shape_info[TORSIONS][0]+shape_info[FIXED][0]
+                     )
+    ).all()
+
+
 
 
 def test_shape_info_insert():
