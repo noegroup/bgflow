@@ -9,7 +9,6 @@ import warnings
 import torch
 import numpy as np
 from ...utils.types import assert_numpy
-from ...utils.clipping import NoClipping
 
 
 def _is_non_empty_sequence_of_integers(x):
@@ -217,16 +216,16 @@ class Energy(torch.nn.Module):
 
 class _BridgeEnergyWrapper(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, bridge, grad_clipping):
+    def forward(ctx, input, bridge):
         energy, force, *_ = bridge.evaluate(input)
         ctx.save_for_backward(grad_clipping(-force))
         return energy
 
     @staticmethod
     def backward(ctx, grad_output):
-        neg_force,  = ctx.saved_tensors
+        neg_force, = ctx.saved_tensors
         grad_input = grad_output * neg_force
-        return grad_input, None, None
+        return grad_input, None
 
 
 _evaluate_bridge_energy = _BridgeEnergyWrapper.apply
@@ -293,11 +292,10 @@ class _Bridge:
 
 class _BridgeEnergy(Energy):
 
-    def __init__(self, bridge, two_event_dims=True, grad_clipping=NoClipping()):
+    def __init__(self, bridge, two_event_dims=True):
         event_shape = (bridge.n_atoms, 3) if two_event_dims else (bridge.n_atoms * 3, )
         super().__init__(event_shape)
         self._bridge = bridge
-        self.grad_clipping = grad_clipping
         self._last_batch = None
 
     @property
@@ -314,7 +312,7 @@ class _BridgeEnergy(Energy):
             return self._bridge.last_energies
         else:
             self._last_batch = hash(str(batch))
-            return _evaluate_bridge_energy(batch, self._bridge, self.grad_clipping)
+            return _evaluate_bridge_energy(batch, self._bridge)
 
     def force(self, batch, temperature=None):
         # check if we have already computed this energy

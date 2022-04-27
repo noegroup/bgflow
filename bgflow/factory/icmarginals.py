@@ -29,7 +29,7 @@ class InternalCoordinateMarginals(dict):
             fixed_scale=20.0,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=TORSIONS,
+            torsions=None,
             fixed=FIXED,
             augmented=AUGMENTED,
     ):

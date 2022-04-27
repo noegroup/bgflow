@@ -3,7 +3,7 @@ import torch
 from ..utils.types import is_list_or_tuple
 
 
-__all__ = ["DenseNet", "MeanFreeDenseNet"]
+__all__ = ["DenseNet", "MeanFreeDenseNet", "ResNet"]
 
 
 class DenseNet(torch.nn.Module):
@@ -46,6 +46,15 @@ class DenseNet(torch.nn.Module):
 
     def forward(self, x):
         return self._layers(x)
+
+
+class ResNet(torch.nn.Module):
+    def __init__(self, dense_net):
+        super().__init__()
+        self._dense = dense_net
+
+    def forward(self, x):
+        return x + self._dense(x)
 
 
 class MeanFreeDenseNet(DenseNet):

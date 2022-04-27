@@ -66,8 +66,22 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
     )
 
 
+def _make_resnet_conditioner(dim_in, dim_out, n_hidden=2, activation=torch.nn.SiLU(), **kwargs):
+    return torch.nn.Sequential(
+        bg.DenseNet([dim_in, dim_out]),
+        activation,
+        bg.ResNet(
+            bg.DenseNet(
+                [dim_out]*(n_hidden+1),
+                activation=activation
+            )
+        )
+    )
+
+
 CONDITIONER_FACTORIES = {
     "dense": _make_dense_conditioner,
+    "resnet": _make_resnet_conditioner,
 }
 
 
