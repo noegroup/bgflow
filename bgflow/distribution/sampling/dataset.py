@@ -100,6 +100,8 @@ class DataSetSampler(_ToDeviceSampler, torch.utils.data.Dataset):
             for i in range(len(self.data)):
                 samples[i] = torch.cat([samples[i], self.data[i][idxs]], dim=0)
         else:
+            #import ipdb
+            #ipdb.set_trace()
             idxs = self._idxs[self._current_index:]
             for i in range(len(self.data)):
                 samples[i] = torch.cat([samples[i], self.data[i][idxs]], dim=0)

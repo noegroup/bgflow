@@ -9,7 +9,7 @@ import logging
 from ..nn.flow.sequential import SequentialFlow
 from ..nn.flow.coupling import SetConstantFlow
 from ..nn.flow.transformer.spline import ConditionalSplineTransformer
-from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow
+from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow, CloneFlow
 from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
@@ -288,17 +288,18 @@ class BoltzmannGeneratorBuilder:
 
         conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
         conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
-        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
-
+        #import ipdb
+        #ipdb.set_trace()
         conditioners = make_conditioners(
             transformer_type=transformer_type,
             conditioner_type=conditioner_type,
             transformer_kwargs=transformer_kwargs,
             what=what,
             on=on,
-            shape_info=self.current_dims,
+            shape_info=self.current_dims.copy(),
             **conditioner_kwargs
         )
         transformer = make_transformer(
@@ -336,6 +337,61 @@ class BoltzmannGeneratorBuilder:
         )
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
+    
+    
+    def add_remove_constant(self, what, tensor):
+        #if what in self.current_dims:
+        #    if self.current_dims[what] != tuple(tensor.shape):
+        #        raise ValueError(f"Constant tensor {tensor} must have shape {self.current_dims[what]}")
+        
+
+        
+        index = self.current_dims.index(what)
+        fix_flow = InverseFlow(SetConstantFlow(
+            indices=[index],
+            values=[tensor.to(**self.ctx)]
+        )
+        )
+        del self.current_dims[what]
+        logger.info(f"  + Removed Constant: {what} at index {index}")
+        self.layers.append(fix_flow)
+        
+    
+    
+    def add_clone(self, what, to):
+        if what not in self.current_dims:
+            raise ValueError(f"Field {what} is not in builder.current_dims")
+        #import ipdb 
+        #ipdb.set_trace()
+        self.current_dims[to] = self.current_dims[what]
+        index_what = self.current_dims.index(what)
+        index_to = self.current_dims.index(to)
+        clone_flow = CloneFlow(
+        )
+        wrap_flow = WrapFlow(clone_flow, indices=(index_what,), out_indices=(index_what,index_to))
+        
+        
+        
+        logger.info(f"  + cloned: {what} at index {index_to}")
+        self.layers.append(wrap_flow)
+        
+    def remove_clone(self, what, to):
+        """ inverse of add_clone"""
+        if what not in self.current_dims:
+            raise ValueError(f"Field {what} is not in builder.current_dims")
+        #import ipdb 
+        #ipdb.set_trace()
+        
+        index_what = self.current_dims.index(what)
+        index_to = self.current_dims.index(to)
+        clone_flow = CloneFlow(
+        )
+        wrap_flow = WrapFlow(clone_flow, indices=(index_what,), out_indices=(index_what,index_to))
+        inverse_wrap_flow = InverseFlow(wrap_flow)
+        
+        del self.current_dims[to]
+        logger.info(f"  + removed clone: {what} at index {index_to}")
+        self.layers.append(inverse_wrap_flow)
 
     def add_layer(self, flow, what=None, inverse=False, param_groups=tuple()):
         """Add a flow layer.
@@ -433,10 +489,53 @@ class BoltzmannGeneratorBuilder:
             indices=indices,
             out_indices=(self.current_dims.index(bonds),)  # first index of the input
         )
+        #import ipdb
+        #ipdb.set_trace()
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
-    def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False):
+    def add_map_to_ICs(
+            self,
+            coordinate_transform,
+            fixed_origin_and_rotation=True,
+            bonds=BONDS,
+            angles=ANGLES,
+            torsions=TORSIONS,
+            fixed=FIXED,
+            origin=ORIGIN,
+            rotation=ROTATION,
+            out=None
+    ):
+        fixed_fields = [FIXED]
+
+        # fix origin and rotation
+        #if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation):
+            #ic_fields.extend([origin, rotation])
+            #if fixed_origin_and_rotation:
+             #   self.add_set_constant(origin, torch.zeros(1, 3, **self.ctx))
+             #   self.add_set_constant(rotation, torch.tensor([0.5, 0.5, 0.5], **self.ctx))
+        #else:
+            #ic_fields.append(fixed)
+
+        indices = [self.current_dims.index(fixed) for fixed in fixed_fields]
+        n_dims = len(self.current_dims) - 1
+        wrap_around_fixed = WrapFlow(
+            coordinate_transform,
+            indices=indices,
+            out_indices=(n_dims, n_dims + 1, n_dims + 2, n_dims + 3, n_dims + 4)  # first index of the input
+        )
+        #import ipdb
+        #ipdb.set_trace()
+        sizes_out = [self.current_dims[fixed_fields[0]][0]//3-1, self.current_dims[fixed_fields[0]][0]//3-2, self.current_dims[fixed_fields[0]][0]//3-3, 3,3 ]
+        for i,(s,f) in enumerate(zip(sizes_out, out)):
+            self.current_dims.insert(f, n_dims + i, s)
+        del self.current_dims[fixed_fields[0]]
+        #self.current_dims.replace(fixed_fields, out)
+        self.layers.append(wrap_around_fixed)
+
+
+
+    def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False, jac = True):
         if len(cdfs) == 0:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
         new_layers = []
@@ -445,7 +544,7 @@ class BoltzmannGeneratorBuilder:
                 if isinstance(cdfs[field], Flow):
                     icdf_flow = cdfs[field]
                 else:
-                    icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
+                    icdf_flow = InverseFlow(CDFTransform(cdfs[field], jac = jac))
                 flow = WrapFlow(icdf_flow, (self.current_dims.index(field),))
                 self.layers.append(flow)
                 new_layers.append(icdf_flow)

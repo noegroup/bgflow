@@ -1,9 +1,10 @@
 
 import numpy as np
 from bgflow.factory.tensor_info import ShapeDictionary, TensorInfo, BONDS, ANGLES, TORSIONS, FIXED
-
+import pytest
 
 def test_shape_info(crd_trafo):
+    #pytest.set_trace()
     shape_info = ShapeDictionary.from_coordinate_transform(crd_trafo)
     for key in [BONDS, ANGLES, TORSIONS]:
         assert shape_info[key] == (len(crd_trafo.z_matrix), )

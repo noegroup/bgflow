@@ -21,10 +21,11 @@ class CDFTransform(Flow):
     eps : float
         Limit to ensure that cdf values are strictly in (0,1). Log deterimants are enforced > -1/eps.
     """
-    def __init__(self, distribution, eps=1e-7):
+    def __init__(self, distribution, eps=1e-7, jac = True):
         super().__init__()
         self.distribution = distribution
         self._eps = eps
+        self.jac = jac
 
     def _forward(self, x, *args, **kwargs):
         y = self.distribution.cdf(x)
@@ -33,6 +34,9 @@ class CDFTransform(Flow):
         logdet = self.distribution.log_prob(x)
         if self._eps is not None:
             logdet = logdet.clamp_min(-1/self._eps)
+            
+        if self.jac == False:
+            logdet = torch.zeros_like(logdet)
         return y, logdet.sum(dim=-1, keepdim=True)
 
     def _inverse(self, x, *args, **kwargs):
@@ -42,6 +46,8 @@ class CDFTransform(Flow):
         logdet = -self.distribution.log_prob(y)
         if self._eps is not None:
             logdet = logdet.clamp_min(-1/self._eps)
+        if self.jac == False:
+            logdet = torch.zeros_like(logdet)
         return y, logdet.sum(dim=-1, keepdim=True)
 
 
