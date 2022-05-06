@@ -4,7 +4,7 @@ from typing import Union
 from functools import partial
 
 
-from .types import assert_numpy
+from .types import assert_numpy, unpack_tensor_tuple
 
 
 class IndexBatchIterator(object):
@@ -98,9 +98,11 @@ class ClipGradient(torch.nn.Module):
         self.register_buffer("clip", torch.as_tensor(clip))
         self.norm_dim = norm_dim
 
-    def forward(self, x):
-        x.register_hook(partial(ClipGradient.clip_tensor, clip=self.clip, last_dim=self.norm_dim))
-        return x
+    def forward(self, *xs):
+        for x in xs:
+            if x.requires_grad:
+                x.register_hook(partial(ClipGradient.clip_tensor, clip=self.clip, last_dim=self.norm_dim))
+        return unpack_tensor_tuple(xs)
 
     @staticmethod
     def clip_tensor(tensor, clip, last_dim):
@@ -149,6 +151,6 @@ class LossReporter:
             axis.set_ylabel(label)
             if i == self._n_reported - 1:
                 axis.set_xlabel("Iteration")
-                
+
     def recent(self, n_recent=1):
         return np.array([raw[-n_recent:] for raw in self._raw])

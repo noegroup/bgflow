@@ -2,7 +2,7 @@
 import pytest
 import warnings
 import torch
-from bgflow import Energy, LinLogCutEnergy, GradientClippedEnergy
+from bgflow import Energy, LinLogCutEnergy, GradientClippedEnergy, DoubleWellEnergy
 from bgflow.utils import ClipGradient
 
 
@@ -60,7 +60,7 @@ def openmm_example(grad_clipping, ctx):
     bridge = OpenMMBridge(system, openmm.LangevinIntegrator(300., 0.1, 0.001), n_workers=1)
 
     energy = OpenMMEnergy(bridge=bridge, two_event_dims=False)
-    energy = GradientClippedEnergy(energy, grad_clipping)
+    energy = GradientClippedEnergy(energy, grad_clipping).to(**ctx)
     positions = torch.tensor([[0.0, 0.0, 0.0, 0.1, 0.2, 0.6]]).to(**ctx)
     positions.requires_grad = True
     force = energy.force(positions)
@@ -90,3 +90,13 @@ def test_openmm_clip_by_batch(ctx):
     ratio = force / grad
     assert torch.allclose(ratio, ratio[0, 0] * torch.ones_like(ratio))
     assert torch.linalg.norm(grad).item() == pytest.approx(1.)
+
+
+def test_openmm_clip_no_grad(ctx):
+    energy = GradientClippedEnergy(
+        energy=DoubleWellEnergy(2),
+        gradient_clipping=ClipGradient(clip=1.0, norm_dim=1)
+    )
+    x = torch.randn(12,2).to(**ctx)
+    x.requires_grad = False
+    energy.energy(x)

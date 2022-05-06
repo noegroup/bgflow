@@ -59,8 +59,7 @@ def ala2():
         rigidWater=True
     )
     system.energy_model = OpenMMEnergy(
-        66,
-        OpenMMBridge(
+        bridge=OpenMMBridge(
             system.system,
             mm.LangevinIntegrator(300, 1, 0.001),
             n_workers=1
