@@ -286,7 +286,7 @@ class BoltzmannGeneratorBuilder:
 
         conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
         conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
-        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
 
