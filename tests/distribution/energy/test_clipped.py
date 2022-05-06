@@ -2,7 +2,7 @@
 import pytest
 import warnings
 import torch
-from bgflow import Energy, LinLogCutEnergy, GradientClippedEnergy
+from bgflow import Energy, LinLogCutEnergy, GradientClippedEnergy, DoubleWellEnergy
 from bgflow.utils import ClipGradient
 
 
@@ -90,3 +90,13 @@ def test_openmm_clip_by_batch(ctx):
     ratio = force / grad
     assert torch.allclose(ratio, ratio[0, 0] * torch.ones_like(ratio))
     assert torch.linalg.norm(grad).item() == pytest.approx(1.)
+
+
+def test_openmm_clip_no_grad(ctx):
+    energy = GradientClippedEnergy(
+        energy=DoubleWellEnergy(2),
+        gradient_clipping=ClipGradient(clip=1.0, norm_dim=1)
+    )
+    x = torch.randn(12,2).to(**ctx)
+    x.requires_grad = False
+    energy.energy(x)

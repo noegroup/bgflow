@@ -4,7 +4,7 @@ from typing import Union
 from functools import partial
 
 
-from .types import assert_numpy
+from .types import assert_numpy, unpack_tensor_tuple
 
 
 class IndexBatchIterator(object):
@@ -149,6 +149,6 @@ class LossReporter:
             axis.set_ylabel(label)
             if i == self._n_reported - 1:
                 axis.set_xlabel("Iteration")
-                
+
     def recent(self, n_recent=1):
         return np.array([raw[-n_recent:] for raw in self._raw])
