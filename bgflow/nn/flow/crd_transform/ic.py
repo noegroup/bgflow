@@ -1,3 +1,4 @@
+from ipdb import set_trace as bp
 import torch
 import numpy as np
 from typing import Union, Optional
@@ -387,7 +388,7 @@ class RelativeInternalCoordinateTransformation(Flow):
 
         n_batch = x.shape[0]
         x = x.view(n_batch, -1, 3)
-
+        #bp()
         # compute bonds, angles, torsions
         # together with jacobians (wrt. to diagonal atom)
         bonds, jbonds = dist_deriv(
@@ -616,7 +617,7 @@ class GlobalInternalCoordinateTransformation(Flow):
 
         # find initial atoms
         initial_atoms, z_matrix = slice_initial_atoms(z_matrix)
-
+        #bp()
         self._rel_ic = RelativeInternalCoordinateTransformation(
             z_matrix=z_matrix,
             fixed_atoms=initial_atoms,

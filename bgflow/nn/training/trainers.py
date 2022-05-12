@@ -181,7 +181,7 @@ class KLTrainer(object):
                 reports.append(testnll)
 
             if w_custom is not None:
-                cl = self.custom_loss()
+                cl = self.custom_loss(batch)
                 (w_custom * cl).backward(retain_graph=True)
                 #import ipdb
                 #ipdb.set_trace()
