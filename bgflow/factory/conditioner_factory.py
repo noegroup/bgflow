@@ -149,10 +149,10 @@ def _make_wrapdistances_conditioner(dim_in, dim_out, hidden=(128, 128), activati
     wrapdistances_conditioner = WrapDistancesConditioner(dim_in, dim_out, hidden, activation, **kwargs)
     return wrapdistances_conditioner
 
-import nequip
-import allegro
-from nequip.nn import SequentialGraphNetwork
-from nequip.data import AtomicData
+#import nequip
+#import allegro
+#from nequip.nn import SequentialGraphNetwork
+#from nequip.data import AtomicData
 # class AllegroGNN():
 #     def __init__(self, layers):
 #
@@ -250,6 +250,7 @@ def _make_allegro_conditioner(dim_in, dim_out, hidden=(128, 128), activation=tor
     '''
     build an allegro GNN and plug it into the Transformer as conditioner network.
     '''
+    from nequip.nn import SequentialGraphNetwork
     allegro_conditioner = AllegroConditioner(dim_in, dim_out, hidden, activation, **kwargs)
     return allegro_conditioner
 
