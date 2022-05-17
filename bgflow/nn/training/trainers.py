@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from tqdm import tqdm
-
+from ipdb import set_trace as bp
 from bgflow.utils.types import assert_numpy
 from bgflow.distribution.sampling import DataSetSampler
 
@@ -89,6 +89,7 @@ class KLTrainer(object):
         w_likelihood=None,
         w_energy=None,
         w_custom=None,
+        custom_loss_kwargs={},
         n_print=0,
         temperature=1.0,
         schedulers=(),
@@ -163,6 +164,7 @@ class KLTrainer(object):
                 nll = self.bg.energy(*batch, temperature=temperature).mean()
                 reports.append(nll)
                 # aggregate weighted gradient
+                #bp()
                 if w_likelihood > 0:
                     l = w_likelihood / (w_likelihood + w_energy)
                     (l * nll).backward(retain_graph=True)
@@ -181,7 +183,7 @@ class KLTrainer(object):
                 reports.append(testnll)
 
             if w_custom is not None:
-                cl = self.custom_loss(batch)
+                cl = self.custom_loss(**custom_loss_kwargs)
                 (w_custom * cl).backward(retain_graph=True)
                 #import ipdb
                 #ipdb.set_trace()
@@ -196,6 +198,7 @@ class KLTrainer(object):
                 print("found nan in grad; skipping optimization step")
             else:
                 self.optim.step()
+                #bp()
                 #pass
 
     def losses(self, n_smooth=1):
