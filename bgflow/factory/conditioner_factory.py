@@ -83,15 +83,6 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
 def _make_schnett_conditioner(dim_in, dim_out, cartesian_indices, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
     pass
 
-#class Envelope(torch.nn.Module):
-#    def __init__(self, p = 6, c = 15):
-#         super().__init__()
-#         self.p = p
-#         self.c = c
-#     def forward(self, x):
-#         x = x/self.c
-#         return(1 - ((self.p+1)*(self.p+2))/2*x**self.p + self.p*(self.p+2)*x**(self.p+1) - (self.p*(self.p+1))/2*x**(self.p+2))
-#
 
 class WrapDistancesConditioner(torch.nn.Module):
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
@@ -149,18 +140,12 @@ def _make_wrapdistances_conditioner(dim_in, dim_out, hidden=(128, 128), activati
     wrapdistances_conditioner = WrapDistancesConditioner(dim_in, dim_out, hidden, activation, **kwargs)
     return wrapdistances_conditioner
 
-#import nequip
-#import allegro
-#from nequip.nn import SequentialGraphNetwork
-#from nequip.data import AtomicData
-# class AllegroGNN():
-#     def __init__(self, layers):
-#
-#
-#
-#         self.model = SequentialGraphNetwork.from_parameters(shared_params=None, layers=layers)
-#
-#         bp()
+
+from nequip.nn import SequentialGraphNetwork
+import bgflow as bg
+
+
+
 class AllegroConditioner(torch.nn.Module):
     '''
     split input into wrapped periodic, nonperiodic and cartesians.
@@ -176,34 +161,17 @@ class AllegroConditioner(torch.nn.Module):
         self.on = kwargs["on"]
         self.layers = kwargs["layers"]
         self.n_cart = len(self.cart_indices)
-        self.cart_atoms = self.n_cart//3
-
+        self.n_cart_atoms = self.n_cart//3
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
-        path = "/srv/public/mameyer/config/json.json"
         self.allegro_gnn = SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
-        #self.allegro_out_dims = self.allegro_gnn.irreps_out["edge_features"].num_irreps # falsch
-        #self.allegro_out_dims = (self.cart_atoms**2 -self.cart_atoms) * self.allegro_gnn._modules["gather"]._module.out_features
-        self.allegro_out_dims = (self.cart_atoms ** 2 - self.cart_atoms)//2 * self.allegro_gnn._modules["gather"]._module.out_features#consider each edge only once
-
+        self.allegro_out_dims = self.n_cart_atoms * kwargs["layers"]["allegro"][1]["latent_kwargs"]["mlp_latent_dimensions"][-1] #TODO# # consider each edge only once
         self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
-        #self.dim_dense_in = int(dim_in - self.n_cart + (((self.n_cart // 3) ** 2 - ((self.n_cart // 3))) / 2)*self.N)
         self.densenet = bg.DenseNet(
             [self.dim_dense_in, *hidden, dim_out],
             activation=activation
         )
-        #bp()
-        repetitions = torch.arange(self.cart_atoms-1,0,-1) #consider each edge only once
-        self.edge_index_from = torch.cat([torch.full((r.item(),) , i) for i,r in enumerate(repetitions)])#consider each edge only once
-        #self.edge_index_from = torch.repeat_interleave(torch.arange(self.cart_atoms),self.cart_atoms - 1)
-        full = torch.arange(self.cart_atoms)
-        #bp()
-        #self.edge_index_to = torch.cat([full[full!=i] for i in range(self.cart_atoms)])#.repeat(self.cart_atoms)
-        self.edge_index_to = torch.cat([full[full > i] for i in range(self.cart_atoms)])  #consider each edge only once
-        #self.edge_index_to = torch.arange(self.cart_atoms)[mask] f
-        self.edge_index = torch.vstack((self.edge_index_from,self.edge_index_to))
-        #bp()
-            #torch.range(cart_atoms)
-        #self.edge_index,append=]
+
+
 
     def forward(self, x):
         x_cart = x[:,self.cart_indices_after_periodic]
@@ -211,37 +179,34 @@ class AllegroConditioner(torch.nn.Module):
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
         batchsize = x_cart.shape[0]
-        #offset_tensor = torch.repeat_interleave((torch.arange(x_cart.shape[0])*100),self.n_cart).view(12,30).to(x_cart)
-        edge_index = self.edge_index.repeat((1,batchsize))
-        #bp()
-        offset_tensor = torch.repeat_interleave(torch.arange(batchsize)*self.cart_atoms, (self.cart_atoms**2-self.cart_atoms)//2).repeat((2,1))
+
+        x_cart = x_cart.view(x_cart.shape[0],-1,3)
+        distances = torch.cdist(x_cart, x_cart)
+        in_bonds = distances <= self.cutoff
+        ###
+        #remove edges from node to itself:
+        indices = in_bonds.nonzero()
+        indices = indices[indices[:,1] != indices[:,2]]
+        edge_index = torch.vstack([indices[:,1],indices[:,2]])
+        batch_index = indices[:,0]
+        offset_tensor = (batch_index * self.n_cart_atoms).repeat((2, 1))
+
         edge_index_batch = edge_index + offset_tensor #make sure that all edges are in their respective graphs ( multiple graphs in a batch)
-        #edge_index = self.edge_index.repeat(batchsize)
-        atom_types = torch.arange(self.cart_atoms).repeat(batchsize)
-        #x_cart_offset = x_cart + offset_tensor
 
+        atom_types = torch.arange(self.n_cart_atoms).repeat(batchsize)
 
-        #batch_graph_offset = batch_graph + torch.full_like(batch_graph, 100.)
-           # .view(-1,3)
-        batch = torch.arange(x_cart.shape[0]).repeat_interleave(self.cart_atoms)
+        batch = torch.arange(x_cart.shape[0]).repeat_interleave(self.n_cart_atoms)
         r_max = torch.full((batchsize,), self.cutoff)
-        #bp()
+
         data = dict(pos=x_cart.view(-1,3),
                     edge_index=edge_index_batch.to(x_cart.device),
                     batch=batch.to(x_cart.device),
                     atom_types=atom_types.to(x_cart.device),
                     r_max=r_max.to(x_cart.device))
 
-       # atomic_data = AtomicData.from_points(pos = x_cart_offset.view(-1, 3), r_max=self.cutoff)
-        #bp()
-        #distances = self.wrapdistancespure(x_cart)
-        #binned_distances = self.bessel(distances[...,None], self.wavenumbers, self.c)
-        #u = self.envelope(distances, c=self.c, p=self.p)
-        #binned_enveloped_distances = (u.unsqueeze(-1)*binned_distances).view(x.shape[0],-1)
+
         allegro_output = self.allegro_gnn(data)
-        #bp()
         formatted_output = allegro_output["outputs"].view(batchsize, -1)
-        #bp()
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
         return self.densenet(inputs_and_distances)
 
@@ -250,7 +215,7 @@ def _make_allegro_conditioner(dim_in, dim_out, hidden=(128, 128), activation=tor
     '''
     build an allegro GNN and plug it into the Transformer as conditioner network.
     '''
-    from nequip.nn import SequentialGraphNetwork
+
     allegro_conditioner = AllegroConditioner(dim_in, dim_out, hidden, activation, **kwargs)
     return allegro_conditioner
 
