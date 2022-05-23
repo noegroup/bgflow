@@ -167,7 +167,7 @@ class KLTrainer(object):
                 #bp()
                 if w_likelihood > 0:
                     l = w_likelihood / (w_likelihood + w_energy)
-                    (l * nll).backward(retain_graph=True)
+                    (l * nll).backward(retain_graph=False) # was True
                 #if iter == 79:
                 #    import ipdb
                 #    ipdb.set_trace()                    
@@ -179,7 +179,8 @@ class KLTrainer(object):
                     testbatch = testdata.sample(batchsize)
                     if isinstance(testbatch, torch.Tensor):
                         testbatch = (testbatch,)
-                    testnll = self.bg.energy(*testbatch, temperature=temperature).mean()
+                    with torch.no_grad():
+                        testnll = self.bg.energy(*testbatch, temperature=temperature).mean()
                 reports.append(testnll)
 
             if w_custom is not None:

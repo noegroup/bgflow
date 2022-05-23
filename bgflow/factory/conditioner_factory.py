@@ -143,7 +143,7 @@ def _make_wrapdistances_conditioner(dim_in, dim_out, hidden=(128, 128), activati
 
 from nequip.nn import SequentialGraphNetwork
 import bgflow as bg
-
+from torch.utils.checkpoint import checkpoint
 
 
 class AllegroConditioner(torch.nn.Module):
@@ -154,12 +154,15 @@ class AllegroConditioner(torch.nn.Module):
     '''
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
         super().__init__()
+        #bp()
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
-        self.cutoff = kwargs["c"]
+        self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
         self.layers = kwargs["layers"]
+        self.use_checkpointing = kwargs["use_checkpointing"]
+        self.first = kwargs["first"] if "first" in kwargs.keys() else False
         self.n_cart = len(self.cart_indices)
         self.n_cart_atoms = self.n_cart//3
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
@@ -170,44 +173,75 @@ class AllegroConditioner(torch.nn.Module):
             [self.dim_dense_in, *hidden, dim_out],
             activation=activation
         )
+        self.allegro_buffer = kwargs["allegro_buffer"]
 
+    def forward(self,x):
+        if self.use_checkpointing:
+            dummy_var = torch.zeros(2,requires_grad = True)
+            #dummy_var.requires_grad = True
+            #x.requires_grad = True
+            #bp()
+            print("checkpoint passed")
+            return checkpoint(self._forward, x, dummy_var)
+        else:
+            return self._forward(x)
 
-
-    def forward(self, x):
+    def _forward(self, x, dummy_var = None):
         x_cart = x[:,self.cart_indices_after_periodic]
         index = torch.ones(x.shape[1], dtype=bool)
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
-        batchsize = x_cart.shape[0]
+        allegro_calculated = False
+        if self.first and len(self.allegro_buffer) == 0:
+            allegro_calculated = True
+            batchsize = x_cart.shape[0]
 
-        x_cart = x_cart.view(x_cart.shape[0],-1,3)
-        distances = torch.cdist(x_cart, x_cart)
-        in_bonds = distances <= self.cutoff
-        ###
-        #remove edges from node to itself:
-        indices = in_bonds.nonzero()
-        indices = indices[indices[:,1] != indices[:,2]]
-        edge_index = torch.vstack([indices[:,1],indices[:,2]])
-        batch_index = indices[:,0]
-        offset_tensor = (batch_index * self.n_cart_atoms).repeat((2, 1))
+            x_cart = x_cart.view(x_cart.shape[0],-1,3)
+            distances = torch.cdist(x_cart, x_cart)
+            in_bonds = distances <= self.cutoff
+            ###
+            #remove edges from node to itself:
+            indices = in_bonds.nonzero()
+            indices = indices[indices[:,1] != indices[:,2]]
+            edge_index = torch.vstack([indices[:,1],indices[:,2]])
+            batch_index = indices[:,0]
+            offset_tensor = (batch_index * self.n_cart_atoms).repeat((2, 1))
 
-        edge_index_batch = edge_index + offset_tensor #make sure that all edges are in their respective graphs ( multiple graphs in a batch)
+            edge_index_batch = edge_index + offset_tensor #make sure that all edges are in their respective graphs ( multiple graphs in a batch)
 
-        atom_types = torch.arange(self.n_cart_atoms).repeat(batchsize)
+            atom_types = torch.arange(self.n_cart_atoms).repeat(batchsize)
 
-        batch = torch.arange(x_cart.shape[0]).repeat_interleave(self.n_cart_atoms)
-        r_max = torch.full((batchsize,), self.cutoff)
+            batch = torch.arange(x_cart.shape[0]).repeat_interleave(self.n_cart_atoms)
+            r_max = torch.full((batchsize,), self.cutoff)
 
-        data = dict(pos=x_cart.view(-1,3),
-                    edge_index=edge_index_batch.to(x_cart.device),
-                    batch=batch.to(x_cart.device),
-                    atom_types=atom_types.to(x_cart.device),
-                    r_max=r_max.to(x_cart.device))
+            data = dict(pos=x_cart.view(-1,3),
+                        edge_index=edge_index_batch.to(x_cart.device),
+                        batch=batch.to(x_cart.device),
+                        atom_types=atom_types.to(x_cart.device),
+                        r_max=r_max.to(x_cart.device))
 
 
-        allegro_output = self.allegro_gnn(data)
-        formatted_output = allegro_output["outputs"].view(batchsize, -1)
+            #allegro_output = checkpoint(self.allegro_gnn,data)
+
+
+            allegro_output = self.allegro_gnn(data)
+            formatted_output = allegro_output["outputs"].view(batchsize, -1)
+            #bp()
+            self.allegro_buffer.append(formatted_output)
+            #assert len(allegro_buffer) == 1, "allegro buffer is "
+
+
+
+        else:
+            formatted_output = self.allegro_buffer[0]
+
+        if self.first and len(self.allegro_buffer) != 0 and allegro_calculated == False:
+            #bp()
+            self.last_buffer = self.allegro_buffer.pop()
+            del self.last_buffer
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
+
+
         return self.densenet(inputs_and_distances)
 
 

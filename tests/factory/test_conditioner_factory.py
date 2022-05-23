@@ -139,5 +139,53 @@ def test_condition_on_cartesian(ala2, crd_trafo, ctx):
     params_r = conditioners["params_net"](onr)
     #pytest.set_trace()
     assert torch.allclose(params_x, params_r, atol=5e-4)
+import bgflow
+def test_condition_on_cartesian_allegro(ala2, crd_trafo, ctx):
+    x = torch.tensor(ala2.xyz)[0]
+    R = torch.Tensor(scipy.spatial.transform.Rotation.random().as_matrix()).double()
+    x_rotated = torch.zeros_like(x)
+    for j in range(22):
+        x_rotated[j] = R@(x[j])
 
+    x = x.unsqueeze(dim = 0)
+    x_rotated = x_rotated.unsqueeze(dim = 0)
+
+    def crd_trafo(ala2, ctx):
+        z_matrix = ala2.system.z_matrix
+        fixed_atoms = ala2.system.rigid_block
+        crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed_atoms)
+        return crd_transform
+
+    crd_transform = crd_trafo(ala2, ctx)
+    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
+    from config import config_dict, r_max, num_basis, p
+    kwargs ={"N": num_basis, "c": r_max, "p": p, "layers": config_dict}
+    distances_net = bgflow.nn.periodic.WrapDistances(torch.nn.Identity())
+    fixed = crd_transform.forward(torch.Tensor(ala2.xyz).view(ala2.xyz.shape[0],-1))[3]
+    RBF_distances = distances_net(fixed.detach()).flatten().cpu()
+    RBF_distances = RBF_distances[RBF_distances <= r_max]
+    avg_num_neighbors = ((len(RBF_distances) / (ala2.xyz.shape[0] * fixed.shape[1] / 3))) * 2
+    config_dict["radial_basis"][1]["basis_kwargs"]["data"] = RBF_distances
+    config_dict["allegro"][1]["avg_num_neighbors"] = avg_num_neighbors
+    conditioners = make_conditioners(
+        ConditionalSplineTransformer, (BONDS,), (TORSIONS, FIXED), shape_info,
+        conditioner_type="allegro",
+        **kwargs
+    )
+    device = torch.device("cpu")
+    dtype = torch.float32
+    ctx = {"device": device, "dtype": dtype}
+    x = x.to(**ctx)
+    x_rotated = x_rotated.to(**ctx)
+    bx, ax, tx, fx, _ = crd_transform(x)
+    br, ar, tr, fr, _ = crd_transform(x_rotated)
+    fx_xyz = fx.view(-1,3)
+    fr_xyz = fr.view(-1,3)
+    torch.norm(fx_xyz[0] - fx_xyz[1])
+    torch.norm(fr_xyz[0] - fr_xyz[1])
+    onx = torch.cat((tx, fx), dim = -1)
+    onr = torch.cat((tr, fr), dim = -1)
+    params_x = conditioners["params_net"](onx)
+    params_r = conditioners["params_net"](onr)
+    assert torch.allclose(params_x, params_r, atol=5e-4)
 

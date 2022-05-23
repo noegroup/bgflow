@@ -293,6 +293,8 @@ class BoltzmannGeneratorBuilder:
         conditioner_kwargs = conditioner_kwargss[0]
         #import ipdb
         #ipdb.set_trace()
+        #if conditioner_type == "allegro":
+        #    self.allegro_layers.append(len(self.layers))
         conditioners = make_conditioners(
             transformer_type=transformer_type,
             conditioner_type=conditioner_type,
