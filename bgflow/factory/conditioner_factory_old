@@ -160,22 +160,20 @@ class AllegroConditioner(torch.nn.Module):
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
-        #self.layers = kwargs["layers"]
+        self.layers = kwargs["layers"]
         self.use_checkpointing = kwargs["use_checkpointing"]
         self.first = kwargs["first"] if "first" in kwargs.keys() else False
         self.n_cart = len(self.cart_indices)
         self.n_cart_atoms = self.n_cart//3
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
-        self.allegro_gnn = kwargs["allegro_feature_extractor"]
-        self.allegro_gnn._buffer = []
-          #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
-        self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features
+        self.allegro_gnn = SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
+        self.allegro_out_dims = self.n_cart_atoms * kwargs["layers"]["allegro"][1]["latent_kwargs"]["mlp_latent_dimensions"][-1] #TODO# # consider each edge only once
         self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
         self.densenet = bg.DenseNet(
             [self.dim_dense_in, *hidden, dim_out],
             activation=activation
         )
-        #self.allegro_buffer = kwargs["allegro_buffer"]
+        self.allegro_buffer = kwargs["allegro_buffer"]
 
     def forward(self,x):
         if self.use_checkpointing:
@@ -194,8 +192,8 @@ class AllegroConditioner(torch.nn.Module):
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
         allegro_calculated = False
-        #if True:
-        if self.first and len(self.allegro_gnn._buffer) == 0:
+        if True:
+        if self.first and len(self.allegro_buffer) == 0:
             #bp()
             allegro_calculated = True
             batchsize = x_cart.shape[0]
@@ -234,20 +232,20 @@ class AllegroConditioner(torch.nn.Module):
             #bp()
             #bp()
             #self.allegro_buffer.append(allegro_output)
-            self.allegro_gnn._buffer.append(formatted_output)
+            self.allegro_buffer.append(formatted_output)
 
             #assert len(allegro_buffer) == 1, "allegro buffer is "
 
 
 
         else:
-            #bp()
-            formatted_output = self.allegro_gnn._buffer[0]
+            bp()
+            formatted_output = self.allegro_buffer[0]
 
 
-        if self.first and len(self.allegro_gnn._buffer) != 0 and allegro_calculated == False:
-           #bp()
-            self.last_buffer = self.allegro_gnn._buffer.pop()
+        if self.first and len(self.allegro_buffer) != 0 and allegro_calculated == False:
+            bp()
+            self.last_buffer = self.allegro_buffer.pop()
             del self.last_buffer
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
 
