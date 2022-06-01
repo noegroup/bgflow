@@ -169,7 +169,10 @@ class AllegroConditioner(torch.nn.Module):
         self.allegro_gnn = kwargs["allegro_feature_extractor"]
         self.allegro_gnn._buffer = []
           #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
-        self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features
+        #bp()
+        self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
+
+        #self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features  ##CHANGE THIS
         self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
         self.densenet = bg.DenseNet(
             [self.dim_dense_in, *hidden, dim_out],

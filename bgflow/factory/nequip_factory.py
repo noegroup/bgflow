@@ -83,11 +83,12 @@ hparams = {
 "avg_num_neighbors" : 9, #
 "num_layers" : 3,
 "env_embed_multiplicity" : 32 ,#16
-"latent_dim" : 32, #16 #512? 32 geht
-"two_body_latent_indermediate_dims" : [64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
+"latent_dim" : 128,#32, #16 #512? 32 geht
+"two_body_latent_indermediate_dims" : [128, 128, 128,],#,[64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
 "nonscalars_include_parity" : False, #True
 "irreps_edge_sh" :  '1x0e+1x1o+1x2e',# calculate only vectors and scalars :'1x0e+1x1o'
-"RBF_distance_offset" : 1.
+"RBF_distance_offset" : 1. ,
+"atomwise_output_dim" : "32x0e"
 }
 
 
@@ -105,7 +106,7 @@ def make_config_dict(**kwargs):
     nonscalars_include_parity = kwargs["nonscalars_include_parity"]
     irreps_edge_sh = kwargs["irreps_edge_sh"]
     RBF_distance_offset = kwargs["RBF_distance_offset"]
-
+    atomwise_output_dim = kwargs["atomwise_output_dim"]
              
     return  {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
                                     {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
@@ -177,9 +178,14 @@ def make_config_dict(**kwargs):
                                      'num_types': num_types}),
                   'atomwise_gather': (allegro.nn._edgewise.EdgewiseReduce,
                                       {'field': 'edge_features',
-                                       'out_field': 'outputs',
+                                       'out_field': 'atomwise_features',
                                        'avg_num_neighbors': avg_num_neighbors}
-                                     )
+                                     ),
+                  'atomwise_linear': (nequip.nn._atomwise.AtomwiseLinear,
+                                      {'field': 'atomwise_features',
+                                       'out_field': 'outputs',
+                                       'irreps_out': atomwise_output_dim}
+                                      ),
                   }
 
 
