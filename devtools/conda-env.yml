@@ -11,6 +11,8 @@ dependencies:
   - numpy
 
   - openmm
+  - xtb-python
+  - ase
   - openmmtools
   - pytorch
   - jax

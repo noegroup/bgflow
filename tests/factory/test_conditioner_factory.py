@@ -4,7 +4,7 @@ import torch
 from bgflow import (
     make_conditioners, ShapeDictionary,
     BONDS, FIXED, ANGLES, TORSIONS,
-    ConditionalSplineTransformer, AffineTransformer
+    ConditionalSplineTransformer, AffineTransformer,
 )
 
 
@@ -74,16 +74,3 @@ def test_conditioner_factory_spline(crd_trafo):
             == ((3 * 8)*(shape_info[BONDS][0] + shape_info[TORSIONS][0]) + shape_info[BONDS][0], )
     )
 
-
-# TODO: fix this
-@pytest.mark.skip()
-@pytest.mark.parametrize("sin", [torch.sin])#, nn.dense.Sin()])
-def test_conditioner_factory_sirens(crd_trafo, sin):
-    crd_transform = crd_trafo
-    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
-    # non-periodic
-    conditioners = make_conditioners(
-        ConditionalSplineTransformer, (BONDS,), (ANGLES,), shape_info, activation=sin
-    )
-    for c in conditioners.values():
-        assert isinstance(c, SirenDenseNet)

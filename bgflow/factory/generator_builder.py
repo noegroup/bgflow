@@ -1,7 +1,6 @@
 """High-level Builder API for Boltzmann generators."""
 
 import warnings
-import copy
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -149,7 +148,6 @@ class BoltzmannGeneratorBuilder:
         generator : bgflow.bg.BoltzmannGenerator
             The Boltzmann generator.
         """
-        # TODO (Jonas): if build_target returns None -> return Generator
         generator = BoltzmannGenerator(
             prior=self.build_prior(),
             flow=self.build_flow(zero_parameters=zero_parameters),
@@ -288,7 +286,7 @@ class BoltzmannGeneratorBuilder:
 
         conditioner_kwargss = [self.conditioner_kwargs.get(el, self.default_conditioner_kwargs) for el in what]
         conditioner_kwargss = [{**defaults, **conditioner_kwargs} for defaults in conditioner_kwargss]
-        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargs):
+        if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
 
@@ -363,8 +361,6 @@ class BoltzmannGeneratorBuilder:
             input_indices = [self.current_dims.index(el) for el in what]
             output_indices = input_indices
             flow = WrapFlow(flow, input_indices, output_indices)
-        else:
-            what = list(self.current_dims.keys())
         self._add_to_param_groups(flow.parameters(), param_groups)
         self.layers.append(flow)
 

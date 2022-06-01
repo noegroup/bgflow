@@ -1,11 +1,9 @@
-
-import numpy as np
 import torch
 
 from ..utils.types import is_list_or_tuple
 
 
-__all__ = ["DenseNet", "MeanFreeDenseNet", "SirenDenseNet"]
+__all__ = ["DenseNet", "MeanFreeDenseNet"]
 
 
 class DenseNet(torch.nn.Module):
@@ -54,28 +52,3 @@ class MeanFreeDenseNet(DenseNet):
     def forward(self, x):
         y = self._layers(x)
         return y - y.mean(dim=1, keepdim=True)
-
-
-class Sin(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        return torch.sin(x)
-
-
-class SirenDenseNet(DenseNet):
-    def __init__(self, *args, scale_first_weights=True, initialize=True, **kwargs):
-        super().__init__(*args, **kwargs, activation=Sin())
-        if initialize:
-            self._init_siren_weights(self._layers, scale_first_weights)
-
-    @staticmethod
-    def _init_siren_weights(layers, scale_first_weights=True):
-        with torch.no_grad():
-            linear_layers = [layer for layer in layers if isinstance(layer, torch.nn.Linear)]
-            for layer in linear_layers:
-                n = layer.weight.shape[-1]
-                layer.weight.data = -np.sqrt(6./n) + 2.0*np.sqrt(6./n) * torch.rand_like(layer.weight.data)
-            if scale_first_weights:
-                linear_layers[0].weight.data *= 30.

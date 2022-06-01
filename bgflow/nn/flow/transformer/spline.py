@@ -1,5 +1,4 @@
 import warnings
-import nflows.transforms.base
 import torch
 
 from .base import Transformer
@@ -105,8 +104,9 @@ class ConditionalSplineTransformer(Transformer):
         slopes[..., self._noncircular_indices(y_dim), -1] = noncircular_slopes
         return widths, heights, slopes
 
-    def _forward(self, x, y, *args, elementwise_jacobian=False, **kwargs):
+    def _forward(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y : rational_quadratic_spline(
@@ -122,7 +122,7 @@ class ConditionalSplineTransformer(Transformer):
             )
         try:
             z, dlogp = rqs(y)
-        except nflows.transforms.base.InputOutsideDomain:
+        except InputOutsideDomain:
             exceeded_left = (y - self._left).min()
             exceeded_right = (y - self._right).max()
             warnings.warn(
@@ -132,12 +132,11 @@ class ConditionalSplineTransformer(Transformer):
             )
             z, dlogp = rqs(y.clamp(self._left, self._right))
 
-        if not elementwise_jacobian:
-            dlogp = dlogp.sum(dim=-1, keepdim=True)
-        return z, dlogp
+        return z, dlogp.sum(dim=-1, keepdim=True)
 
-    def _inverse(self, x, y, *args, elementwise_jacobian=False, **kwargs):
+    def _inverse(self, x, y, *args, **kwargs):
         from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
 
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y: rational_quadratic_spline(
@@ -153,7 +152,7 @@ class ConditionalSplineTransformer(Transformer):
         )
         try:
             z, dlogp = rqs(y)
-        except nflows.transforms.base.InputOutsideDomain:
+        except InputOutsideDomain:
             exceeded_left = (y - self._left).min()
             exceeded_right = (y - self._right).max()
             warnings.warn(
@@ -163,9 +162,7 @@ class ConditionalSplineTransformer(Transformer):
             )
             z, dlogp = rqs(y.clamp(self._left, self._right))
 
-        if not elementwise_jacobian:
-            dlogp = dlogp.sum(dim=-1, keepdim=True)
-        return z, dlogp
+        return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _n_noncircular(self, y_dim):
         if self._is_circular.all():

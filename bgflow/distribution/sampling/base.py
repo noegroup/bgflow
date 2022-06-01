@@ -1,3 +1,5 @@
+
+from typing import Tuple
 import torch
 from ...utils.types import unpack_tensor_tuple, pack_tensor_in_list
 
@@ -40,15 +42,15 @@ class Sampler(torch.nn.Module):
 
         Returns
         -------
-        samples : Union[torch.Tensor, tuple[torch.Tensor]]
+        samples : Union[torch.Tensor, Tuple[torch.Tensor, ...]]
             If this sampler reflects a joint distribution of multiple tensors,
             it returns a tuple of tensors, each of which have length n_samples.
             Otherwise it returns a single tensor of length n_samples.
         """
         if isinstance(temperature, float) and temperature == 1.0:
-            return self._sample(n_samples, *args, **kwargs)
+            samples = self._sample(n_samples, *args, **kwargs)
         else:
-            return self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
+            samples = self._sample_with_temperature(n_samples, temperature, *args, **kwargs)
         samples = pack_tensor_in_list(samples)
         return unpack_tensor_tuple(self.return_hook(samples))
 

@@ -26,6 +26,7 @@ An MCMC sampler is set up as follows
 
 import torch
 import dataclasses
+from typing import Sequence
 from .base import Sampler
 from ...utils.types import pack_tensor_in_tuple
 from ._iterative_helpers import AbstractSamplerState, default_set_samples_hook, default_extract_sample_hook
@@ -35,11 +36,11 @@ __all__ = ["SamplerState", "IterativeSampler", "SamplerStep"]
 
 @dataclasses.dataclass(frozen=True)
 class _SamplerStateData:
-    samples: tuple[torch.Tensor]
-    velocities: tuple[torch.Tensor] = None
+    samples: Sequence[torch.Tensor]
+    velocities: Sequence[torch.Tensor] = None
     energies: torch.Tensor = None
-    forces: tuple[torch.Tensor] = None
-    box_vectors: tuple[torch.Tensor] = None
+    forces: Sequence[torch.Tensor] = None
+    box_vectors: Sequence[torch.Tensor] = None
     energies_up_to_date: bool = False
     forces_up_to_date: bool = False
 
@@ -68,10 +69,10 @@ class SamplerState(AbstractSamplerState):
 
     Parameters
     ----------
-    samples : Union[torch.Tensor, tuple[torch.Tensor]]
+    samples : Union[torch.Tensor, Tuple[torch.Tensor, ...]]
     energies : Union[torch.Tensor, NoneType], optional
-    velocities : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
-    forces : Union[torch.Tensor, tuple[torch.Tensor], NoneType], optional
+    velocities : Union[torch.Tensor, Tuple[torch.Tensor, ...], NoneType], optional
+    forces : Union[torch.Tensor, Tuple[torch.Tensor, ...], NoneType], optional
     box_vectors : Union[torch.Tensor, NoneType], optional
         The box vectors are a 3x3 matrix (a b c) , whose columns denote the periodic box vectors.
         The first vector, a, has to be parallel to the x-axis. The second vector, b, has
