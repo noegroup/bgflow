@@ -83,12 +83,138 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
 def _make_schnett_conditioner(dim_in, dim_out, cartesian_indices, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
     pass
 
+#####
+#transformerencoderlayer
+from typing import Optional, Any, Union, Callable
+
+import torch
+from torch import Tensor
+from torch.nn import functional as F
+from torch.nn.modules.module import Module
+from torch.nn.modules.activation import MultiheadAttention
+from torch.nn.modules.dropout import Dropout
+from torch.nn.modules.linear import Linear
+from torch.nn.modules.normalization import LayerNorm
+class CustomTransformerEncoderLayer(Module):
+    r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
+    This standard encoder layer is based on the paper "Attention Is All You Need".
+    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
+    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
+    in a different way during application.
+
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of the intermediate layer, can be a string
+            ("relu" or "gelu") or a unary callable. Default: relu
+        layer_norm_eps: the eps value in layer normalization components (default=1e-5).
+        batch_first: If ``True``, then the input and output tensors are provided
+            as (batch, seq, feature). Default: ``False`` (seq, batch, feature).
+        norm_first: if ``True``, layer norm is done prior to attention and feedforward
+            operations, respectivaly. Otherwise it's done after. Default: ``False`` (after).
+
+    Examples::
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
+        >>> src = torch.rand(10, 32, 512)
+        >>> out = encoder_layer(src)
+
+    Alternatively, when ``batch_first`` is ``True``:
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8, batch_first=True)
+        >>> src = torch.rand(32, 10, 512)
+        >>> out = encoder_layer(src)
+    """
+    __constants__ = ['batch_first', 'norm_first']
+
+    def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
+                 activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
+                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super(CustomTransformerEncoderLayer, self).__init__()
+        self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first,
+                                            **factory_kwargs)
+        # Implementation of Feedforward model
+        self.linear1 = Linear(d_model, dim_feedforward, **factory_kwargs)
+        self.dropout = Dropout(dropout)
+        self.linear2 = Linear(dim_feedforward, d_model, **factory_kwargs)
+
+        self.norm_first = norm_first
+        self.norm1 = LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.norm2 = LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.dropout1 = Dropout(dropout)
+        self.dropout2 = Dropout(dropout)
+
+        self.qkv_proj = torch.nn.Linear(d_model, 3 * d_model)
+
+        # Legacy string support for activation function.
+        if isinstance(activation, str):
+            self.activation = _get_activation_fn(activation)
+        else:
+            self.activation = activation
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(CustomTransformerEncoderLayer, self).__setstate__(state)
+
+    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None, src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the input through the encoder layer.
+
+        Args:
+            src: the sequence to the encoder layer (required).
+            src_mask: the mask for the src sequence (optional).
+            src_key_padding_mask: the mask for the src keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+
+        # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
+
+        x = src
+        if self.norm_first:
+            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._ff_block(self.norm2(x))
+        else:
+            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm2(x + self._ff_block(x))
+
+        return x
+
+
+    # self-attention block
+    def _sa_block(self, x: Tensor,
+                  attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor]) -> Tensor:
+        qkv = self.qkv_proj(x)
+        q, k, v = qkv.chunk(3, dim=-1)
+        x = self.self_attn(q, k, v,
+                           attn_mask=attn_mask,
+                           key_padding_mask=key_padding_mask,
+                           need_weights=False)[0]
+        return self.dropout1(x)
+
+    # feed forward block
+    def _ff_block(self, x: Tensor) -> Tensor:
+        x = self.linear2(self.dropout(self.activation(self.linear1(x))))
+        return self.dropout2(x)
+
+
+
+
+
+######
+
+
+
 
 class WrapDistancesConditioner(torch.nn.Module):
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
         super().__init__()
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
-        self.use_attention = kwargs["use_attention"]
+        self.attention_level = kwargs["attention_level"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.on = kwargs["on"]
@@ -109,9 +235,20 @@ class WrapDistancesConditioner(torch.nn.Module):
         wavenumbers = torch.Tensor([np.pi*(i+1)/self.c for i in range(self.N)])
         self.wavenumbers = torch.nn.Parameter(wavenumbers)
         ### define attention:
-        self.MHA = torch.nn.MultiheadAttention(embed_dim = self.N, num_heads = 8, batch_first = True)
+        if self.attention_level == "MHA":
+            self.MHA = torch.nn.MultiheadAttention(embed_dim = self.N, num_heads = 8, batch_first = True)
 
-        self.qkv_proj = torch.nn.Linear(self.N, 3 * self.N)
+            self.qkv_proj = torch.nn.Linear(self.N, 3 * self.N)
+
+        if self.attention_level == "Transformer":
+            self.encoder_layer = CustomTransformerEncoderLayer(d_model=self.N,
+                                                                  nhead=2,
+                                                                  batch_first = True,
+                                                                  dropout=0.,
+                                                                  dim_feedforward=64)
+            self.transformer_encoder = torch.nn.TransformerEncoder(self.encoder_layer, num_layers=2)
+
+
 
     def bessel(self, x, wavenumber, c):
         return ((2 / c) ** 0.5 * torch.sin(wavenumber * x) / x)
@@ -127,7 +264,7 @@ class WrapDistancesConditioner(torch.nn.Module):
         binned_distances = self.bessel(distances[...,None], self.wavenumbers, self.c)
         u = self.envelope(distances, c=self.c, p=self.p)
 
-        if self.use_attention:
+        if self.attention_level == "MHA":
             binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances)#.view(x.shape[0], -1)
             ## feed this into the dense layer
             #bp()
@@ -138,6 +275,12 @@ class WrapDistancesConditioner(torch.nn.Module):
 
             distances_output = bondwise_output.reshape(batchsize, -1)
         #### end attention on atom features
+        elif self.attention_level == "Transformer":
+            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances)
+            bondwise_output = self.transformer_encoder(binned_enveloped_distances)
+            batchsize = x_rest.shape[0]
+
+            distances_output = bondwise_output.reshape(batchsize, -1)
         else:
             binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances).view(x.shape[0], -1)
             distances_output = binned_enveloped_distances
@@ -179,7 +322,7 @@ class AllegroConditioner(torch.nn.Module):
         super().__init__()
         #bp()
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
-        self.use_attention = kwargs["use_attention"]
+        self.attention_level = kwargs["attention_level"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
@@ -205,9 +348,18 @@ class AllegroConditioner(torch.nn.Module):
         )
         #self.allegro_buffer = kwargs["allegro_buffer"]
         ### define attention:
-        self.MHA = torch.nn.MultiheadAttention(embed_dim = self.atomwise_feature_dim, num_heads = 8, batch_first = True)
+        if self.attention_level == "MHA":
+            self.MHA = torch.nn.MultiheadAttention(embed_dim = self.atomwise_feature_dim, num_heads = 8, batch_first = True)
 
-        self.qkv_proj = torch.nn.Linear(self.atomwise_feature_dim, 3 * self.atomwise_feature_dim)
+            self.qkv_proj = torch.nn.Linear(self.atomwise_feature_dim, 3 * self.atomwise_feature_dim)
+        if self.attention_level == "Transformer":
+            self.encoder_layer = CustomTransformerEncoderLayer(d_model=self.atomwise_feature_dim,
+                                                                  nhead=8,
+                                                                  batch_first = True,
+                                                                  dropout=0.,
+                                                                  dim_feedforward=64)
+            self.transformer_encoder = torch.nn.TransformerEncoder(self.encoder_layer, num_layers=1)
+
 
     def forward(self,x):
         if self.use_checkpointing:
@@ -288,13 +440,18 @@ class AllegroConditioner(torch.nn.Module):
         #get attention matrix by Q*K1,K2...
         #sum values with their attention weights.
         #concatenate, Linear layer
-        if self.use_attention:
+        if self.attention_level == "MHA":
             ## feed this into the dense layer
             #bp()
             qkv = self.qkv_proj(atomwise_output)
             q, k, v = qkv.chunk(3, dim=-1)
             atomwise_output,_ = self.MHA(q,k,v, need_weights = False)
         #### end attention on atom features
+        elif self.attention_level == "Transformer":
+            atomwise_output = self.transformer_encoder(atomwise_output)
+            #batchsize = x_rest.shape[0]
+
+            #distances_output = bondwise_output.reshape(batchsize, -1)
         batchsize = x_rest.shape[0]
 
         formatted_output = atomwise_output.reshape(batchsize, -1)
