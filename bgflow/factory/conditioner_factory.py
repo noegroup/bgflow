@@ -88,6 +88,7 @@ class WrapDistancesConditioner(torch.nn.Module):
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
         super().__init__()
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
+        self.use_attention = kwargs["use_attention"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.on = kwargs["on"]
@@ -107,6 +108,10 @@ class WrapDistancesConditioner(torch.nn.Module):
         #self.envelope = Envelope(p = self.p, c = self.c)
         wavenumbers = torch.Tensor([np.pi*(i+1)/self.c for i in range(self.N)])
         self.wavenumbers = torch.nn.Parameter(wavenumbers)
+        ### define attention:
+        self.MHA = torch.nn.MultiheadAttention(embed_dim = self.N, num_heads = 8, batch_first = True)
+
+        self.qkv_proj = torch.nn.Linear(self.N, 3 * self.N)
 
     def bessel(self, x, wavenumber, c):
         return ((2 / c) ** 0.5 * torch.sin(wavenumber * x) / x)
@@ -121,8 +126,26 @@ class WrapDistancesConditioner(torch.nn.Module):
         distances = self.wrapdistancespure(x_cart)
         binned_distances = self.bessel(distances[...,None], self.wavenumbers, self.c)
         u = self.envelope(distances, c=self.c, p=self.p)
-        binned_enveloped_distances = (u.unsqueeze(-1)*binned_distances).view(x.shape[0],-1)
-        inputs_and_distances = torch.cat([x_rest, binned_enveloped_distances], dim = -1)
+
+        if self.use_attention:
+            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances)#.view(x.shape[0], -1)
+            ## feed this into the dense layer
+            #bp()
+            qkv = self.qkv_proj(binned_enveloped_distances)
+            q, k, v = qkv.chunk(3, dim=-1)
+            bondwise_output,_ = self.MHA(q,k,v, need_weights = False)
+            batchsize = x_rest.shape[0]
+
+            distances_output = bondwise_output.reshape(batchsize, -1)
+        #### end attention on atom features
+        else:
+            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances).view(x.shape[0], -1)
+            distances_output = binned_enveloped_distances
+
+
+
+
+        inputs_and_distances = torch.cat([x_rest, distances_output], dim = -1)
         return self.densenet(inputs_and_distances)
 
 
@@ -270,7 +293,7 @@ class AllegroConditioner(torch.nn.Module):
             #bp()
             qkv = self.qkv_proj(atomwise_output)
             q, k, v = qkv.chunk(3, dim=-1)
-            atomwise_output, attn_output_weights = self.MHA(q,k,v)
+            atomwise_output,_ = self.MHA(q,k,v, need_weights = False)
         #### end attention on atom features
         batchsize = x_rest.shape[0]
 
