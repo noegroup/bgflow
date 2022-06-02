@@ -156,6 +156,7 @@ class AllegroConditioner(torch.nn.Module):
         super().__init__()
         #bp()
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
+        self.use_attention = kwargs["use_attention"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
@@ -170,7 +171,8 @@ class AllegroConditioner(torch.nn.Module):
         self.allegro_gnn._buffer = []
           #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
         #bp()
-        self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
+        self.atomwise_feature_dim = self.allegro_gnn.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
+        self.allegro_out_dims = self.n_cart_atoms * self.atomwise_feature_dim
 
         #self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features  ##CHANGE THIS
         self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
@@ -179,6 +181,10 @@ class AllegroConditioner(torch.nn.Module):
             activation=activation
         )
         #self.allegro_buffer = kwargs["allegro_buffer"]
+        ### define attention:
+        self.MHA = torch.nn.MultiheadAttention(embed_dim = self.atomwise_feature_dim, num_heads = 8, batch_first = True)
+
+        self.qkv_proj = torch.nn.Linear(self.atomwise_feature_dim, 3 * self.atomwise_feature_dim)
 
     def forward(self,x):
         if self.use_checkpointing:
@@ -233,11 +239,11 @@ class AllegroConditioner(torch.nn.Module):
 
             allegro_output = self.allegro_gnn(data)
             #bp()
-            formatted_output = allegro_output["outputs"].view(batchsize, -1)
+            atomwise_output = allegro_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
             #bp()
             #bp()
             #self.allegro_buffer.append(allegro_output)
-            self.allegro_gnn._buffer.append(formatted_output)
+            self.allegro_gnn._buffer.append(atomwise_output)
 
             #assert len(allegro_buffer) == 1, "allegro buffer is "
 
@@ -245,13 +251,31 @@ class AllegroConditioner(torch.nn.Module):
 
         else:
             #bp()
-            formatted_output = self.allegro_gnn._buffer[0]
+            atomwise_output = self.allegro_gnn._buffer[0]
 
 
         if self.first and len(self.allegro_gnn._buffer) != 0 and allegro_calculated == False:
            #bp()
             self.last_buffer = self.allegro_gnn._buffer.pop()
             del self.last_buffer
+
+
+        #### insert attention on the atom features here
+        #multihead attention: generate QKV from every atom vector,
+        #get attention matrix by Q*K1,K2...
+        #sum values with their attention weights.
+        #concatenate, Linear layer
+        if self.use_attention:
+            ## feed this into the dense layer
+            #bp()
+            qkv = self.qkv_proj(atomwise_output)
+            q, k, v = qkv.chunk(3, dim=-1)
+            atomwise_output, attn_output_weights = self.MHA(q,k,v)
+        #### end attention on atom features
+        batchsize = x_rest.shape[0]
+
+        formatted_output = atomwise_output.reshape(batchsize, -1)
+
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
 
 
