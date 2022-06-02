@@ -60,7 +60,7 @@ def openmm_example(grad_clipping, ctx):
     bridge = OpenMMBridge(system, openmm.LangevinIntegrator(300., 0.1, 0.001), n_workers=1)
 
     energy = OpenMMEnergy(bridge=bridge, two_event_dims=False)
-    energy = GradientClippedEnergy(energy, grad_clipping)
+    energy = GradientClippedEnergy(energy, grad_clipping).to(**ctx)
     positions = torch.tensor([[0.0, 0.0, 0.0, 0.1, 0.2, 0.6]]).to(**ctx)
     positions.requires_grad = True
     force = energy.force(positions)
