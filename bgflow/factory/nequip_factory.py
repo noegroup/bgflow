@@ -76,19 +76,20 @@ class NormalizedBasis(torch.nn.Module):
 use_checkpointing = False
 #hyperparams
 hparams = {
-"r_max" : 1.2,
+"r_max" : 3.2,  #1.2,
 "num_types" : 10,
 "num_basis" : 32, #8
 "p" : 6,#48
 "avg_num_neighbors" : 9, #
 "num_layers" : 3,
 "env_embed_multiplicity" : 32 ,#16
-"latent_dim" : 128,#32, #16 #512? 32 geht
+"latent_dim" : 32,#32, #16 #512? 32 geht
 "two_body_latent_indermediate_dims" : [128, 128, 128,],#,[64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
 "nonscalars_include_parity" : False, #True
 "irreps_edge_sh" :  '1x0e+1x1o+1x2e',# calculate only vectors and scalars :'1x0e+1x1o'
 "RBF_distance_offset" : 1. ,
-"atomwise_output_dim" : "32x0e"
+"atomwise_output_dim" : "32x0e",
+"latent_resnet": True
 }
 
 
@@ -107,6 +108,7 @@ def make_config_dict(**kwargs):
     irreps_edge_sh = kwargs["irreps_edge_sh"]
     RBF_distance_offset = kwargs["RBF_distance_offset"]
     atomwise_output_dim = kwargs["atomwise_output_dim"]
+    latent_resnet = kwargs["latent_resnet"]
              
     return  {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
                                     {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
@@ -167,7 +169,7 @@ def make_config_dict(**kwargs):
                                                        'mlp_dropout_p': 0.0,
                                                        'mlp_batchnorm': False, #False
                                                        'mlp_latent_dimensions': [latent_dim]},
-                                     'latent_resnet': True,
+                                     'latent_resnet': latent_resnet,
                                      'latent_resnet_update_ratios': None,
                                      'latent_resnet_update_ratios_learnable': False,
                                      'latent_out_field': 'edge_features',

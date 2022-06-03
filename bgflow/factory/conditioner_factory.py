@@ -321,12 +321,15 @@ class AllegroConditioner(torch.nn.Module):
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
         super().__init__()
         #bp()
+        self.latent_dim = kwargs["allegro_feature_extractor"].allegro.latents[0].out_features
+
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
         self.attention_level = kwargs["attention_level"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
+        self.allegro_scope = kwargs["allegro_scope"]
         #self.layers = kwargs["layers"]
         self.use_checkpointing = kwargs["use_checkpointing"]
         self.first = kwargs["first"] if "first" in kwargs.keys() else False
@@ -338,8 +341,10 @@ class AllegroConditioner(torch.nn.Module):
           #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
         #bp()
         self.atomwise_feature_dim = self.allegro_gnn.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
-        self.allegro_out_dims = self.n_cart_atoms * self.atomwise_feature_dim
-
+        if self.allegro_scope == "atomwise":
+            self.allegro_out_dims = self.n_cart_atoms * self.atomwise_feature_dim
+        elif self.allegro_scope == "bondwise":
+            self.allegro_out_dims = (self.n_cart_atoms**2 - self.n_cart_atoms)*self.latent_dim
         #self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features  ##CHANGE THIS
         self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
         self.densenet = bg.DenseNet(
@@ -349,11 +354,13 @@ class AllegroConditioner(torch.nn.Module):
         #self.allegro_buffer = kwargs["allegro_buffer"]
         ### define attention:
         if self.attention_level == "MHA":
-            self.MHA = torch.nn.MultiheadAttention(embed_dim = self.atomwise_feature_dim, num_heads = 8, batch_first = True)
+            attention_dim = self.atomwise_feature_dim if self.allegro_scope == "atomwise" else self.latent_dim
+            self.MHA = torch.nn.MultiheadAttention(embed_dim = attention_dim, num_heads = 8, batch_first = True)
 
             self.qkv_proj = torch.nn.Linear(self.atomwise_feature_dim, 3 * self.atomwise_feature_dim)
         if self.attention_level == "Transformer":
-            self.encoder_layer = CustomTransformerEncoderLayer(d_model=self.atomwise_feature_dim,
+            attention_dim = self.atomwise_feature_dim if self.allegro_scope == "atomwise" else self.latent_dim
+            self.encoder_layer = CustomTransformerEncoderLayer(d_model=attention_dim,
                                                                   nhead=8,
                                                                   batch_first = True,
                                                                   dropout=0.,
@@ -414,11 +421,19 @@ class AllegroConditioner(torch.nn.Module):
 
             allegro_output = self.allegro_gnn(data)
             #bp()
-            atomwise_output = allegro_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
+            if self.allegro_scope == "atomwise":
+                allegro_output = allegro_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
+                self.allegro_gnn._buffer.append(allegro_output)
+            elif self.allegro_scope == "bondwise":
+                allegro_output = allegro_output["edge_features"].view(batchsize, -1, allegro_output["edge_features"].shape[-1])
+                #bp()
+                #allegro_output =#reduce number of bond features by two?
+                self.allegro_gnn._buffer.append(allegro_output)
+                #bp()#.view(batchsize, -1, self.atomwise_feature_dim)
             #bp()
             #bp()
             #self.allegro_buffer.append(allegro_output)
-            self.allegro_gnn._buffer.append(atomwise_output)
+
 
             #assert len(allegro_buffer) == 1, "allegro buffer is "
 
@@ -426,7 +441,7 @@ class AllegroConditioner(torch.nn.Module):
 
         else:
             #bp()
-            atomwise_output = self.allegro_gnn._buffer[0]
+            allegro_output = self.allegro_gnn._buffer[0]
 
 
         if self.first and len(self.allegro_gnn._buffer) != 0 and allegro_calculated == False:
@@ -442,19 +457,22 @@ class AllegroConditioner(torch.nn.Module):
         #concatenate, Linear layer
         if self.attention_level == "MHA":
             ## feed this into the dense layer
-            #bp()
-            qkv = self.qkv_proj(atomwise_output)
+            ## currently not working with bondwise allegro_scope
+            bp()
+            qkv = self.qkv_proj(allegro_output)
             q, k, v = qkv.chunk(3, dim=-1)
-            atomwise_output,_ = self.MHA(q,k,v, need_weights = False)
+            allegro_output,_ = self.MHA(q,k,v, need_weights = False)
         #### end attention on atom features
         elif self.attention_level == "Transformer":
-            atomwise_output = self.transformer_encoder(atomwise_output)
+            ## currently not working with bondwise allegro_scope
+
+            allegro_output = self.transformer_encoder(allegro_output)
             #batchsize = x_rest.shape[0]
 
             #distances_output = bondwise_output.reshape(batchsize, -1)
         batchsize = x_rest.shape[0]
 
-        formatted_output = atomwise_output.reshape(batchsize, -1)
+        formatted_output = allegro_output.reshape(batchsize, -1)
 
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
 
