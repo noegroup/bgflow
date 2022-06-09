@@ -438,6 +438,7 @@ class GNNConditioner(torch.nn.Module):
                 #GNN_output =#reduce number of bond features by two?
 
                 #bp()#.view(batchsize, -1, self.atomwise_feature_dim)
+            #bp()
             if not self.many_GNNs:
                 self.GNN._buffer.append(GNN_output)
             #bp()
@@ -449,7 +450,7 @@ class GNNConditioner(torch.nn.Module):
 
 
         else:
-            bp()
+            #bp()
             GNN_output = self.GNN._buffer[0]
 
 
