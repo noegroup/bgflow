@@ -80,8 +80,6 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
         activation=activation
     )
 
-def _make_schnett_conditioner(dim_in, dim_out, cartesian_indices, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
-    pass
 
 #####
 #transformerencoderlayer
@@ -312,54 +310,59 @@ import bgflow as bg
 from torch.utils.checkpoint import checkpoint
 
 
-class AllegroConditioner(torch.nn.Module):
+class GNNConditioner(torch.nn.Module):
     '''
     split input into wrapped periodic, nonperiodic and cartesians.
-    On cartesians, apply allegro GNN.
+    On cartesians, apply GNN implemented using the nequip library.
     then apply dense net on (periodic || nonperiodic || GNN outputs)
     '''
-    def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
+    def __init__(self, dim_in, dim_out, hidden, activation, GNN_output_dim, attention_level=None, GNN_scope="bondwise", **kwargs):
         super().__init__()
         #bp()
-        self.latent_dim = kwargs["allegro_feature_extractor"].allegro.latents[0].out_features
 
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
-        self.attention_level = kwargs["attention_level"]
+        #self.attention_level = kwargs["attention_level"]
+        self.attention_level = attention_level
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
-        self.allegro_scope = kwargs["allegro_scope"]
+
+        self.GNN_scope = GNN_scope
         #self.layers = kwargs["layers"]
         self.use_checkpointing = kwargs["use_checkpointing"]
         self.first = kwargs["first"] if "first" in kwargs.keys() else False
         self.n_cart = len(self.cart_indices)
         self.n_cart_atoms = self.n_cart//3
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
-        self.allegro_gnn = kwargs["allegro_feature_extractor"]
-        self.allegro_gnn._buffer = []
+        self.GNN = kwargs["GNN_feature_extractor"]
+        self.GNN._buffer = []
           #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
         #bp()
-        self.atomwise_feature_dim = self.allegro_gnn.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
-        if self.allegro_scope == "atomwise":
-            self.allegro_out_dims = self.n_cart_atoms * self.atomwise_feature_dim
-        elif self.allegro_scope == "bondwise":
-            self.allegro_out_dims = (self.n_cart_atoms**2 - self.n_cart_atoms)*self.latent_dim
-        #self.allegro_out_dims = self.n_cart_atoms * self.allegro_gnn.allegro.final_latent.out_features  ##CHANGE THIS
-        self.dim_dense_in = int(dim_in - self.n_cart + self.allegro_out_dims)
+
+        if self.GNN_scope == "atomwise":
+            #self.atomwise_feature_dim = self.GNN.atomwise_linear._modules["linear"].instructions[0].path_shape[1]
+            self.atomwise_feature_dim = GNN_output_dim
+            self.GNN_out_dims = self.n_cart_atoms * self.atomwise_feature_dim
+        elif self.GNN_scope == "bondwise":
+            #self.latent_dim = kwargs["GNN_feature_extractor"].allegro.latents[0].out_features
+            self.latent_dim = GNN_output_dim
+            self.GNN_out_dims = (self.n_cart_atoms**2 - self.n_cart_atoms)*self.latent_dim
+        #self.GNN_out_dims = self.n_cart_atoms * self.GNN.GNN.final_latent.out_features  ##CHANGE THIS
+        self.dim_dense_in = int(dim_in - self.n_cart + self.GNN_out_dims)
         self.densenet = bg.DenseNet(
             [self.dim_dense_in, *hidden, dim_out],
             activation=activation
         )
-        #self.allegro_buffer = kwargs["allegro_buffer"]
+        #self.GNN_buffer = kwargs["GNN_buffer"]
         ### define attention:
         if self.attention_level == "MHA":
-            attention_dim = self.atomwise_feature_dim if self.allegro_scope == "atomwise" else self.latent_dim
+            attention_dim = self.atomwise_feature_dim if self.GNN_scope == "atomwise" else self.latent_dim
             self.MHA = torch.nn.MultiheadAttention(embed_dim = attention_dim, num_heads = 8, batch_first = True)
 
             self.qkv_proj = torch.nn.Linear(self.atomwise_feature_dim, 3 * self.atomwise_feature_dim)
         if self.attention_level == "Transformer":
-            attention_dim = self.atomwise_feature_dim if self.allegro_scope == "atomwise" else self.latent_dim
+            attention_dim = self.atomwise_feature_dim if self.GNN_scope == "atomwise" else self.latent_dim
             self.encoder_layer = CustomTransformerEncoderLayer(d_model=attention_dim,
                                                                   nhead=8,
                                                                   batch_first = True,
@@ -384,11 +387,11 @@ class AllegroConditioner(torch.nn.Module):
         index = torch.ones(x.shape[1], dtype=bool)
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
-        allegro_calculated = False
+        GNN_calculated = False
         #if True:
-        if self.first and len(self.allegro_gnn._buffer) == 0:
+        if self.first and len(self.GNN._buffer) == 0:
             #bp()
-            allegro_calculated = True
+            GNN_calculated = True
             batchsize = x_cart.shape[0]
 
             x_cart = x_cart.view(x_cart.shape[0],-1,3)
@@ -416,37 +419,37 @@ class AllegroConditioner(torch.nn.Module):
                         r_max=r_max.to(x_cart.device))
 
 
-            #allegro_output = checkpoint(self.allegro_gnn,data)
+            #GNN_output = checkpoint(self.GNN,data)
 
 
-            allegro_output = self.allegro_gnn(data)
-            #bp()
-            if self.allegro_scope == "atomwise":
-                allegro_output = allegro_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
-                self.allegro_gnn._buffer.append(allegro_output)
-            elif self.allegro_scope == "bondwise":
-                allegro_output = allegro_output["edge_features"].view(batchsize, -1, allegro_output["edge_features"].shape[-1])
+            GNN_output = self.GNN(data)
+            #()
+            if self.GNN_scope == "atomwise":
+                GNN_output = GNN_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
+                self.GNN._buffer.append(GNN_output)
+            elif self.GNN_scope == "bondwise":
+                GNN_output = GNN_output["edge_features"].view(batchsize, -1, GNN_output["edge_features"].shape[-1])
                 #bp()
-                #allegro_output =#reduce number of bond features by two?
-                self.allegro_gnn._buffer.append(allegro_output)
+                #GNN_output =#reduce number of bond features by two?
+                self.GNN._buffer.append(GNN_output)
                 #bp()#.view(batchsize, -1, self.atomwise_feature_dim)
             #bp()
             #bp()
-            #self.allegro_buffer.append(allegro_output)
+            #self.GNN_buffer.append(GNN_output)
 
 
-            #assert len(allegro_buffer) == 1, "allegro buffer is "
+            #assert len(GNN_buffer) == 1, "GNN buffer is "
 
 
 
         else:
             #bp()
-            allegro_output = self.allegro_gnn._buffer[0]
+            GNN_output = self.GNN._buffer[0]
 
 
-        if self.first and len(self.allegro_gnn._buffer) != 0 and allegro_calculated == False:
+        if self.first and len(self.GNN._buffer) != 0 and GNN_calculated == False:
            #bp()
-            self.last_buffer = self.allegro_gnn._buffer.pop()
+            self.last_buffer = self.GNN._buffer.pop()
             del self.last_buffer
 
 
@@ -457,22 +460,22 @@ class AllegroConditioner(torch.nn.Module):
         #concatenate, Linear layer
         if self.attention_level == "MHA":
             ## feed this into the dense layer
-            ## currently not working with bondwise allegro_scope
-            bp()
-            qkv = self.qkv_proj(allegro_output)
+            ## currently not working with bondwise GNN_scope
+            #bp()
+            qkv = self.qkv_proj(GNN_output)
             q, k, v = qkv.chunk(3, dim=-1)
-            allegro_output,_ = self.MHA(q,k,v, need_weights = False)
+            GNN_output,_ = self.MHA(q,k,v, need_weights = False)
         #### end attention on atom features
         elif self.attention_level == "Transformer":
-            ## currently not working with bondwise allegro_scope
+            ## currently not working with bondwise GNN_scope
 
-            allegro_output = self.transformer_encoder(allegro_output)
+            GNN_output = self.transformer_encoder(GNN_output)
             #batchsize = x_rest.shape[0]
 
             #distances_output = bondwise_output.reshape(batchsize, -1)
         batchsize = x_rest.shape[0]
 
-        formatted_output = allegro_output.reshape(batchsize, -1)
+        formatted_output = GNN_output.reshape(batchsize, -1)
 
         inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
 
@@ -480,20 +483,19 @@ class AllegroConditioner(torch.nn.Module):
         return self.densenet(inputs_and_distances)
 
 
-def _make_allegro_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
+def _make_GNN_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
     '''
-    build an allegro GNN and plug it into the Transformer as conditioner network.
+    build an nequip GNN and plug it into the Transformer as conditioner network.
     '''
 
-    allegro_conditioner = AllegroConditioner(dim_in, dim_out, hidden, activation, **kwargs)
-    return allegro_conditioner
+    GNN_conditioner = GNNConditioner(dim_in, dim_out, hidden, activation, **kwargs)
+    return GNN_conditioner
 
 
 
 CONDITIONER_FACTORIES = {
-    "allegro": _make_allegro_conditioner,
+    "GNN": _make_GNN_conditioner,
     "dense": _make_dense_conditioner,
-    #"schnett": _make_schnett_conditioner,
     "wrapdistances": _make_wrapdistances_conditioner,
 }
 

@@ -6,4 +6,4 @@ from .conditioner_factory import *
 from .distribution_factory import *
 from .icmarginals import *
 from .generator_builder import *
-from .nequip_factory import *
+from .GNN_factory import *
