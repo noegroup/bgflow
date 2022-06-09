@@ -91,7 +91,7 @@ allegro_hparams = {  #renaem to allegro_hparams
 "RBF_distance_offset" : 1. ,
 "GNN_output_dim" : 32, #"32x0e",
 "latent_resnet": True,
-"GNN_scope": "bondwise"
+"GNN_scope": "atomwise"
 }
 
 
