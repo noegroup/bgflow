@@ -327,7 +327,7 @@ class GNNConditioner(torch.nn.Module):
         self.shape_info = kwargs["shape_info"]
         self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
-
+        self.many_GNNs = kwargs["many_GNNs"]
         self.GNN_scope = GNN_scope
         #self.layers = kwargs["layers"]
         self.use_checkpointing = kwargs["use_checkpointing"]
@@ -335,7 +335,12 @@ class GNNConditioner(torch.nn.Module):
         self.n_cart = len(self.cart_indices)
         self.n_cart_atoms = self.n_cart//3
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
-        self.GNN = kwargs["GNN_feature_extractor"]
+        # = kwargs["many_GNNs"]
+        if isinstance(kwargs["GNN_feature_extractor"], list):
+            self.GNN = kwargs["GNN_feature_extractor"].pop()
+        else:
+            self.GNN = kwargs["GNN_feature_extractor"]
+
         self.GNN._buffer = []
           #  SequentialGraphNetwork.from_parameters(shared_params=None, layers=self.layers)
         #bp()
@@ -426,14 +431,15 @@ class GNNConditioner(torch.nn.Module):
             #()
             if self.GNN_scope == "atomwise":
                 GNN_output = GNN_output["outputs"].view(batchsize, -1, self.atomwise_feature_dim)
-                self.GNN._buffer.append(GNN_output)
+                #self.GNN._buffer.append(GNN_output)
             elif self.GNN_scope == "bondwise":
                 GNN_output = GNN_output["edge_features"].view(batchsize, -1, GNN_output["edge_features"].shape[-1])
                 #bp()
                 #GNN_output =#reduce number of bond features by two?
-                self.GNN._buffer.append(GNN_output)
+
                 #bp()#.view(batchsize, -1, self.atomwise_feature_dim)
-            #bp()
+            if not self.many_GNNs:
+                self.GNN._buffer.append(GNN_output)
             #bp()
             #self.GNN_buffer.append(GNN_output)
 
@@ -443,7 +449,7 @@ class GNNConditioner(torch.nn.Module):
 
 
         else:
-            #bp()
+            bp()
             GNN_output = self.GNN._buffer[0]
 
 

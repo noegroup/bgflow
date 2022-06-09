@@ -58,6 +58,7 @@ def log_weights_from_true_samples(prior, flow, target, num_samples, batch_size, 
 def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normalize=True):
     x = pack_tensor_in_tuple(x)
     z = pack_tensor_in_tuple(z)
+    #bp()
     logw = (
         prior.energy(*z, temperature=temperature)
         + dlogp
