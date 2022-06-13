@@ -117,7 +117,7 @@ class InternalCoordinateMarginals(dict):
             bonds=BONDS,
             angles=ANGLES,
             torsions=TORSIONS,
-            torsion_test='shapiro',
+            torsion_test=None,
             broadening=1
     ):
         with torch.no_grad():
@@ -154,37 +154,41 @@ class InternalCoordinateMarginals(dict):
         if torsions in self.current_dims:
             assert torsion_lower <= torsion_values.min(), "Set a smaller torsion_lower"
             assert torsion_upper >= torsion_values.max(), "Set a larger torsion_upper"
-            from ..utils.types import assert_numpy
-            torsion_values_np = assert_numpy(torsion_values)
-            n_torsions = torsion_values.shape[-1]
-            torsion_mu = np.full(n_torsions, 0.5)
-            torsion_sigma = np.full(n_torsions, 10.) #TODO not a great substitute for uniform distribution
-            counter = 0
-            if torsion_test == 'shapiro':
-              from scipy.stats import shapiro
-              import warnings
-              with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', message='p-value may not be accurate for N > 5000.')
-                for t in range(n_torsions):
-                    _, pvalue = shapiro(torsion_values_np[:,t])
-                    if pvalue > 0: #very low bar since tipycally there is a lot of data
-                        torsion_mu[t] = torsion_values_np[:,t].mean()
-                        torsion_sigma[t] = torsion_values_np[:,t].std()
-                        counter += 1
-            elif torsion_test == 'gaussian_mixture':
-              from sklearn.mixture import GaussianMixture
-              for t in range(n_torsions):
-                  test_gm = []
-                  for n in range(1,5):
-                      test_gm.append(GaussianMixture(n).fit(torsion_values_np[:,t].reshape(-1,1)))
-                  best = np.argmax(np.array([gm.lower_bound_ for gm in test_gm]))
-                  if best == 0:
-                      torsion_mu[t] = torsion_values_np[:,t].mean()
-                      torsion_sigma[t] = torsion_values_np[:,t].std()
-                      counter += 1
+            if torsion_test is None:
+                torsion_mu = torsion_values.mean(axis=0)
+                torsion_sigma = torsion_values.std(axis=0)
             else:
-              raise ValueError("unknown torsion_test:" + torsion_test)
-            print('Gaussian torsions found:', counter)
+                from ..utils.types import assert_numpy
+                torsion_values_np = assert_numpy(torsion_values)
+                n_torsions = torsion_values.shape[-1]
+                torsion_mu = np.full(n_torsions, 0.5)
+                torsion_sigma = np.full(n_torsions, 0.5) #TODO not a great substitute for uniform distribution
+                counter = 0
+                if torsion_test == 'shapiro':
+                    from scipy.stats import shapiro
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', message='p-value may not be accurate for N > 5000.')
+                        for t in range(n_torsions):
+                            _, pvalue = shapiro(torsion_values_np[:,t])
+                            if pvalue > 0: #very low bar since tipycally there is a lot of data
+                                torsion_mu[t] = torsion_values_np[:,t].mean()
+                                torsion_sigma[t] = torsion_values_np[:,t].std()
+                                counter += 1
+                elif torsion_test == 'gaussian_mixture':
+                    from sklearn.mixture import GaussianMixture
+                    for t in range(n_torsions):
+                        test_gm = []
+                        for n in range(1,5):
+                            test_gm.append(GaussianMixture(n).fit(torsion_values_np[:,t].reshape(-1,1)))
+                        best = np.argmax(np.array([gm.lower_bound_ for gm in test_gm]))
+                        if best == 0:
+                            torsion_mu[t] = torsion_values_np[:,t].mean()
+                            torsion_sigma[t] = torsion_values_np[:,t].std()
+                            counter += 1
+                else:
+                    raise ValueError("unknown torsion_test:" + torsion_test)
+                print('Gaussian torsions found:', counter)
 
             self[torsions] = TruncatedNormalDistribution(
                 mu=torch.as_tensor(torsion_mu, **self.ctx),
