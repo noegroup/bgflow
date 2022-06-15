@@ -71,13 +71,140 @@ class NormalizedBasis(torch.nn.Module):
         return (self.basis(x_o) - self._mean) * self._inv_std
 
 
+import torch
+from torch import Tensor
+from torch.nn import functional as F
+from torch.nn.modules.activation import MultiheadAttention
+from torch.nn.modules.dropout import Dropout
+from torch.nn.modules.linear import Linear
+from torch.nn.modules.normalization import LayerNorm
+from typing import Optional, Any, Union, Callable
+
+class CustomTransformerEncoderLayer(torch.nn.Module):
+    r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
+    This standard encoder layer is based on the paper "Attention Is All You Need".
+    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
+    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
+    in a different way during application.
+
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of the intermediate layer, can be a string
+            ("relu" or "gelu") or a unary callable. Default: relu
+        layer_norm_eps: the eps value in layer normalization components (default=1e-5).
+        batch_first: If ``True``, then the input and output tensors are provided
+            as (batch, seq, feature). Default: ``False`` (seq, batch, feature).
+        norm_first: if ``True``, layer norm is done prior to attention and feedforward
+            operations, respectivaly. Otherwise it's done after. Default: ``False`` (after).
+
+    Examples::
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
+        >>> src = torch.rand(10, 32, 512)
+        >>> out = encoder_layer(src)
+
+    Alternatively, when ``batch_first`` is ``True``:
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8, batch_first=True)
+        >>> src = torch.rand(32, 10, 512)
+        >>> out = encoder_layer(src)
+
+
+
+
+
+    THe native torch.nn.TransformerENcoderLayer does not have linear Layers
+    producing the  QKV vectors, but instead uses on and the same input vector for all these.
+
+    so i added this feature.
+    """
+    __constants__ = ['batch_first', 'norm_first']
+
+    def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
+                 activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
+                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super(CustomTransformerEncoderLayer, self).__init__()
+        self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first,
+                                            **factory_kwargs)
+        # Implementation of Feedforward model
+        self.linear1 = Linear(d_model, dim_feedforward, **factory_kwargs)
+        self.dropout = Dropout(dropout)
+        self.linear2 = Linear(dim_feedforward, d_model, **factory_kwargs)
+
+        self.norm_first = norm_first
+        self.norm1 = LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.norm2 = LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.dropout1 = Dropout(dropout)
+        self.dropout2 = Dropout(dropout)
+
+        self.qkv_proj = torch.nn.Linear(d_model, 3 * d_model)
+
+        # Legacy string support for activation function.
+        if isinstance(activation, str):
+            self.activation = _get_activation_fn(activation)
+        else:
+            self.activation = activation
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(CustomTransformerEncoderLayer, self).__setstate__(state)
+
+    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None, src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the input through the encoder layer.
+
+        Args:
+            src: the sequence to the encoder layer (required).
+            src_mask: the mask for the src sequence (optional).
+            src_key_padding_mask: the mask for the src keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+
+        # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
+
+        x = src
+        if self.norm_first:
+            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._ff_block(self.norm2(x))
+        else:
+            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm2(x + self._ff_block(x))
+
+        return x
+
+
+    # self-attention block
+    def _sa_block(self, x: Tensor,
+                  attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor]) -> Tensor:
+        qkv = self.qkv_proj(x)
+        q, k, v = qkv.chunk(3, dim=-1)
+        x = self.self_attn(q, k, v,
+                           attn_mask=attn_mask,
+                           key_padding_mask=key_padding_mask,
+                           need_weights=False)[0]
+        return self.dropout1(x)
+
+    # feed forward block
+    def _ff_block(self, x: Tensor) -> Tensor:
+        x = self.linear2(self.dropout(self.activation(self.linear1(x))))
+        return self.dropout2(x)
+
+
+
+
 
 
 #gradient checkpointing to lower memory consumption at the cost of speed
-use_checkpointing = False
+
 #hyperparams
-allegro_hparams = {  #renaem to allegro_hparams
-"r_max" : 3.2,  #1.2,
+allegro_hparams = {
+"r_max" : 1.2,  #1.2,
 "num_types" : 10,
 "num_basis" : 32, #8
 "p" : 6,#48
@@ -85,7 +212,7 @@ allegro_hparams = {  #renaem to allegro_hparams
 "num_layers" : 3,
 "env_embed_multiplicity" : 32 ,#16
 "latent_dim" : 32,#32, #16 #512? 32 geht
-"two_body_latent_indermediate_dims" : [128, 128, 128,],#,[64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
+"two_body_latent_indermediate_dims" : [128, 128, 128],#,[64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
 "nonscalars_include_parity" : False, #True
 "irreps_edge_sh" :  '1x0e+1x1o+1x2e',# calculate only vectors and scalars :'1x0e+1x1o'
 "RBF_distance_offset" : 1. ,
@@ -96,7 +223,6 @@ allegro_hparams = {  #renaem to allegro_hparams
 
 
 def make_allegro_config_dict(**kwargs): ###rename to make_allegro_config_dict
-    #bp()
     r_max = kwargs["r_max"]
     num_types = kwargs["num_types"]
     num_basis = kwargs["num_basis"]
@@ -211,23 +337,19 @@ def make_allegro_config_dict(**kwargs): ###rename to make_allegro_config_dict
 
 allegro_config_dict = make_allegro_config_dict(**allegro_hparams)
 
-nequip_hparams = {  # renaem to nequip_hparams
-    "r_max": 3.2,  # 1.2,
+nequip_hparams = {
+    "r_max": 1.2,  # 1.2,
     "num_types": 10,
     "num_basis": 32,  # 8
     "p": 6,  # 48
     "avg_num_neighbors": 9,  #
     "num_layers": 3,
-    #"env_embed_multiplicity": 32,  # 16
     "latent_dim": 32,  # 32, #16 #512? 32 geht
-    #"two_body_latent_indermediate_dims": [128, 128, 128, ],
-    # ,[64, 128, 256], #[64,64,64]#[64, 128, 256] #war mal 64 128 256 512 #64s
     "nonscalars_include_parity": False,  # True
     "irreps_edge_sh": '1x0e+1x1o+1x2e',  # calculate only vectors and scalars :'1x0e+1x1o'  change this to "1x0e" to reduce nequip to schnett basically
     "RBF_distance_offset": 1.,
     "GNN_output_dim": 32,  # "32x0e",
-    #"latent_resnet": True,
-    #"GNN_scope": "bondwise",
+
     "num_interaction_blocks": 4
 }
 
@@ -308,8 +430,23 @@ def make_nequip_config_dict(**kwargs):  ###rename to make_nequip_config_dict
                    }
 
     dict = base_dict | conv_dict | output_dict
-
     return dict
 
 
 nequip_config_dict = make_nequip_config_dict(**nequip_hparams)
+
+class nequip_wrapper(torch.nn.Module):
+    def __init__(
+        self,
+        nequip_GNN = SequentialGraphNetwork.from_parameters,
+        output_field="outputs",
+        **kwargs
+    ):
+        super().__init__()
+        if isinstance(nequip_GNN, torch.nn.Module):
+            self.GNN = nequip_GNN
+        elif callable(nequip_GNN):
+            self.GNN = nequip_GNN(**kwargs)
+        self.output_field = output_field
+    def forward(self, x):
+        return self.GNN.forward(x)[self.output_field]
