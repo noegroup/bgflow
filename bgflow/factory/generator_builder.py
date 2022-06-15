@@ -429,7 +429,7 @@ class BoltzmannGeneratorBuilder:
         wrap_around_ics = WrapFlow(
             InverseFlow(coordinate_transform),
             indices=indices,
-            out_indices=(self.current_dims.index(bonds),)  # first index of the input
+            out_indices=(min(indices),) # first index of the input
         )
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
