@@ -204,7 +204,7 @@ class CustomTransformerEncoderLayer(torch.nn.Module):
 
 #hyperparams
 allegro_hparams = {
-"r_max" : 1.2,  #1.2,
+"r_max" : 3.2,  #1.2,  #1.2,
 "num_types" : 10,
 "num_basis" : 32, #8
 "p" : 6,#48
@@ -338,7 +338,7 @@ def make_allegro_config_dict(**kwargs): ###rename to make_allegro_config_dict
 allegro_config_dict = make_allegro_config_dict(**allegro_hparams)
 
 nequip_hparams = {
-    "r_max": 1.2,  # 1.2,
+    "r_max": 3.2,  #1.2,  # 1.2,
     "num_types": 10,
     "num_basis": 32,  # 8
     "p": 6,  # 48
