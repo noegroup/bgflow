@@ -144,6 +144,8 @@ pytest
   * [netCDF4](https://unidata.github.io/netcdf4-python/) (for the `ReplayBufferReporter`)
   * [jax](https://github.com/google/jax) (for smooth flows / implicit backprop)
   * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
+  * [allegro]([https://github.com/lucidrains/allegro](https://github.com/mir-group/nequip)) (for Graph Neural Networks)
+  * [nequip]([https://github.com/mir-group/nequip]) (for Graph Neural Networks)
 
 
 ***
