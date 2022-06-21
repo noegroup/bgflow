@@ -1,5 +1,7 @@
 """High-level Builder API for Boltzmann generators."""
 
+import contextlib
+import copy
 import warnings
 from typing import Mapping, Sequence
 
@@ -9,7 +11,8 @@ import logging
 from ..nn.flow.sequential import SequentialFlow
 from ..nn.flow.coupling import SetConstantFlow
 from ..nn.flow.transformer.spline import ConditionalSplineTransformer
-from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow
+from ..nn.flow.transformer.affine import AffineTransformer
+from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow, VolumePreservingWrapFlow
 from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
@@ -20,7 +23,8 @@ from ..distribution.normal import NormalDistribution
 from ..distribution.product import ProductDistribution, ProductEnergy
 from ..bg import BoltzmannGenerator
 from .tensor_info import (
-    TensorInfo, BONDS, ANGLES, TORSIONS, FIXED, ORIGIN, ROTATION, AUGMENTED, TARGET
+    TensorInfo, BONDS, ANGLES, TORSIONS, FIXED, ORIGIN, ROTATION, AUGMENTED, TARGET,
+    ShapeDictionary
 )
 from .conditioner_factory import make_conditioners
 from .transformer_factory import make_transformer
@@ -508,6 +512,94 @@ class BoltzmannGeneratorBuilder:
         scale[halpha_torsion_indices] = 0.5
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
+
+    @contextlib.contextmanager
+    def volume_preserving_block(
+            self,
+            volume_sink: TensorInfo,
+            condition_on_dlogp: bool = True,
+            exclude_inputs_from_conditioner: Sequence[TensorInfo] = tuple(),
+            exclude_outputs_from_conditioner: Sequence[TensorInfo] = tuple(),
+            **conditioner_kwargs
+    ):
+        """Context manager for volume-preserving co-transforms.
+        A volume-preserving block can contain arbitrary (primary) transforms.
+        Every volume change (`dlogp != 0`) in this block will be sucked up
+        by a volume sink tensor so that the total `dlogp` vanishes.
+
+        Parameters
+        ----------
+        volume_sink
+            The field that acts as a volume sink.
+        condition_on_dlogp
+            Whether to condition the affine transform on dlogp of the primary transform
+        exclude_inputs_from_conditioner
+            Input tensors that are not passed to the conditioner of the affine co-layer.
+        exclude_outputs_from_conditioner
+            Output tensors that are not passed to the conditioner of the affine co-layer.
+
+        Notes
+        -----
+        It is paramount that the volume sink field is not used by any transform in the block.
+
+        Examples
+        --------
+        >>> from bgflow import
+        >>> builder = BoltzmannGeneratorBuilder(...)
+        >>> with builder.volume_preserving_block(volume_sink=AUGMENTED):
+        >>>     builder.add_condition(BONDS, on=(ANGLES, TORSIONS))
+
+        No matter the transform used in the coupling layer, this block will
+        have vanishing `dlogp` in total.
+        """
+        previous_layer = len(self.layers)
+        input_shape_dict = copy.copy(self.current_dims)
+        volume_sink_index_before = self.current_dims.index(volume_sink)
+        yield
+        # wrap layers that have been added in context
+        volume_sink_index_after = self.current_dims.index(volume_sink)
+        wrapped_flow = SequentialFlow(self.layers[previous_layer:])
+        self.layers = self.layers[:previous_layer]
+
+        # make conditioner inputs
+        cond_indices = []
+        cond_names = []
+        coflow_input_shapes = ShapeDictionary()
+
+        dlogp_info = TensorInfo("dlogp", is_circular=False)
+        coflow_input_shapes[dlogp_info] = (1,)
+        if condition_on_dlogp:
+            cond_indices.append(0)
+            cond_names.append(dlogp_info)
+        for i, (info, shape) in enumerate(input_shape_dict.items(), start=1):
+            coflow_input_shapes[info] = shape
+            if info not in (*exclude_inputs_from_conditioner, volume_sink):
+                cond_indices.append(i)
+                cond_names.append(info)
+        for i, (info, shape) in enumerate(self.current_dims.items(), start=1+len(input_shape_dict)):
+            info_out = info._replace(name=info.name+"_out")
+            coflow_input_shapes[info_out] = shape
+            if info not in (*exclude_outputs_from_conditioner, volume_sink):
+                cond_indices.append(i)
+                cond_names.append(info_out)
+
+        affine_conditioners = make_conditioners(
+            transformer_type=AffineTransformer,
+            what=_tuple(volume_sink),
+            on=cond_names,
+            shape_info=coflow_input_shapes,
+            **conditioner_kwargs
+        )
+        affine_conditioners = {name: net.to(**self.ctx) for name, net in affine_conditioners.items()}
+        volume_preserver = VolumePreservingWrapFlow(
+            flow=wrapped_flow,
+            volume_sink_index=volume_sink_index_before,
+            out_volume_sink_index=volume_sink_index_after,
+            cond_indices=cond_indices,
+            **affine_conditioners
+        )
+
+        self.add_layer(volume_preserver)
 
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)

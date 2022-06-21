@@ -1,3 +1,5 @@
+
+
 import torch
 
 
@@ -31,3 +33,4 @@ class Flow(torch.nn.Module):
             return self._inverse(*xs, **kwargs)
         else:
             return self._forward(*xs, **kwargs)
+

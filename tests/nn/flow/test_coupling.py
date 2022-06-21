@@ -1,7 +1,10 @@
 import pytest
 
 import torch
-from bgflow import SplitFlow, Transformer, CouplingFlow, WrapFlow, SetConstantFlow
+from bgflow import (
+    Flow, SplitFlow, Transformer, CouplingFlow, WrapFlow,
+    SetConstantFlow, VolumePreservingWrapFlow, DenseNet
+)
 
 
 def test_split_flow(ctx):
@@ -147,6 +150,54 @@ def test_wrap_flow(device, dtype):
     assert torch.allclose(z2, x2)
     assert torch.allclose(z3, x3)
     assert torch.allclose(dlogp, torch.zeros_like(x1[...,[0]]))
+
+
+class DummyNVPFlow(Flow):
+    def __init__(self, skip_indices=[3]):
+        super().__init__()
+        self.skip = skip_indices
+
+    def _forward(self, *xs, **kwargs):
+        out = (x if i in self.skip else 2*x
+               for i, x in enumerate(xs))
+        dlogp = torch.log(2**(len(xs)-len(self.skip))*torch.ones_like(xs[0][..., [0]]))
+        return (*out, dlogp)
+
+    def _inverse(self, *xs, **kwargs):
+        out = (x if i in self.skip else x/2
+               for i, x in enumerate(xs))
+        dlogp = torch.log(0.5**(len(xs)-len(self.skip))*torch.ones_like(xs[0][..., [0]]))
+        return (*out, dlogp)
+
+
+def test_volume_preserving_wrap(ctx):
+    # five inputs
+    inputs = torch.arange(1, 21, **ctx).reshape(2, 10).chunk(5, dim=-1)
+    # flow
+    wrap_flow = VolumePreservingWrapFlow(
+        flow=DummyNVPFlow(),
+        volume_sink_index=3,
+        out_volume_sink_index=3,
+        shift_transformation=None,
+        scale_transformation=DenseNet([9, 2]),
+        cond_indices=(0, 1, 2, 3, 5, ),
+    ).to(**ctx)
+    *outputs, dlogp = wrap_flow.forward(*inputs)
+    assert torch.allclose(dlogp, torch.zeros_like(dlogp))
+    assert torch.allclose(outputs[0], 2*inputs[0])
+    assert torch.allclose(outputs[1], 2*inputs[1])
+    assert torch.allclose(outputs[2], 2*inputs[2])
+    expected = 1/(2**8)*inputs[3].prod()
+    assert torch.allclose(outputs[3].prod(), expected)
+    assert torch.allclose(outputs[4], 2*inputs[4])
+
+    # inversion
+    *z2, dlogp2 = wrap_flow.forward(*outputs, inverse=True)
+    assert torch.allclose(dlogp2, -dlogp)
+    for x, y in zip(inputs, z2):
+        print(x, y)
+    for x, y in zip(inputs, z2):
+        assert torch.allclose(x, y)
 
 
 def test_set_constant_flow(ctx):

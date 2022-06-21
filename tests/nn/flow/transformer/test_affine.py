@@ -41,3 +41,25 @@ def test_affine(is_circular, use_scale_transform):
         else:
             assert (y2 > 1).any()
 
+
+def test_volume_preserving(ctx):
+    trafo = AffineTransformer(
+        shift_transformation=DenseNet([2, 2]),
+        scale_transformation=DenseNet([2, 2]),
+        preserve_volume=True
+    ).to(**ctx)
+    x = torch.rand(100, 2, **ctx)
+    y = torch.rand(100, 2, **ctx)
+
+    y2, dlogp = trafo.forward(x, y)
+    assert torch.allclose(dlogp, torch.zeros(100, 1, **ctx), atol=1e-6)
+
+    y2, dlogp = trafo.forward(x, y, inverse=True)
+    assert torch.allclose(dlogp, torch.zeros(100, 1, **ctx), atol=1e-6)
+
+    y2, dlogp = trafo.forward(x, y, target_dlogp=torch.ones(2, **ctx))
+    assert torch.allclose(dlogp, torch.ones(100, 1, **ctx), atol=1e-6)
+
+    y2, dlogp = trafo.forward(x, y, target_dlogp=torch.ones(2, **ctx), inverse=True)
+    assert torch.allclose(dlogp, torch.ones(100, 1, **ctx), atol=1e-6)
+

@@ -97,7 +97,7 @@ class BoltzmannGenerator(Energy, Sampler):
         results = list(x)
 
         if with_latent:
-            results.append(*z)
+            results.append(z)
         if with_dlogp:
             results.append(dlogp)
         if with_energy:
