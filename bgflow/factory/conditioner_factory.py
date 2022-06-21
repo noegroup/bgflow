@@ -63,8 +63,9 @@ def make_conditioners(
     dim_out = dim_out_factory(what=what, shape_info=shape_info, transformer_kwargs=transformer_kwargs, **kwargs)
     dim_in = shape_info.dim_noncircular(on) + 2 * shape_info.dim_circular(on)
     conditioners = {}
+    #bp()
     for name, dim in dim_out.items():
-        kwargs["cart_indices"] = shape_info.cartesian_indices(on)
+        #kwargs["cart_indices"] = shape_info.cartesian_indices(on)
         kwargs["shape_info"] = shape_info
         kwargs["on"] = on
         conditioner = net_factory(dim_in, dim, **kwargs)
@@ -85,14 +86,18 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
 class WrapDistancesConditioner(torch.nn.Module):
     def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
         super().__init__()
-        ### sequential of wrapdistances, merge distances and other input, and this desne net:
         self.attention_level = kwargs["attention_level"]
         self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
         self.on = kwargs["on"]
-        self.N = kwargs["N"]  #number of RBFs
+        self.N = kwargs["N"]  # number of RBFs
         self.c = kwargs["c"]  # cutoff
         self.p = kwargs["p"]  # envelope parameter
+        #bp()
+
+
+
+
         self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
         self.wrapdistances = WrapDistances(torch.nn.Identity(), indices=self.cart_indices_after_periodic)
         self.wrapdistancespure = WrapDistances(torch.nn.Identity())
@@ -127,6 +132,7 @@ class WrapDistancesConditioner(torch.nn.Module):
         return(1 - ((p+1)*(p+2))/2*x**p + p*(p+2)*x**(p+1) - (p*(p+1))/2*x**(p+2))
     def forward(self, x):
         x_cart = x[:,self.cart_indices_after_periodic]
+
         index = torch.ones(x.shape[1], dtype=bool)
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
@@ -162,15 +168,6 @@ class WrapDistancesConditioner(torch.nn.Module):
 
 
 def _make_wrapdistances_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
-    ''' take as input the flattened cartesian coordinates and other inputs
-    flatten them
-    make distance matrix
-    subset with mask
-    return distances and noncartesian (circular) inputs
-    do dense net on these
-    (use rbf)
-    maybe also wrap the periodics in here and keep book with a shape dictionary
-    '''
     wrapdistances_conditioner = WrapDistancesConditioner(dim_in, dim_out, hidden, activation, **kwargs)
     return wrapdistances_conditioner
 
@@ -186,22 +183,40 @@ class GNNConditioner(torch.nn.Module):
     On cartesians, apply GNN implemented using the nequip library.
     then apply dense net on (periodic || nonperiodic || GNN outputs)
     '''
-    def __init__(self, dim_in, dim_out, hidden, activation, GNN_output_dim, attention_level=None, GNN_scope="atomwise", **kwargs):
+    def __init__(self, dim_in, dim_out, hidden, activation, GNN_output_dim, **kwargs):
         super().__init__()
-        #bp()
 
         ### sequential of wrapdistances, merge distances and other input, and this desne net:
         #self.attention_level = kwargs["attention_level"]
-        self.attention_level = attention_level
-        self.cart_indices = kwargs["cart_indices"]
+        self.attention_level = kwargs["attention_level"]
+        #self.cart_indices = kwargs["cart_indices"]
         self.shape_info = kwargs["shape_info"]
-        self.cutoff = kwargs["r_max"]
         self.on = kwargs["on"]
-        self.GNN_scope = GNN_scope
+        self.cart_indices = self.shape_info.cartesian_indices(self.on)
+
+        self.cutoff = kwargs["r_max"]
+
+        self.GNN_scope = kwargs["GNN_scope"]
         self.use_checkpointing = kwargs["use_checkpointing"]
         self.n_cart = len(self.cart_indices)
         self.n_cart_atoms = self.n_cart//3
-        self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
+        #bp()
+
+        self.labels = []
+        for field in self.on:
+            if field.is_circular:
+                self.labels = (["circular"]*self.shape_info[field][0]*2) + self.labels  #add the sin, cos indices on the left
+            elif field.is_cartesian:
+                self.labels.extend(["cartesian"] * self.shape_info[field][0])
+            else:
+                self.labels.extend(["regular"] * self.shape_info[field][0])
+        self.cart_indices_after_periodic = np.where(np.array(self.labels) == "cartesian")[0]
+
+        #bp()
+
+
+        #self.cart_indices_after_periodic = self.cart_indices + self.shape_info.dim_circular(self.on)
+        #bp()
 
         ## this has to reaturn a tensor of shape (batchsize, num_atoms or num_bonds, self.GNN_output_dim)
         if isinstance(kwargs["GNN"], torch.nn.Module):
@@ -264,8 +279,7 @@ class GNNConditioner(torch.nn.Module):
 
     def forward(self,x):
         if self.use_checkpointing:
-            dummy_var = torch.zeros(2,requires_grad = True)  ## checkpointing does not work without having input that rquires grad
-            print("checkpoint passed")
+            dummy_var = torch.zeros(2,requires_grad = True)  ## checkpointing does not work without having input that requires grad
             return checkpoint(self._forward, x, dummy_var)
         else:
             try:
@@ -280,28 +294,26 @@ class GNNConditioner(torch.nn.Module):
         index = torch.ones(x.shape[1], dtype=bool)
         index[self.cart_indices_after_periodic] = False
         x_rest = x[:,index]
-
         if self.GNN.num_evaluations == 0:
 
             batchsize = x_cart.shape[0]
             x_cart = x_cart.view(x_cart.shape[0],-1,3)
             distances = torch.cdist(x_cart, x_cart)
             in_bonds = distances <= self.cutoff
-            #bp()
-            #remove edges from node to itself:
             indices = in_bonds.nonzero()
-            indices = indices[indices[:,1] != indices[:,2]]
+            indices = indices[indices[:,1] != indices[:,2]]  #remove edges from node to itself:
             edge_index = torch.vstack([indices[:,1],indices[:,2]])
             batch_index = indices[:,0]
             offset_tensor = (batch_index * self.n_cart_atoms).repeat((2, 1))
 
-            edge_index_batch = edge_index + offset_tensor #make sure that all edges are in their respective graphs ( multiple graphs in a batch)
-
+            edge_index_batch = edge_index + offset_tensor #make sure that all edges are in their respective graphs (multiple graphs in a batch)
             atom_types = torch.arange(self.n_cart_atoms).repeat(batchsize)
 
             batch = torch.arange(x_cart.shape[0]).repeat_interleave(self.n_cart_atoms)
             r_max = torch.full((batchsize,), self.cutoff)
 
+            ## this is an atomicdatadict, it is used by the nequip GNNs to keep track of multiple graphs in a batch.
+            ## The graphs may have a different number of atoms in their neighborhoods
             data = dict(pos=x_cart.view(-1,3),
                         edge_index=edge_index_batch.to(x_cart.device),
                         batch=batch.to(x_cart.device),
@@ -309,49 +321,42 @@ class GNNConditioner(torch.nn.Module):
                         r_max=r_max.to(x_cart.device))
 
 
-            #bp()
-            GNN_output = self.GNN(data)#["outputs"]
-
+            GNN_output = self.GNN(data)  #actually call the GNN
             GNN_output = GNN_output.view(batchsize, -1, self.GNN_output_dim)
 
 
-            self.GNN._buffer=GNN_output
+            self.GNN._buffer=GNN_output  # save GNN output for eventual recycling by other conditioners.
             self.GNN.num_evaluations +=1
 
         else:
-            GNN_output = self.GNN._buffer
+            GNN_output = self.GNN._buffer  #recycle the GNN output from earlier conditioner
             self.GNN.num_evaluations += 1
 
 
-        if self.GNN.num_evaluations == self.GNN.num_uses:
-            self.GNN.num_evaluations = 0
+        if self.GNN.num_evaluations == self.GNN.num_uses:  #we are at the end of the generators flow.
+            self.GNN.num_evaluations = 0  #the next conditioner call will actually call the GNN
 
 
 
-        #### insert attention on the atom features here
-        #multihead attention: generate QKV from every atom vector,
-        #get attention matrix by Q*K1,K2...
-        #sum values with their attention weights.
-        #concatenate, Linear layer
+        # each conditioner may use some attention on the generated atomwise features
         if self.attention_level is not None and self.GNN_scope == "bondwise":
             warnings.warn("unsing Attention on the GNN Edge Features will must likely crash as there are too many of them.")
         if self.attention_level == "MHA":
-            ## feed this into the dense layer
             ## currently not working with bondwise GNN_scope
-            #bp()
             qkv = self.qkv_proj(GNN_output)
             q, k, v = qkv.chunk(3, dim=-1)
             GNN_output,_ = self.MHA(q,k,v, need_weights = False)
-        #### end attention on atom features
         elif self.attention_level == "Transformer":
             ## currently not working with bondwise GNN_scope
             GNN_output = self.transformer_encoder(GNN_output)
 
         batchsize = x_rest.shape[0]
         formatted_output = GNN_output.reshape(batchsize, -1)
-        #bp()
-        inputs_and_distances = torch.cat([x_rest, formatted_output], dim = -1)
-        return self.densenet(inputs_and_distances)
+        features = torch.cat([x_rest, formatted_output], dim=-1)
+
+        # a dense NN computes the transforms parameters from the (wrapped)
+        # noncartesian inputs and the feature vectors calculated from the cartesian inputs
+        return self.densenet(features)
 
 
 def _make_GNN_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):

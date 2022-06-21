@@ -1,7 +1,7 @@
 
 import torch
 import numpy as np
-
+from ipdb import set_trace as bp
 __all__ = ["WrapPeriodic"]
 
 
@@ -26,9 +26,11 @@ class WrapPeriodic(torch.nn.Module):
         self.net = net
         self.left = left
         self.right = right
+        #bp()
         self.indices = indices
 
     def forward(self, x):
+        #bp()
         indices = np.arange(x.shape[-1])[self.indices]
         other_indices = np.setdiff1d(np.arange(x.shape[-1]), indices)
         y = x[..., indices]

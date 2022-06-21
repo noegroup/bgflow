@@ -160,17 +160,12 @@ class KLTrainer(object):
                 if isinstance(batch, torch.Tensor):
                     batch = (batch,)
                 # negative log-likelihood of the batch is equal to the energy of the BG
-
                 nll = self.bg.energy(*batch, temperature=temperature).mean()
                 reports.append(nll)
                 # aggregate weighted gradient
-                #bp()
                 if w_likelihood > 0:
                     l = w_likelihood / (w_likelihood + w_energy)
-                    (l * nll).backward(retain_graph=False) # was True
-                #if iter == 79:
-                #    import ipdb
-                #    ipdb.set_trace()                    
+                    (l * nll).backward(retain_graph=True)
                 
             # compute NLL over test data 
             if self.test_likelihood:
@@ -186,8 +181,6 @@ class KLTrainer(object):
             if w_custom is not None:
                 cl = self.custom_loss(**custom_loss_kwargs)
                 (w_custom * cl).backward(retain_graph=True)
-                #import ipdb
-                #ipdb.set_trace()
                 reports.append(cl)
 
             self.reporter.report(*reports)
