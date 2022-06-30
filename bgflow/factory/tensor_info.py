@@ -310,7 +310,6 @@ class ShapeDictionary(OrderedDict):
         keys = self if keys is None else keys
         return np.arange(self.dim_all(keys, dim))[self.is_circular(keys, dim)]
 
-    #### all methods below are not tested ####
     def dim_cartesian(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
         """The total dimension of all circular tensors along a given axis `dim`.
 
@@ -334,7 +333,7 @@ class ShapeDictionary(OrderedDict):
         keys = self if keys is None else keys
         return sum(self[key][dim] for key in keys if not key.is_cartesian)
 
-    def is_cartesain(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
+    def is_cartesian(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
         """The total dimension of all circular tensors along a given axis `dim`.
 
         Parameters
@@ -369,4 +368,4 @@ class ShapeDictionary(OrderedDict):
             the context of all keys concatenated.
         """
         keys = self if keys is None else keys
-        return np.arange(self.dim_all(keys, dim))[self.is_cartesain(keys, dim)]
+        return np.arange(self.dim_all(keys, dim))[self.is_cartesian(keys, dim)]

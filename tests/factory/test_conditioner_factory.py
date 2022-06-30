@@ -75,117 +75,122 @@ def test_conditioner_factory_spline(crd_trafo):
             == ((3 * 8)*(shape_info[BONDS][0] + shape_info[TORSIONS][0]) + shape_info[BONDS][0], )
     )
 
-def test_condition_on_cartesian(ala2, crd_trafo, ctx):
-    x = torch.tensor(ala2.xyz)[0]
-    R = torch.Tensor(scipy.spatial.transform.Rotation.random().as_matrix()).double()
-    #R = torch.eye(3)
-    #R_batch = torch.repeat_interleave(torch.repeat_interleave(R.unsqueeze(0),22,0).unsqueeze(0),100,0)
 
 
 
-    #x_rotated = torch.einsum("BNIJ,BNJ->BNI", R_batch, x)
-    x_rotated = torch.zeros_like(x)
-    for j in range(22):
-        x_rotated[j] = R@(x[j])
-    #x_rotated = R@x
-    #pytest.set_trace()
-    x_xyz = x.view(-1,3)
-    x_rotated_xyz = x_rotated.view(-1,3)
 
-    x = x.unsqueeze(dim = 0)
-    x_rotated = x_rotated.unsqueeze(dim = 0)
-    #pytest.set_trace()
+from bgflow.nn.periodic import WrapDistances
+def test_GNN(ala2, crd_trafo_unwhitened):
 
-    def crd_trafo(ala2, ctx):
-        z_matrix = ala2.system.z_matrix
-        fixed_atoms = ala2.system.rigid_block
-        crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed_atoms)
-        return crd_transform
+    for conditioner in ["allegro", "nequip", "wrapdistances"]:
 
-    crd_transform = crd_trafo(ala2, ctx)
-    #pytest.set_trace()
+            for use_checkpointing in ["True", "False"]:
+                for attention_level in ["MHA", "Transformer", None]:
+                    x = torch.tensor(ala2.xyz)[0]
+                    R = torch.Tensor(np.linalg.qr(np.random.normal(size=(3, 3)))[0]).double()
+                    x_rotated = x@R
+                    x = x.unsqueeze(dim = 0)
+                    x_rotated = x_rotated.unsqueeze(dim = 0)
+                    shape_info = ShapeDictionary.from_coordinate_transform(crd_trafo_unwhitened)
 
-    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
-    #
-    kwargs ={"N": 16, "c": 15, "p": 6}
-    conditioners = make_conditioners(
-        ConditionalSplineTransformer, (BONDS,), (TORSIONS, FIXED), shape_info,
-        conditioner_type="wrapdistances",
-        **kwargs
-    )
-    #device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-    device = torch.device("cpu")
-    dtype = torch.float32
+                    if conditioner == "allegro":
+                        from bgflow.factory.GNN_factory import allegro_config_dict as config_dict, allegro_hparams as hparams, \
+                            make_allegro_config_dict as make_config_dict
 
-    # a context tensor to send data to the right device and dtype via '.to(ctx)'
-    ctx = {"device": device, "dtype": dtype}
-    #pytest.set_trace()
-    x = x.to(**ctx)
-    x_rotated = x_rotated.to(**ctx)
-    #pytest.set_trace()
+                    if conditioner == "nequip":
+                        from bgflow.factory.GNN_factory import nequip_config_dict as config_dict, nequip_hparams as hparams, \
+                            make_nequip_config_dict as make_config_dict
 
-    bx, ax, tx, fx, _ = crd_transform(x)
-    br, ar, tr, fr, _ = crd_transform(x_rotated)
-    fx_xyz = fx.view(-1,3)
-    fr_xyz = fr.view(-1,3)
-    #pytest.set_trace()
 
-    torch.norm(fx_xyz[0] - fx_xyz[1])
-    torch.norm(fr_xyz[0] - fr_xyz[1])
-    onx = torch.cat((tx, fx), dim = -1)
-    onr = torch.cat((tr, fr), dim = -1)
-    #pytest.set_trace()
-    params_x = conditioners["params_net"](onx)
-    params_r = conditioners["params_net"](onr)
-    #pytest.set_trace()
-    assert torch.allclose(params_x, params_r, atol=5e-4)
-import bgflow
-def test_condition_on_cartesian_allegro(ala2, crd_trafo, ctx):
-    x = torch.tensor(ala2.xyz)[0]
-    R = torch.Tensor(scipy.spatial.transform.Rotation.random().as_matrix()).double()
-    x_rotated = torch.zeros_like(x)
-    for j in range(22):
-        x_rotated[j] = R@(x[j])
 
-    x = x.unsqueeze(dim = 0)
-    x_rotated = x_rotated.unsqueeze(dim = 0)
+                    if conditioner in ["allegro", "nequip"]:
+                        ### gather some data to initialize the RBF to be normalized
+                        distances_net = WrapDistances(torch.nn.Identity())
+                        fixed = crd_trafo_unwhitened.forward(torch.Tensor(ala2.xyz.reshape(ala2.xyz.shape[0], -1)))[3]
+                        RBF_distances = distances_net(fixed.detach()).flatten().cpu()
+                        RBF_distances = RBF_distances[RBF_distances<=hparams["r_max"]]
 
-    def crd_trafo(ala2, ctx):
-        z_matrix = ala2.system.z_matrix
-        fixed_atoms = ala2.system.rigid_block
-        crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed_atoms)
-        return crd_transform
+                        avg_num_neighbors = ((len(RBF_distances)/(ala2.xyz.shape[0]*fixed.shape[1]/3)))*2
+                        layers = make_config_dict(**hparams)
+                        layers["radial_basis"][1]["basis_kwargs"]["data"] = RBF_distances
 
-    crd_transform = crd_trafo(ala2, ctx)
-    shape_info = ShapeDictionary.from_coordinate_transform(crd_transform)
-    from config import config_dict, r_max, num_basis, p
-    kwargs ={"N": num_basis, "c": r_max, "p": p, "layers": config_dict}
-    distances_net = bgflow.nn.periodic.WrapDistances(torch.nn.Identity())
-    fixed = crd_transform.forward(torch.Tensor(ala2.xyz).view(ala2.xyz.shape[0],-1))[3]
-    RBF_distances = distances_net(fixed.detach()).flatten().cpu()
-    RBF_distances = RBF_distances[RBF_distances <= r_max]
-    avg_num_neighbors = ((len(RBF_distances) / (ala2.xyz.shape[0] * fixed.shape[1] / 3))) * 2
-    config_dict["radial_basis"][1]["basis_kwargs"]["data"] = RBF_distances
-    config_dict["allegro"][1]["avg_num_neighbors"] = avg_num_neighbors
-    conditioners = make_conditioners(
-        ConditionalSplineTransformer, (BONDS,), (TORSIONS, FIXED), shape_info,
-        conditioner_type="allegro",
-        **kwargs
-    )
-    device = torch.device("cpu")
-    dtype = torch.float32
-    ctx = {"device": device, "dtype": dtype}
-    x = x.to(**ctx)
-    x_rotated = x_rotated.to(**ctx)
-    bx, ax, tx, fx, _ = crd_transform(x)
-    br, ar, tr, fr, _ = crd_transform(x_rotated)
-    fx_xyz = fx.view(-1,3)
-    fr_xyz = fr.view(-1,3)
-    torch.norm(fx_xyz[0] - fx_xyz[1])
-    torch.norm(fr_xyz[0] - fr_xyz[1])
-    onx = torch.cat((tx, fx), dim = -1)
-    onr = torch.cat((tr, fr), dim = -1)
-    params_x = conditioners["params_net"](onx)
-    params_r = conditioners["params_net"](onr)
-    assert torch.allclose(params_x, params_r, atol=5e-4)
+                        if conditioner == "allegro":
+                            layers["allegro"][1]["avg_num_neighbors"]= avg_num_neighbors
+                        if conditioner == "nequip":
+                            for i in range(hparams["num_interaction_blocks"]):
+                                layers[f"convnet_{i}"][1]["convolution_kwargs"]["avg_num_neighbors"] = avg_num_neighbors
+
+                        from nequip.nn import SequentialGraphNetwork
+                        # the layers object is a config dict, that contains all we need to construct a nequip GNN
+                        GNN = SequentialGraphNetwork.from_parameters(shared_params=None, layers=layers)
+
+                        from bgflow.factory.GNN_factory import NequipWrapper
+                        # the GNN has to be wrapped to return a Tensor, not a nequip "AtomicDataDict"
+                        GNN_feature_extractor = NequipWrapper(GNN, cutoff = hparams["r_max"])
+
+
+
+
+
+
+
+                        kwargs = {
+                            "r_max": hparams["r_max"],
+                            "GNN": GNN_feature_extractor,
+                            "use_checkpointing": use_checkpointing,
+                            "GNN_output_dim": hparams["GNN_feature_dim"]*(shape_info[FIXED][0]//3),
+                            "attention_units": (shape_info[FIXED][0]//3),
+                            "attention_level": attention_level
+                        }
+                    if conditioner in ["allegro", "nequip"]:
+                        conditioners = make_conditioners(
+                            ConditionalSplineTransformer, (BONDS,), (TORSIONS, FIXED), shape_info,
+                            conditioner_type="GNN",
+                            **kwargs
+                        )
+                    elif conditioner == "wrapdistances":
+                        from bgflow.factory.GNN_factory import WrapDistancesGNN
+                        num_basis = 32
+                        kwargs = {
+                            "r_max": 1.2,
+                            "GNN": WrapDistancesGNN,
+                            "GNN_kwargs": {"num_basis": num_basis,
+                                           "r_max": 15,
+                                           "env_p": 48
+                                           },
+                            "use_checkpointing": use_checkpointing,  # False,
+                            "GNN_output_dim": ((shape_info[FIXED][0]//3 )** 2 - shape_info[FIXED][0]//3) // 2 * num_basis,
+                            "attention_units": ((shape_info[FIXED][0]//3)** 2 - shape_info[FIXED][0]//3) // 2,
+                            "attention_level": attention_level
+                        }
+                        conditioners = make_conditioners(
+                            ConditionalSplineTransformer, (BONDS,), (TORSIONS, FIXED), shape_info,
+                            conditioner_type="GNN",
+                            **kwargs
+                        )
+
+                    device = torch.device("cpu")
+                    dtype = torch.float32
+
+                    # a context tensor to send data to the right device and dtype via '.to(ctx)'
+                    ctx = {"device": device, "dtype": dtype}
+                    x = x.to(**ctx)
+                    x_rotated = x_rotated.to(**ctx)
+
+
+                    bx, ax, tx, fx, _ = crd_trafo_unwhitened(x)
+                    br, ar, tr, fr, _ = crd_trafo_unwhitened(x_rotated)
+                    fx_xyz = fx.view(-1,3)
+                    fr_xyz = fr.view(-1,3)
+
+                    onx = torch.cat((tx, fx), dim = -1)
+                    onr = torch.cat((tr, fr), dim = -1)
+                    params_x = conditioners["params_net"](onx)
+                    params_r = conditioners["params_net"](onr)
+                    ### parameters of an untrained GNN can be quite large, so for GNNs, absolute errors are fine.
+                    if conditioner in ["allegro", "nequip"]:
+                        assert torch.allclose(params_x, params_r, rtol=1e-03, atol=1e-3)
+                    elif conditioner == "wrapdistances":
+                        assert torch.allclose(params_x, params_r, rtol=1e-03, atol=1e-3)
+
 

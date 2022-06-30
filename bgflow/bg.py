@@ -1,5 +1,4 @@
 import torch
-from ipdb import set_trace as bp
 from .distribution.energy import Energy
 from .distribution.sampling import Sampler
 from .utils.types import pack_tensor_in_tuple
@@ -29,7 +28,8 @@ def log_weights(*x, prior, flow, target, temperature=1.0, normalize=True):
         x, z, -neg_dlogp, prior, target, temperature=temperature, normalize=normalize
     )
 
-def log_weights_from_true_samples(prior, flow, target, num_samples, batch_size, temperature=1.0, normalize=True):
+def log_weights_from_samples(prior, flow, target, num_samples, batch_size, temperature=1.0, normalize=True):
+    """sample a bunch of datapoints, and compute their log_weights"""
 
     z=[]
     x=[]
@@ -41,11 +41,7 @@ def log_weights_from_true_samples(prior, flow, target, num_samples, batch_size, 
             x_batch, dlogp_batch = flow(*z_batch)
             x.append(x_batch)
             dlogp.append(dlogp_batch)
-        #*z, neg_dlogp = flow(*x, inverse=True, temperature=temperature)
-        #for el in range(len(z[0])):
         z_cat =tuple([torch.cat([z_t[el] for z_t in z], dim = 0) for el in range(len(z[0]))])
-        #bp()
-        #z = torch.cat(z)
         x = torch.cat(x)
         dlogp = torch.cat(dlogp)
 
@@ -58,7 +54,6 @@ def log_weights_from_true_samples(prior, flow, target, num_samples, batch_size, 
 def log_weights_given_latent(x, z, dlogp, prior, target, temperature=1.0, normalize=True):
     x = pack_tensor_in_tuple(x)
     z = pack_tensor_in_tuple(z)
-    #bp()
     logw = (
         prior.energy(*z, temperature=temperature)
         + dlogp

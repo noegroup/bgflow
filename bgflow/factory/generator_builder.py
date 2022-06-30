@@ -291,10 +291,6 @@ class BoltzmannGeneratorBuilder:
         if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
-        #import ipdb
-        #ipdb.set_trace()
-        #if conditioner_type == "allegro":
-        #    self.allegro_layers.append(len(self.layers))
         conditioners = make_conditioners(
             transformer_type=transformer_type,
             conditioner_type=conditioner_type,
@@ -342,12 +338,6 @@ class BoltzmannGeneratorBuilder:
     
     
     def add_remove_constant(self, what, tensor):
-        #if what in self.current_dims:
-        #    if self.current_dims[what] != tuple(tensor.shape):
-        #        raise ValueError(f"Constant tensor {tensor} must have shape {self.current_dims[what]}")
-        
-
-        
         index = self.current_dims.index(what)
         fix_flow = InverseFlow(SetConstantFlow(
             indices=[index],
@@ -361,10 +351,13 @@ class BoltzmannGeneratorBuilder:
     
     
     def add_clone(self, what, to):
+
+        ''' take a field in builder.current_dims and clone it. you now have this field twice.
+            You can for example do a coordinate transform on this field while keeping the original representation untouched.
+        '''
         if what not in self.current_dims:
             raise ValueError(f"Field {what} is not in builder.current_dims")
-        #import ipdb 
-        #ipdb.set_trace()
+
         self.current_dims[to] = self.current_dims[what]
         index_what = self.current_dims.index(what)
         index_to = self.current_dims.index(to)
@@ -381,8 +374,6 @@ class BoltzmannGeneratorBuilder:
         """ inverse of add_clone"""
         if what not in self.current_dims:
             raise ValueError(f"Field {what} is not in builder.current_dims")
-        #import ipdb 
-        #ipdb.set_trace()
         
         index_what = self.current_dims.index(what)
         index_to = self.current_dims.index(to)
@@ -491,8 +482,6 @@ class BoltzmannGeneratorBuilder:
             indices=indices,
             out_indices=(self.current_dims.index(bonds),)  # first index of the input
         )
-        #import ipdb
-        #ipdb.set_trace()
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
@@ -509,16 +498,6 @@ class BoltzmannGeneratorBuilder:
             out=None
     ):
         fixed_fields = [FIXED]
-
-        # fix origin and rotation
-        #if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation):
-            #ic_fields.extend([origin, rotation])
-            #if fixed_origin_and_rotation:
-             #   self.add_set_constant(origin, torch.zeros(1, 3, **self.ctx))
-             #   self.add_set_constant(rotation, torch.tensor([0.5, 0.5, 0.5], **self.ctx))
-        #else:
-            #ic_fields.append(fixed)
-
         indices = [self.current_dims.index(fixed) for fixed in fixed_fields]
         n_dims = len(self.current_dims) - 1
         wrap_around_fixed = WrapFlow(
@@ -526,13 +505,10 @@ class BoltzmannGeneratorBuilder:
             indices=indices,
             out_indices=(n_dims, n_dims + 1, n_dims + 2, n_dims + 3, n_dims + 4)  # first index of the input
         )
-        #import ipdb
-        #ipdb.set_trace()
         sizes_out = [self.current_dims[fixed_fields[0]][0]//3-1, self.current_dims[fixed_fields[0]][0]//3-2, self.current_dims[fixed_fields[0]][0]//3-3, 3,3 ]
         for i,(s,f) in enumerate(zip(sizes_out, out)):
             self.current_dims.insert(f, n_dims + i, s)
         del self.current_dims[fixed_fields[0]]
-        #self.current_dims.replace(fixed_fields, out)
         self.layers.append(wrap_around_fixed)
 
 
@@ -628,7 +604,7 @@ class BoltzmannGeneratorBuilder:
             if group not in self.param_groups:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
-            ### remove duplicate parameters if parameters are shared between layers:
+            # remove duplicate parameters if parameters are shared between layers:
             self.param_groups[group] = list(set(self.param_groups[group]))
 
 
