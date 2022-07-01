@@ -1,6 +1,7 @@
 """High-level Builder API for Boltzmann generators."""
 
 import warnings
+from typing import Mapping, Sequence
 
 import numpy as np
 import torch

@@ -1,7 +1,7 @@
 import warnings
 
 import torch
-from ..nn.periodic import WrapPeriodic, WrapDistances
+from ..nn.periodic import WrapPeriodic
 import numpy as np
 from bgflow.factory.GNN_factory import CustomTransformerEncoderLayer
 import traceback
