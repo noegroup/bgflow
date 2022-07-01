@@ -1,3 +1,9 @@
+"""Tools to build graph neural networks using the nequip and allegro libraries.
+These tools are not used directly by the conditioner factories.
+Instead, the user constructs a GNN instance (an instance of `NequipWrapper`) via the functions in this module.
+This GNN instance is then passed to the factory.
+"""
+
 import nequip
 import allegro
 from allegro.nn._allegro import Allegro_Module
@@ -17,6 +23,8 @@ from torch.nn.modules.linear import Linear
 from torch.nn.modules.normalization import LayerNorm
 from typing import Optional, Union, Callable
 
+
+__all__ = ["NormalizedBasis", "CustomTransformerEncoderLayer", "make_allegro_config_dict"]
 
 
 # define the Normalized Basis that is also shifted a bit to increase stability:
@@ -237,7 +245,7 @@ def make_allegro_config_dict(**kwargs):
     GNN_feature_dim = kwargs["GNN_feature_dim"]
     latent_resnet = kwargs["latent_resnet"]
     GNN_scope = kwargs["GNN_scope"]
-             
+
     base_dict =   {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
                                     {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
 
