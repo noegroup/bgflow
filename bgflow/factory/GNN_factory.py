@@ -342,7 +342,7 @@ def make_allegro_config_dict(**kwargs):
     return dict
 
 
-allegro_config_dict = make_allegro_config_dict(**allegro_hparams)
+#allegro_config_dict = make_allegro_config_dict(**allegro_hparams)
 
 nequip_hparams = {
     "r_max": 3.2,
@@ -438,7 +438,7 @@ def make_nequip_config_dict(**kwargs):  ###rename to make_nequip_config_dict
     return dict
 
 
-nequip_config_dict = make_nequip_config_dict(**nequip_hparams)
+#nequip_config_dict = make_nequip_config_dict(**nequip_hparams)
 
 class NequipWrapper(torch.nn.Module):
     def __init__(
