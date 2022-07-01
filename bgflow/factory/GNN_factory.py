@@ -5,8 +5,6 @@ This GNN instance is then passed to the factory.
 """
 
 import nequip
-import allegro
-from allegro.nn._allegro import Allegro_Module
 from nequip.nn import SequentialGraphNetwork
 from nequip.nn.radial_basis import BesselBasis
 from nequip.nn.embedding import (
@@ -230,6 +228,8 @@ allegro_hparams = {
 
 
 def make_allegro_config_dict(**kwargs):
+    import allegro
+    from allegro.nn._allegro import Allegro_Module
     r_max = kwargs["r_max"]
     num_types = kwargs["num_types"]
     num_basis = kwargs["num_basis"]

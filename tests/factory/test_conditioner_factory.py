@@ -10,12 +10,11 @@ from bgflow.nn.periodic import WrapDistances
 
 try:
     import nequip
-    import allegro
     GNN_LIBRARIES_IMPORTED = True
 except ImportError:
     GNN_LIBRARIES_IMPORTED = False
 
-pytestmark = pytest.mark.skipif(not GNN_LIBRARIES_IMPORTED, reason="tests require allegro and nequip libraries")
+pytestmark = pytest.mark.skipif(not GNN_LIBRARIES_IMPORTED, reason="tests require nequip library")
 
 
 @pytest.mark.parametrize(
@@ -98,14 +97,13 @@ def test_GNN(ala2, crd_trafo_unwhitened, conditioner, use_checkpointing, attenti
     shape_info = ShapeDictionary.from_coordinate_transform(crd_trafo_unwhitened)
 
     if conditioner == "allegro":
+        pytest.importorskip("allegro")
         from bgflow.factory.GNN_factory import allegro_config_dict as config_dict, allegro_hparams as hparams, \
             make_allegro_config_dict as make_config_dict
 
     if conditioner == "nequip":
         from bgflow.factory.GNN_factory import nequip_config_dict as config_dict, nequip_hparams as hparams, \
             make_nequip_config_dict as make_config_dict
-
-
 
     if conditioner in ["allegro", "nequip"]:
         ### gather some data to initialize the RBF to be normalized
