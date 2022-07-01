@@ -207,8 +207,6 @@ class WrapFlow(Flow):
         inp = (xs[i] for i in self._indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._indices]
         *yi, dlogp = self._flow(*inp, **kwargs)
-        #import ipdb
-        #ipdb.set_trace()
         for i in self._argsort_out_indices:
             index = self._out_indices[i]
             output.insert(index, yi[i])

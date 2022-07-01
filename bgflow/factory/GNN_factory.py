@@ -3,7 +3,6 @@ import allegro
 from allegro.nn._allegro import Allegro_Module
 from nequip.nn import SequentialGraphNetwork
 from nequip.nn.radial_basis import BesselBasis
-from ipdb import set_trace as bp
 from nequip.nn.embedding import (
     OneHotAtomEncoding
 )
