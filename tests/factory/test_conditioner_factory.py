@@ -98,13 +98,12 @@ def test_GNN(ala2, crd_trafo_unwhitened, conditioner, use_checkpointing, attenti
 
     if conditioner == "allegro":
         pytest.importorskip("allegro")
-        from bgflow.factory.GNN_factory import allegro_config_dict as config_dict, allegro_hparams as hparams, \
-            make_allegro_config_dict as make_config_dict
+        from bgflow.factory.GNN_factory import allegro_hparams as hparams, make_allegro_config_dict as make_config_dict
 
     if conditioner == "nequip":
-        from bgflow.factory.GNN_factory import nequip_config_dict as config_dict, nequip_hparams as hparams, \
-            make_nequip_config_dict as make_config_dict
+        from bgflow.factory.GNN_factory import nequip_hparams as hparams, make_nequip_config_dict as make_config_dict
 
+    config_dict = make_config_dict(**hparams)
     if conditioner in ["allegro", "nequip"]:
         ### gather some data to initialize the RBF to be normalized
         distances_net = WrapDistances(torch.nn.Identity())
