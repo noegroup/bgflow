@@ -3,7 +3,6 @@ import warnings
 import torch
 from ..nn.periodic import WrapPeriodic
 import numpy as np
-from bgflow.factory.GNN_factory import CustomTransformerEncoderLayer
 import traceback
 import bgflow as bg
 from torch.utils.checkpoint import checkpoint
@@ -91,6 +90,8 @@ class GNNConditioner(torch.nn.Module):
     then apply dense net on (periodic || nonperiodic || GNN outputs)
     '''
     def __init__(self, dim_in, dim_out, hidden, activation, GNN_output_dim, **kwargs):
+        from bgflow.factory.GNN_factory import CustomTransformerEncoderLayer
+
         super().__init__()
         self.GNN_output_dim = GNN_output_dim
         self.attention_level = kwargs["attention_level"]
