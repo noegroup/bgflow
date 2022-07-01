@@ -520,6 +520,6 @@ class BoltzmannGeneratorBuilder:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
             # remove duplicate parameters if parameters are shared between layers:
-            self.param_groups[group] = list(set(self.param_groups[group]))
+            # self.param_groups[group] = list(set(self.param_groups[group]))
 
 
