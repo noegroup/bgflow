@@ -1,9 +1,6 @@
 import torch
 import numpy as np
 
-from tqdm import tqdm
-
-
 import warnings
 
 from bgflow.utils.types import assert_numpy
@@ -97,7 +94,8 @@ class KLTrainer(object):
         n_print=0,
         temperature=1.0,
         schedulers=(),
-        clip_forces=None
+        clip_forces=None,
+        progress_bar=lambda x:x
     ):
         """
         Train the network.
@@ -125,6 +123,8 @@ class KLTrainer(object):
         schedulers : iterable
             A list of pairs (int, scheduler), where the integer specifies the number of iterations between
             steps of the scheduler. Scheduler steps are invoked before the optimization step.
+        progress_bar : callable
+            To show a progress bar, pass `progress_bar = tqdm.auto.tqdm`
 
         Returns
         -------
@@ -145,7 +145,7 @@ class KLTrainer(object):
         if isinstance(testdata, torch.Tensor):
             testdata = DataSetSampler(testdata)
 
-        for iter in tqdm(range(n_iter)):
+        for iter in progress_bar(range(n_iter)):
             # invoke schedulers
             for interval, scheduler in schedulers:
                 if iter % interval == 0:
