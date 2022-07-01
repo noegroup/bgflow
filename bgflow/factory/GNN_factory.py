@@ -211,7 +211,7 @@ allegro_hparams = {
 "num_layers" : 3,
 "env_embed_multiplicity" : 32 ,
 "latent_dim" : 32,
-"two_body_latent_indermediate_dims" : [128, 128, 128],
+"two_body_latent_intermediate_dims" : [128, 128, 128],
 "nonscalars_include_parity" : False,
 "irreps_edge_sh" :  '1x0e+1x1o+1x2e', # embed direction vector to only vectors and scalar tensor would be :'1x0e+1x1o'
 "RBF_distance_offset" : 1. ,
@@ -230,7 +230,7 @@ def make_allegro_config_dict(**kwargs):
     num_layers = kwargs["num_layers"]
     env_embed_multiplicity = kwargs["env_embed_multiplicity"]
     latent_dim = kwargs["latent_dim"]
-    two_body_latent_indermediate_dims = kwargs["two_body_latent_indermediate_dims"]
+    two_body_latent_intermediate_dims = kwargs["two_body_latent_intermediate_dims"]
     nonscalars_include_parity = kwargs["nonscalars_include_parity"]
     irreps_edge_sh = kwargs["irreps_edge_sh"]
     RBF_distance_offset = kwargs["RBF_distance_offset"]
@@ -284,7 +284,7 @@ def make_allegro_config_dict(**kwargs):
                                                                 'mlp_initialization': 'uniform',
                                                                 'mlp_dropout_p': 0.0,
                                                                 'mlp_batchnorm': False,
-                                                                'mlp_latent_dimensions': [*two_body_latent_indermediate_dims, latent_dim]},
+                                                                'mlp_latent_dimensions': [*two_body_latent_intermediate_dims, latent_dim]},
                                      'env_embed': allegro.nn._fc.ScalarMLPFunction,
                                      'env_embed_kwargs': {'mlp_nonlinearity': None,
                                                           'mlp_initialization': 'uniform',
