@@ -279,3 +279,4 @@ class MeanFreeNormalDistribution(Energy, Sampler):
         x = x.view(-1, self._n_particles, self._spacial_dims)
         x = x - torch.mean(x, dim=1, keepdim=True)
         return x
+

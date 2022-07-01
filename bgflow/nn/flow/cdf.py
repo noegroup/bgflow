@@ -33,6 +33,7 @@ class CDFTransform(Flow):
         logdet = self.distribution.log_prob(x)
         if self._eps is not None:
             logdet = logdet.clamp_min(-1/self._eps)
+
         return y, logdet.sum(dim=-1, keepdim=True)
 
     def _inverse(self, x, *args, **kwargs):

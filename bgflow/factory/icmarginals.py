@@ -37,6 +37,7 @@ class InternalCoordinateMarginals(dict):
         self.current_dims = current_dims
 
         super().__init__()
+        # bonds
         if bonds in current_dims:
             self[bonds] = TruncatedNormalDistribution(
                 mu=bond_mu*torch.ones(current_dims[bonds], **ctx),
@@ -54,7 +55,7 @@ class InternalCoordinateMarginals(dict):
                 upper_bound=torch.as_tensor(angle_upper, **ctx),
             )
 
-        # angles
+        # torsions
         if torsions in current_dims:
             self[torsions] = SloppyUniform(
                 low=torsion_lower*torch.ones(current_dims[torsions], **ctx),
@@ -106,21 +107,23 @@ class InternalCoordinateMarginals(dict):
             self,
             data,
             coordinate_transform,
-            bond_lower=1e-5,
-            bond_upper=np.infty,
-            angle_lower=1e-5,
+            bond_lower=0.01,
+            bond_upper=1,
+            angle_lower=0.01,
             angle_upper=1.0,
             torsion_lower=0.0,
             torsion_upper=1.0,
-            torsion_bins=50,
             constrained_bond_indices=None,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=None,
+            torsions=None
     ):
-        bond_values, angle_values, torsion_values, *_ = coordinate_transform.forward(data)
+        with torch.no_grad():
+          bond_values, angle_values, torsion_values, *_ = coordinate_transform.forward(data)
 
         if bonds in self.current_dims:
+            assert bond_lower < bond_values.min(), "Set a smaller bond_lower"
+            assert bond_upper > bond_values.max(), "Set a larger bond_upper"
             bond_mu = bond_values.mean(axis=0)
             bond_sigma = bond_values.std(axis=0)
             if constrained_bond_indices is not None:
@@ -135,6 +138,8 @@ class InternalCoordinateMarginals(dict):
             )
 
         if angles in self.current_dims:
+            assert angle_lower < angle_values.min(), "Set a smaller angle_lower"
+            assert angle_upper > angle_values.max(), "Set a larger angle_upper"
             angle_mu = angle_values.mean(axis=0)
             angle_sigma = angle_values.std(axis=0)
             self[angles] = TruncatedNormalDistribution(
@@ -143,11 +148,6 @@ class InternalCoordinateMarginals(dict):
                 lower_bound=torch.as_tensor(angle_lower, **self.ctx),
                 upper_bound=torch.as_tensor(angle_upper, **self.ctx),
             )
-
-#        torsion_values = torsion_values.detach().cpu().numpy()
-#        density, edges = np.histogram(torsion_values, range=(torsion_lower, torsion_upper), density=True)
-#        density
-#        edges
 
         if torsions in self.current_dims:
             torsion_mu = torsion_values.mean(axis=0)
@@ -158,4 +158,3 @@ class InternalCoordinateMarginals(dict):
                 lower_bound=torch.as_tensor(torsion_lower, **self.ctx),
                 upper_bound=torch.as_tensor(torsion_upper, **self.ctx),
             )
-

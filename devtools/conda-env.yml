@@ -16,3 +16,4 @@ dependencies:
   - openmmtools
   - pytorch
   - jax
+  - nequip

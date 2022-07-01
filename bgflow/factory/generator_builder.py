@@ -289,14 +289,13 @@ class BoltzmannGeneratorBuilder:
         if not all(ckwargs == conditioner_kwargss[0] for ckwargs in conditioner_kwargss):
             raise ValueError("Fields with different conditioner_kwargs cannot be transformed together.")
         conditioner_kwargs = conditioner_kwargss[0]
-
         conditioners = make_conditioners(
             transformer_type=transformer_type,
             conditioner_type=conditioner_type,
             transformer_kwargs=transformer_kwargs,
             what=what,
             on=on,
-            shape_info=self.current_dims,
+            shape_info=self.current_dims.copy(),
             **conditioner_kwargs
         )
         transformer = make_transformer(
@@ -334,6 +333,7 @@ class BoltzmannGeneratorBuilder:
         )
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
+    
 
     def add_layer(self, flow, what=None, inverse=False, param_groups=tuple()):
         """Add a flow layer.
@@ -434,6 +434,9 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
+
+
+
     def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False):
         if len(cdfs) == 0:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
@@ -509,11 +512,14 @@ class BoltzmannGeneratorBuilder:
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
 
+
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)
         for group in param_groups:
             if group not in self.param_groups:
                 self.param_groups[group] = []
             self.param_groups[group].extend(parameters)
+            # remove duplicate parameters if parameters are shared between layers:
+            # self.param_groups[group] = list(set(self.param_groups[group]))
 
 
