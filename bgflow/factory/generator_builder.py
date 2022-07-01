@@ -1,7 +1,6 @@
 """High-level Builder API for Boltzmann generators."""
 
 import warnings
-from typing import Mapping, Sequence
 
 import numpy as np
 import torch
@@ -9,13 +8,11 @@ import logging
 from ..nn.flow.sequential import SequentialFlow
 from ..nn.flow.coupling import SetConstantFlow
 from ..nn.flow.transformer.spline import ConditionalSplineTransformer
-from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow, CloneFlow
+from ..nn.flow.coupling import CouplingFlow, SplitFlow, WrapFlow, MergeFlow
 from ..nn.flow.crd_transform.ic import GlobalInternalCoordinateTransformation
 from ..nn.flow.inverted import InverseFlow
 from ..nn.flow.cdf import CDFTransform
 from ..nn.flow.base import Flow
-from ..nn.flow.modulo import IncreaseMultiplicityFlow
-from ..nn.flow.modulo import CircularShiftFlow
 from ..nn.flow.torchtransform import TorchTransform
 from ..distribution.distributions import UniformDistribution
 from ..distribution.normal import NormalDistribution
@@ -336,55 +333,6 @@ class BoltzmannGeneratorBuilder:
         logger.info(f"  + Set Constant: {what} at index {index}")
         self.layers.append(fix_flow)
     
-    
-    def add_remove_constant(self, what, tensor):
-        index = self.current_dims.index(what)
-        fix_flow = InverseFlow(SetConstantFlow(
-            indices=[index],
-            values=[tensor.to(**self.ctx)]
-        )
-        )
-        del self.current_dims[what]
-        logger.info(f"  + Removed Constant: {what} at index {index}")
-        self.layers.append(fix_flow)
-        
-    
-    
-    def add_clone(self, what, to):
-
-        ''' take a field in builder.current_dims and clone it. you now have this field twice.
-            You can for example do a coordinate transform on this field while keeping the original representation untouched.
-        '''
-        if what not in self.current_dims:
-            raise ValueError(f"Field {what} is not in builder.current_dims")
-
-        self.current_dims[to] = self.current_dims[what]
-        index_what = self.current_dims.index(what)
-        index_to = self.current_dims.index(to)
-        clone_flow = CloneFlow(
-        )
-        wrap_flow = WrapFlow(clone_flow, indices=(index_what,), out_indices=(index_what,index_to))
-        
-        
-        
-        logger.info(f"  + cloned: {what} at index {index_to}")
-        self.layers.append(wrap_flow)
-        
-    def remove_clone(self, what, to):
-        """ inverse of add_clone"""
-        if what not in self.current_dims:
-            raise ValueError(f"Field {what} is not in builder.current_dims")
-        
-        index_what = self.current_dims.index(what)
-        index_to = self.current_dims.index(to)
-        clone_flow = CloneFlow(
-        )
-        wrap_flow = WrapFlow(clone_flow, indices=(index_what,), out_indices=(index_what,index_to))
-        inverse_wrap_flow = InverseFlow(wrap_flow)
-        
-        del self.current_dims[to]
-        logger.info(f"  + removed clone: {what} at index {index_to}")
-        self.layers.append(inverse_wrap_flow)
 
     def add_layer(self, flow, what=None, inverse=False, param_groups=tuple()):
         """Add a flow layer.
@@ -485,35 +433,10 @@ class BoltzmannGeneratorBuilder:
         self.current_dims.merge(ic_fields, out)
         self.layers.append(wrap_around_ics)
 
-    def add_map_to_ICs(
-            self,
-            coordinate_transform,
-            fixed_origin_and_rotation=True,
-            bonds=BONDS,
-            angles=ANGLES,
-            torsions=TORSIONS,
-            fixed=FIXED,
-            origin=ORIGIN,
-            rotation=ROTATION,
-            out=None
-    ):
-        fixed_fields = [FIXED]
-        indices = [self.current_dims.index(fixed) for fixed in fixed_fields]
-        n_dims = len(self.current_dims) - 1
-        wrap_around_fixed = WrapFlow(
-            coordinate_transform,
-            indices=indices,
-            out_indices=(n_dims, n_dims + 1, n_dims + 2, n_dims + 3, n_dims + 4)  # first index of the input
-        )
-        sizes_out = [self.current_dims[fixed_fields[0]][0]//3-1, self.current_dims[fixed_fields[0]][0]//3-2, self.current_dims[fixed_fields[0]][0]//3-3, 3,3 ]
-        for i,(s,f) in enumerate(zip(sizes_out, out)):
-            self.current_dims.insert(f, n_dims + i, s)
-        del self.current_dims[fixed_fields[0]]
-        self.layers.append(wrap_around_fixed)
 
 
 
-    def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False, jac = True):
+    def add_map_to_ic_domains(self, cdfs=dict(), return_layers=False):
         if len(cdfs) == 0:
             cdfs = InternalCoordinateMarginals(self.current_dims, self.ctx)
         new_layers = []
@@ -522,7 +445,7 @@ class BoltzmannGeneratorBuilder:
                 if isinstance(cdfs[field], Flow):
                     icdf_flow = cdfs[field]
                 else:
-                    icdf_flow = InverseFlow(CDFTransform(cdfs[field], jac = jac))
+                    icdf_flow = InverseFlow(CDFTransform(cdfs[field]))
                 flow = WrapFlow(icdf_flow, (self.current_dims.index(field),))
                 self.layers.append(flow)
                 new_layers.append(icdf_flow)
@@ -588,15 +511,6 @@ class BoltzmannGeneratorBuilder:
         affine = TorchTransform(torch.distributions.AffineTransform(loc=loc, scale=scale), 1)
         return self.add_layer(affine, what=(torsions, ))
 
-    def add_torsion_multiplicities(self, multiplicities, torsions=TORSIONS):
-        """TODO:docs"""
-        fmod_layer = IncreaseMultiplicityFlow(multiplicities).to(**self.ctx)
-        return self.add_layer(fmod_layer, what=(torsions, ))
-
-    def add_torsion_shifts(self, shifts, torsions=TORSIONS):
-        """TODO:docs"""
-        fmod_layer = CircularShiftFlow(shifts).to(**self.ctx)
-        return self.add_layer(fmod_layer, what=(torsions, ))
 
     def _add_to_param_groups(self, parameters, param_groups):
         parameters = list(parameters)

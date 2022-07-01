@@ -1,11 +1,12 @@
 import warnings
 
-from ipdb import set_trace as bp
 import torch
 from ..nn.periodic import WrapPeriodic, WrapDistances
 import numpy as np
 from bgflow.factory.GNN_factory import CustomTransformerEncoderLayer
 import traceback
+import bgflow as bg
+from torch.utils.checkpoint import checkpoint
 __all__ = ["make_conditioners"]
 
 
@@ -79,101 +80,8 @@ def _make_dense_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch
         activation=activation
     )
 
-### this is actually not needed anymore.
-class WrapDistancesConditioner(torch.nn.Module):
-    def __init__(self, dim_in, dim_out, hidden, activation, **kwargs):
-        super().__init__()
-        self.attention_level = kwargs["attention_level"]
-        self.shape_info = kwargs["shape_info"]
-        self.on = kwargs["on"]
-        self.cart_indices = self.shape_info.cartesian_indices(self.on)
-        self.N = kwargs["num_basis"]  # number of RBFs
-        self.c = kwargs["r_max"]  # cutoff
-        self.p = kwargs["env_p"]  # envelope parameter
 
 
-        self.labels = []
-        for field in self.on:
-            if field.is_circular:
-                self.labels = (["circular"]*self.shape_info[field][0]*2) + self.labels  #add the sin, cos indices on the left
-            elif field.is_cartesian:
-                self.labels.extend(["cartesian"] * self.shape_info[field][0])
-            else:
-                self.labels.extend(["regular"] * self.shape_info[field][0])
-        self.cart_indices_after_periodic = np.where(np.array(self.labels) == "cartesian")[0]
-
-
-        self.wrapdistances = WrapDistances(torch.nn.Identity(), indices=self.cart_indices_after_periodic)
-        self.wrapdistancespure = WrapDistances(torch.nn.Identity())
-        self.n_cart = len(self.cart_indices)
-
-        self.dim_dense_in = int(dim_in - self.n_cart + (((self.n_cart // 3) ** 2 - ((self.n_cart // 3))) / 2)*self.N)
-        self.densenet = bg.DenseNet(
-            [self.dim_dense_in, *hidden, dim_out],
-            activation=activation
-        )
-        wavenumbers = torch.Tensor([np.pi*(i+1)/self.c for i in range(self.N)])
-        self.wavenumbers = torch.nn.Parameter(wavenumbers)
-        if self.attention_level == "MHA":
-            self.MHA = torch.nn.MultiheadAttention(embed_dim = self.N, num_heads = 8, batch_first = True)
-            self.qkv_proj = torch.nn.Linear(self.N, 3 * self.N)
-
-        if self.attention_level == "Transformer":
-            self.encoder_layer = CustomTransformerEncoderLayer(d_model=self.N,
-                                                                  nhead=2,
-                                                                  batch_first = True,
-                                                                  dropout=0.,
-                                                                  dim_feedforward=64)
-            self.transformer_encoder = torch.nn.TransformerEncoder(self.encoder_layer, num_layers=2)
-
-
-
-    def bessel(self, x, wavenumber, c):
-        return ((2 / c) ** 0.5 * torch.sin(wavenumber * x) / x)
-    def envelope(self, x, c, p):
-        #taken from the paper: https://arxiv.org/pdf/2003.03123.pdf
-        x = x/c
-        return(1 - ((p+1)*(p+2))/2*x**p + p*(p+2)*x**(p+1) - (p*(p+1))/2*x**(p+2))
-    def forward(self, x):
-        x_cart = x[:,self.cart_indices_after_periodic]
-        index = torch.ones(x.shape[1], dtype=bool)
-        index[self.cart_indices_after_periodic] = False
-        x_rest = x[:,index]
-        distances = self.wrapdistancespure(x_cart)
-        binned_distances = self.bessel(distances[...,None], self.wavenumbers, self.c)
-        u = self.envelope(distances, c=self.c, p=self.p)
-
-        if self.attention_level == "MHA":
-            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances)
-            qkv = self.qkv_proj(binned_enveloped_distances)
-            q, k, v = qkv.chunk(3, dim=-1)
-            bondwise_output,_ = self.MHA(q,k,v, need_weights = False)
-            batchsize = x_rest.shape[0]
-
-            distances_output = bondwise_output.reshape(batchsize, -1)
-        #### end attention on atom features
-        elif self.attention_level == "Transformer":
-            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances)
-            bondwise_output = self.transformer_encoder(binned_enveloped_distances)
-            batchsize = x_rest.shape[0]
-            distances_output = bondwise_output.reshape(batchsize, -1)
-        elif self.attention_level is None:
-            binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances).view(x.shape[0], -1)
-            distances_output = binned_enveloped_distances
-        else:
-            raise ValueError("unrecognized attention level")
-        inputs_and_distances = torch.cat([x_rest, distances_output], dim = -1)
-        return self.densenet(inputs_and_distances)
-
-
-### this is actually not needed anymore.
-def _make_wrapdistances_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.nn.SiLU(), **kwargs):
-    wrapdistances_conditioner = WrapDistancesConditioner(dim_in, dim_out, hidden, activation, **kwargs)
-    return wrapdistances_conditioner
-
-
-import bgflow as bg
-from torch.utils.checkpoint import checkpoint
 
 
 class GNNConditioner(torch.nn.Module):
@@ -314,8 +222,7 @@ def _make_GNN_conditioner(dim_in, dim_out, hidden=(128, 128), activation=torch.n
 
 CONDITIONER_FACTORIES = {
     "GNN": _make_GNN_conditioner,
-    "dense": _make_dense_conditioner,
-    "wrapdistances": _make_wrapdistances_conditioner,### this is actually not needed anymore.
+    "dense": _make_dense_conditioner
 }
 
 

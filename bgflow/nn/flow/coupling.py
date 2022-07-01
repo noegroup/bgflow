@@ -218,54 +218,10 @@ class WrapFlow(Flow):
         inp = (xs[i] for i in self._out_indices)
         output = [xs[i] for i in range(len(xs)) if i not in self._out_indices]
         *yi, dlogp = self._flow(*inp, inverse=True, **kwargs)
-        #import ipdb
-        #ipdb.set_trace()
         for i in self._argsort_indices:
             index = self._indices[i]
             output.insert(index, yi[i])
         return (*tuple(output), dlogp)
-
-
-class CloneFlow(Flow):
-    """Split the input tensor into multiple output tensors.
-
-    Parameters
-    ----------
-    *sizes_or_indices : int or sequence of ints
-        If int: lengths of the output tensors in dimension `dim`.
-        Otherwise: indices of the input tensor that are mapped each output tensor.
-
-    dim : int
-        Dimension along which to split.
-
-    Raises
-    ------
-    ValueError
-        If the tensor is to short for the desired split in dimension `dim`.
-
-    Notes
-    -----
-    Specifying the size or indices of the last tensor is optional. If the tensor is longer
-    than the sum of all sizes, the last size will be inferred from the input
-    dimensions.
-    """
-    def __init__(self):
-        super().__init__()
-        
-    def _forward(self, x, **kwargs):
-        #import ipdb
-        #ipdb.set_trace()
-        x_clone = torch.clone(x)#.detach()
-        return (x, x_clone, self._dlogp(x))
-
-    def _inverse(self, *xs, **kwargs):
-        return xs[0], self._dlogp(xs[0])
-
-    def _dlogp(self, x):
-        return torch.zeros(x.shape[0],1).to(x)
-
-
-
 
 
 

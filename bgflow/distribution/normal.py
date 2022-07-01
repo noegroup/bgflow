@@ -1,13 +1,11 @@
 import torch
 import numpy as np
-from torch.distributions import VonMises
-import warnings
 
 from .energy.base import Energy
 from .sampling.base import Sampler
 
 
-__all__ = ["NormalDistribution", "TruncatedNormalDistribution", "MeanFreeNormalDistribution", "CircularNormalDistribution"]
+__all__ = ["NormalDistribution", "TruncatedNormalDistribution", "MeanFreeNormalDistribution"]
 
 
 def _is_symmetric_matrix(m):
@@ -282,43 +280,3 @@ class MeanFreeNormalDistribution(Energy, Sampler):
         x = x - torch.mean(x, dim=1, keepdim=True)
         return x
 
-
-class CircularNormalDistribution(Energy, Sampler):
-# TODO: test
-    """ Wrapper for pytorch VonMises distribution.
-    Output is mapped to the [0,1] interval instead of the original [-2pi,2pi].
-
-    Sampling from this distribution becomes extremely slow for big values of sigma (above 1),
-    when the distribution becomes almost uniform over the [0,1] interval."""
-
-    def __init__(self, mu: torch.Tensor, sigma):
-        assert type(mu) is torch.Tensor
-        if torch.any(torch.as_tensor(sigma > 3.6)):
-            warnings.warn("CircularNormalDistribution with sigma greater than 1 can be quite slow."
-              "Use UniformDistribution instead")
-        loc = 2 * np.pi * (mu - 0.5)
-        concentration = (2 * np.pi * sigma)**(-2)
-        self._delegate = VonMises(loc, concentration)
-        super().__init__(dim=mu.shape)
-
-    def _sample(self, n_samples):
-        if isinstance(n_samples, int):
-            event_shape = torch.Size([n_samples])
-        else:
-            event_shape = torch.Size(n_samples)
-        return self._delegate.sample(event_shape) / (2 * np.pi) + 0.5
-
-    def _sample_with_temperature(self, n_samples, temperature):
-        # TODO is this trivial?
-        raise NotImplementedError()
-
-    def _energy(self, x):
-        return -self._delegate.log_prob(2 * np.pi * (x - 0.5)).sum(dim=-1, keepdim=True)
-
-    def __getattr__(self, name):
-        try:
-            return getattr(self._delegate, name)
-        except AttributeError as e:
-            msg = str(e)
-            msg = msg.replace(self._delegate.__class__.__name__, "CircularNormalDistribution")
-            raise AttributeError(msg)
