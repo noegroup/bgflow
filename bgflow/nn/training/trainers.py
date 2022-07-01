@@ -1,7 +1,11 @@
 import torch
 import numpy as np
+
 from tqdm import tqdm
-from ipdb import set_trace as bp
+
+
+import warnings
+
 from bgflow.utils.types import assert_numpy
 from bgflow.distribution.sampling import DataSetSampler
 
@@ -129,6 +133,12 @@ class KLTrainer(object):
             w_likelihood = self.w_likelihood
         if w_energy is None:
             w_energy = self.w_energy
+        if clip_forces is not None:
+            warnings.warn(
+                "clip_forces is deprecated and will be ignored. "
+                "Use GradientClippedEnergy instances instead",
+                DeprecationWarning
+            )
 
         if isinstance(data, torch.Tensor):
             data = DataSetSampler(data)
@@ -151,9 +161,6 @@ class KLTrainer(object):
                 if w_energy > 0:
                     l = w_energy / (w_likelihood + w_energy)
                     (l * kll).backward(retain_graph=True)
-                # constrain forces
-                if clip_forces is not None:
-                    torch.nn.utils.clip_grad_value_(self.bg.parameters(), clip_forces)
 
             if self.train_likelihood:
                 batch = data.sample(batchsize)
@@ -192,8 +199,7 @@ class KLTrainer(object):
                 print("found nan in grad; skipping optimization step")
             else:
                 self.optim.step()
-                #bp()
-                #pass
+
 
     def losses(self, n_smooth=1):
         return self.reporter.losses(n_smooth=n_smooth)

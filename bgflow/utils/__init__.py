@@ -65,9 +65,20 @@ Training utilities
     IndexBatchIterator
     LossReporter
 
+
+===============================================================================
+Training utilities
+===============================================================================
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    ClipGradient
+
 """
 
-from .train import IndexBatchIterator, LossReporter
+from .train import IndexBatchIterator, LossReporter, ClipGradient
 from .shape import tile
 from .types import *
 from .autograd import *

@@ -59,8 +59,7 @@ def ala2():
         rigidWater=True
     )
     system.energy_model = OpenMMEnergy(
-        66,
-        OpenMMBridge(
+        bridge=OpenMMBridge(
             system.system,
             mm.LangevinIntegrator(300, 1, 0.001),
             n_workers=1
@@ -118,9 +117,11 @@ def crd_trafo(ala2, ctx):
     crd_transform = MixedCoordinateTransformation(torch.tensor(ala2.xyz, **ctx), z_matrix, fixed_atoms)
     return crd_transform
 
+
 @pytest.fixture()
 def crd_trafo_unwhitened(ala2, ctx):
     z_matrix = ala2.system.z_matrix
     fixed_atoms = ala2.system.rigid_block
     crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed_atoms)
     return crd_transform
+

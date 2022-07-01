@@ -22,7 +22,7 @@ def test_mcmc(ctx, proposal, temperatures):
         import tqdm
         progress_bar = tqdm.tqdm
     except ImportError:
-        progress_bar = None
+        progress_bar = lambda x: x
     target = NormalDistribution(4, 3.0*torch.ones(4, **ctx))
     temperatures = temperatures.to(**ctx)
     # for testing efficiency we have a second batch dimension
