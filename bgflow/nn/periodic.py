@@ -1,7 +1,6 @@
 
 import torch
 import numpy as np
-
 __all__ = ["WrapPeriodic"]
 
 
@@ -34,7 +33,7 @@ class WrapPeriodic(torch.nn.Module):
         y = x[..., indices]
         cos = torch.cos(2 * np.pi * (y - self.left) / (self.right - self.left))
         sin = torch.sin(2 * np.pi * (y - self.left) / (self.right - self.left))
-        x = torch.cat([x[..., other_indices], cos, sin], dim=-1)
+        x = torch.cat([cos, sin, x[..., other_indices]], dim=-1)
         return self.net.forward(x)
 
 
@@ -46,14 +45,14 @@ class WrapDistances(torch.nn.Module):
         self.left = left
         self.right = right
         self.indices = indices
-        import warnings
-        warnings.warn("WrapDistances is not tested!")
 
     def forward(self, x):
         indices = np.arange(x.shape[-1])[self.indices]
         other_indices = np.setdiff1d(np.arange(x.shape[-1]), indices)
         y = x[..., indices].view(x.shape[0],-1,3)
         distance_matrix = torch.cdist(y,y)
-        distances = distance_matrix.view(x.shape[0], -1)
+        mask = ~torch.tril(torch.ones_like(distance_matrix)).bool()
+        
+        distances = distance_matrix[mask].view(x.shape[0], -1)
         x = torch.cat([x[..., other_indices], distances], dim=-1)
         return self.net.forward(x)

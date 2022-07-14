@@ -1,7 +1,6 @@
 """Tensor info objects and constants (dimension and topology) used in factories.
 """
 
-
 import numpy as np
 from ..nn.flow.crd_transform import GlobalInternalCoordinateTransformation
 from typing import Sequence, Union
@@ -18,8 +17,8 @@ __all__ = [
 class TensorInfo(
     namedtuple(
         "TensorInfo",
-        ["name", "is_circular"],
-        defaults=(False, )
+        ["name", "is_circular", "is_cartesian"],
+        defaults=(False, False)
         # allow specifying bounds?
     )
 ):
@@ -36,27 +35,28 @@ class TensorInfo(
 
 
 #: Default tensor info for bonds
-BONDS = TensorInfo("BONDS", False)
+BONDS = TensorInfo("BONDS", False, False)
 #: Default tensor info for angles
-ANGLES = TensorInfo("ANGLES", False)
+ANGLES = TensorInfo("ANGLES", False, False)
 #: Default tensor info for torsions
-TORSIONS = TensorInfo("TORSIONS", True)
+TORSIONS = TensorInfo("TORSIONS", True, False)
 #: Default tensor info for fixed atoms in relative/mixed coordinate transforms
-FIXED = TensorInfo("FIXED", False)
+FIXED = TensorInfo("FIXED", False, True)
 #: Default tensor info for global origin in global coordinate transform
-ORIGIN = TensorInfo("ORIGIN", False)
+ORIGIN = TensorInfo("ORIGIN", False, True)
 #: Default tensor info for global rotation in global coordinate transform
-ROTATION = TensorInfo("ROTATION", False)
+ROTATION = TensorInfo("ROTATION", False, False)
 #: Default tensor info for augmented dimensions
-AUGMENTED = TensorInfo("AUGMENTED", False)
+AUGMENTED = TensorInfo("AUGMENTED", False, False)
 #: Default tensor info for the target space (e.g., Cartesian atom positions)
-TARGET = TensorInfo("TARGET", False)
+TARGET = TensorInfo("TARGET", False, True)
 
 
 class ShapeDictionary(OrderedDict):
     """A dictionary of tensor shapes.
     Helper class to keep track of tensor shapes and periodicity when building a flow/Boltzmann generator.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -85,15 +85,15 @@ class ShapeDictionary(OrderedDict):
         """
         shape_info = ShapeDictionary()
         if coordinate_transform.dim_angles > 0:
-            shape_info[BONDS] = (coordinate_transform.dim_bonds - n_constraints, )
+            shape_info[BONDS] = (coordinate_transform.dim_bonds - n_constraints,)
         if coordinate_transform.dim_angles > 0:
-            shape_info[ANGLES] = (coordinate_transform.dim_angles, )
+            shape_info[ANGLES] = (coordinate_transform.dim_angles,)
         if coordinate_transform.dim_torsions > 0:
-            shape_info[TORSIONS] = (coordinate_transform.dim_torsions, )
+            shape_info[TORSIONS] = (coordinate_transform.dim_torsions,)
         if coordinate_transform.dim_fixed > 0:
-            shape_info[FIXED] = (coordinate_transform.dim_fixed, )
+            shape_info[FIXED] = (coordinate_transform.dim_fixed,)
         if dim_augmented > 0:
-            shape_info[AUGMENTED] = (dim_augmented, )
+            shape_info[AUGMENTED] = (dim_augmented,)
         if isinstance(coordinate_transform, GlobalInternalCoordinateTransformation) and not remove_origin_and_rotation:
             shape_info[ORIGIN] = (1, 3)
             shape_info[ROTATION] = (3,)
@@ -195,7 +195,7 @@ class ShapeDictionary(OrderedDict):
         assert key not in self
         self[key] = size  # append
         for i, key in enumerate(list(self)):
-            if index <= i < len(self) -1:
+            if index <= i < len(self) - 1:
                 self.move_to_end(key)
 
     def index(self, key: TensorInfo, keys: Union[None, Sequence[TensorInfo]] = None):
@@ -289,7 +289,7 @@ class ShapeDictionary(OrderedDict):
             A boolean array that contains `True` for each circular indices and `False` for others
         """
         keys = self if keys is None else keys
-        return np.concatenate([np.ones(self[key][dim])*key.is_circular for key in keys]).astype(bool)
+        return np.concatenate([np.ones(self[key][dim]) * key.is_circular for key in keys]).astype(bool)
 
     def circular_indices(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
         """Indices that are circular.
@@ -310,3 +310,62 @@ class ShapeDictionary(OrderedDict):
         keys = self if keys is None else keys
         return np.arange(self.dim_all(keys, dim))[self.is_circular(keys, dim)]
 
+    def dim_cartesian(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
+        """The total dimension of all circular tensors along a given axis `dim`.
+
+        Parameters
+        ----------
+        keys : Sequence[TensorInfo]], optional
+            The keys over which to iterate; if None, iterate over the entire dictionary.
+        dim : int, optional
+            The axis over which to sum.
+
+        Returns
+        -------
+        dim_circular : int
+            Total number of circular elements.
+        """
+        keys = self if keys is None else keys
+        return sum(self[key][dim] for key in keys if key.is_cartesian)
+
+    def dim_noncartesian(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
+        """see `dim_circular`"""
+        keys = self if keys is None else keys
+        return sum(self[key][dim] for key in keys if not key.is_cartesian)
+
+    def is_cartesian(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
+        """The total dimension of all circular tensors along a given axis `dim`.
+
+        Parameters
+        ----------
+        keys : Sequence[TensorInfo]], optional
+            The keys over which to iterate; if None, iterate over the entire dictionary.
+        dim : int, optional
+            The axis over which to sum.
+
+        Returns
+        -------
+        is_circular : np.array
+            A boolean array that contains `True` for each circular indices and `False` for others
+        """
+        keys = self if keys is None else keys
+        return np.concatenate([np.ones(self[key][dim]) * key.is_cartesian for key in keys]).astype(bool)
+
+    def cartesian_indices(self, keys: Union[None, Sequence[TensorInfo]] = None, dim: int = -1):
+        """Indices that are circular.
+
+        Parameters
+        ----------
+        keys : Sequence[TensorInfo]], optional
+            The keys over which to iterate; if None, iterate over the entire dictionary.
+        dim : int, optional
+            The axis over which to sum.
+
+        Returns
+        -------
+        circular_indices : np.array
+            An array of data type int that contains the indices of all circular elements as seen in
+            the context of all keys concatenated.
+        """
+        keys = self if keys is None else keys
+        return np.arange(self.dim_all(keys, dim))[self.is_cartesian(keys, dim)]

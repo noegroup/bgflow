@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 import numpy as np
 import torch
-from bgflow import MixedCoordinateTransformation, OpenMMBridge, OpenMMEnergy
+from bgflow import MixedCoordinateTransformation, OpenMMBridge, OpenMMEnergy, RelativeInternalCoordinateTransformation
 
 
 @pytest.fixture(
@@ -116,3 +116,12 @@ def crd_trafo(ala2, ctx):
     fixed_atoms = ala2.system.rigid_block
     crd_transform = MixedCoordinateTransformation(torch.tensor(ala2.xyz, **ctx), z_matrix, fixed_atoms)
     return crd_transform
+
+
+@pytest.fixture()
+def crd_trafo_unwhitened(ala2, ctx):
+    z_matrix = ala2.system.z_matrix
+    fixed_atoms = ala2.system.rigid_block
+    crd_transform = RelativeInternalCoordinateTransformation(z_matrix, fixed_atoms)
+    return crd_transform
+
