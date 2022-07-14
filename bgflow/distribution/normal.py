@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from torch.distributions import VonMises
+from torch.distributions import VonMises, Independent
 import warnings
 
 from .energy.base import Energy
@@ -286,7 +286,7 @@ class MeanFreeNormalDistribution(Energy, Sampler):
 class CircularNormalDistribution(Energy, Sampler):
 # TODO: test
     """ Wrapper for pytorch VonMises distribution.
-    Output is mapped to the [0,1] interval instead of the original [-2pi,2pi].
+    Output is mapped to the [0,1] interval instead of the original [-pi,pi].
 
     Sampling from this distribution becomes extremely slow for big values of sigma (above 1),
     when the distribution becomes almost uniform over the [0,1] interval."""
@@ -298,7 +298,7 @@ class CircularNormalDistribution(Energy, Sampler):
               "Use UniformDistribution instead")
         loc = 2 * np.pi * (mu - 0.5)
         concentration = (2 * np.pi * sigma)**(-2)
-        self._delegate = VonMises(loc, concentration)
+        self._delegate = Independent(VonMises(loc, concentration), 1)
         super().__init__(dim=mu.shape)
 
     def _sample(self, n_samples):
@@ -313,7 +313,7 @@ class CircularNormalDistribution(Energy, Sampler):
         raise NotImplementedError()
 
     def _energy(self, x):
-        return -self._delegate.log_prob(2 * np.pi * (x - 0.5)).sum(dim=-1, keepdim=True)
+        return -self._delegate.log_prob(2 * np.pi * (x - 0.5))
 
     def __getattr__(self, name):
         try:
