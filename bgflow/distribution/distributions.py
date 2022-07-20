@@ -90,7 +90,7 @@ class SloppyUniform(torch.nn.Module):
         try:
             return super().__getattr__(name=name)
         except AttributeError:
-            # ugly workaround so that error is raised and low and high buffers are registered
+            # workaround so that AttributeError is always raised on low and high so that buffers are registered
             if name == 'low' or name == 'high':
                 raise AttributeError(f"SloppyUniform has no attribute {name}")
             else:
