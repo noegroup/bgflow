@@ -443,9 +443,11 @@ class NequipWrapper(torch.nn.Module):
             self.GNN = nequip_GNN  # register the GNN that is to be used in the conditioner
         elif callable(nequip_GNN):
             # create a GNN from the constructor, using the kwargs
-            self.GNN = nequip_GNN(**kwargs)
+            GNN = nequip_GNN.from_parameters(**kwargs)
+            self.GNN = GNN
         self.output_field = output_field
         self.cutoff = cutoff
+
 
     # this takes as input just the cartesian coordinates of the atoms.
     def forward(self, x):
