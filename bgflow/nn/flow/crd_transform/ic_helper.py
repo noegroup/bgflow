@@ -331,12 +331,14 @@ def _to_euler_angles(x, y, z):
     """ converts a basis made of three orthonormal vectors into the corresponding proper x-y-z euler angles
         output values are
         alpha in [-pi, pi]
-        beta in [0, pi]
+        beta in [0, pi] #beta in [-1,1]
         gamma in [-pi, pi]
     """
+    import ipdb
+    #ipdb.set_trace()
     alpha = torch.atan2(z[..., 0], -z[..., 1])
     beta = z[..., 2]
-    #     beta = torch.acos(z[..., 2])
+    #beta = torch.acos(z[..., 2])
     gamma = torch.atan2(x[..., 2], y[..., 2])
     return alpha, beta, gamma
 
@@ -638,6 +640,8 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
 
             # and compute the euler angles given this basis (range is [0, pi])
             alpha, beta, gamma = _to_euler_angles(*basis)
+            import ipdb
+            #ipdb.set_trace()
 
             # now we flatten the outputs (x0, ics, euler angles) into a 9-dim output vec
             ys = torch.cat(
@@ -676,5 +680,7 @@ def init_xyz2ics(x0, x1, x2, eps=1e-7, enforce_boundaries=True, raise_warnings=T
         )
 
         dlogp = det.abs().log()
-
+    import ipdb
+    #ipdb.set_trace()
+    x0=x0.squeeze(1)
     return x0, d01, d12, a012, alpha, beta, gamma, dlogp

@@ -115,3 +115,16 @@ class UniformDistribution(TorchDistribution):
 
     def _sample_with_temperature(self, n_samples, temperature):
         return self._sample(n_samples)
+
+    def cdf(self, x):
+        return (x-self._delegate.base_dist.low)/self.domain
+
+    def icdf(self, x):
+        return x*self.domain + self._delegate.base_dist.low
+    
+    def log_prob(self, x):
+        return torch.log(1/self.domain)
+    
+    @property
+    def domain(self):
+        return self._delegate.base_dist.high - self._delegate.base_dist.low

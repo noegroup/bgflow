@@ -16,7 +16,7 @@ class LossReporter:
     """
 
     def __init__(self, *labels):
-        self._labels = labels
+        self._labels = list(labels)
         self._n_reported = len(labels)
         self._raw = [[] for _ in range(self._n_reported)]
 
@@ -43,6 +43,10 @@ class LossReporter:
 
     def recent(self, n_recent=1):
         return np.array([raw[-n_recent:] for raw in self._raw])
+
+    def add_loss(self,lossname):
+        self._labels.append(lossname)
+        self._n_reported +=1
 
 
 class KLTrainer(object):
@@ -78,8 +82,11 @@ class KLTrainer(object):
             self.w_likelihood = 1.0
         if test_likelihood: 
             loss_names.append("NLL(Test)")
-        self.reporter = LossReporter(*loss_names)
         self.custom_loss = custom_loss
+        if self.custom_loss:
+            loss_names.append("custom_loss")
+        self.reporter = LossReporter(*loss_names)
+        
 
     def train(
         self,
