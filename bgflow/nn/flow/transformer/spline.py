@@ -7,6 +7,9 @@ __all__ = [
     "ConditionalSplineTransformer",
 ]
 
+DEFAULT_MIN_BIN_WIDTH = 1e-3
+DEFAULT_MIN_BIN_HEIGHT = 1e-3
+DEFAULT_MIN_DERIVATIVE = 1e-3
 
 class ConditionalSplineTransformer(Transformer):
     def __init__(
@@ -119,6 +122,9 @@ class ConditionalSplineTransformer(Transformer):
                 right=self._right,
                 top=self._top,
                 bottom=self._bottom,
+                min_bin_width=DEFAULT_MIN_BIN_WIDTH,
+                min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
+                min_derivative=DEFAULT_MIN_DERIVATIVE,
             )
         try:
             z, dlogp = rqs(y)
@@ -149,6 +155,9 @@ class ConditionalSplineTransformer(Transformer):
             right=self._right,
             top=self._top,
             bottom=self._bottom,
+            min_bin_width=DEFAULT_MIN_BIN_WIDTH,
+            min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
+            min_derivative=DEFAULT_MIN_DERIVATIVE,
         )
         try:
             z, dlogp = rqs(y)
