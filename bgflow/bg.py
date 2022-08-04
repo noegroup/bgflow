@@ -121,18 +121,18 @@ class BoltzmannGenerator(Energy, Sampler):
             results.append(*z)
         if with_dlogp:
             results.append(dlogp)
-        if with_energy:
-            energy = self._prior.energy(*z, temperature=temperature) + dlogp
-            results.append(energy)
-        if with_log_weights or with_weights:
-            target_energy = self._target.energy(*x, temperature=temperature)
+        if with_energy or with_log_weights or with_weights:
             bg_energy = self._prior.energy(*z, temperature=temperature) + dlogp
-            log_weights = bg_energy - target_energy
-            if with_log_weights:
-                results.append(log_weights)
-            weights = torch.softmax(log_weights, dim=0).view(-1)
-            if with_weights:
-                results.append(weights)
+            if with_energy:
+                results.append(bg_energy)
+            if with_log_weights or with_weights:
+                target_energy = self._target.energy(*x, temperature=temperature)
+                log_weights = bg_energy - target_energy
+                if with_log_weights:
+                    results.append(log_weights)
+                if with_weights:
+                    weights = torch.softmax(log_weights, dim=0).view(-1)
+                    results.append(weights)
         if len(results) > 1:
             return (*results,)
         else:
