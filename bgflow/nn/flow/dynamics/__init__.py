@@ -4,3 +4,5 @@ from .blackbox import BlackBoxDynamics
 from .simple import TimeIndependentDynamics
 from .kernel_dynamic import KernelDynamics
 from .anode_dynamic import AnodeDynamics
+from .EGNN import EGNN
+from .simple_equivariant_dynamic import InvariantNet, EquivariantNet

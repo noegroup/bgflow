@@ -82,6 +82,7 @@ from .train import IndexBatchIterator, LossReporter, ClipGradient
 from .shape import tile
 from .types import *
 from .autograd import *
+from .data_augmentation import *
 
 from .geometry import (
     distance_vectors,
