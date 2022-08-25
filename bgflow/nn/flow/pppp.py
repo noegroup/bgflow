@@ -318,7 +318,7 @@ class PPPPScheduler:
 
     def _reset_adam(self):
         for p in self._parameters_to_reset:
-            self.optimizer.state[p]["step"] = 0
+            self.optimizer.state[p]["step"] = torch.tensor(0)
             self.optimizer.state[p]["exp_avg"] = torch.zeros_like(p)
             self.optimizer.state[p]["exp_avg_sq"] = torch.zeros_like(p)
             if "max_exp_avg_sq" in self.optimizer.state[p]:
