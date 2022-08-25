@@ -21,9 +21,9 @@ class OpenMMBridge(_Bridge):
 
     Parameters
     ----------
-    openmm_system : simtk.openmm.System
+    openmm_system : openmm.System
         The OpenMM system object that contains all force objects.
-    openmm_integrator : simtk.openmm.Integrator
+    openmm_integrator : openmm.Integrator
         A thermostated OpenMM integrator (has to have a method `getTemperature()`.
     platform_name : str, optional
         An OpenMM platform name ('CPU', 'CUDA', 'Reference', or 'OpenCL')
@@ -46,7 +46,10 @@ class OpenMMBridge(_Bridge):
         n_workers=mp.cpu_count(),
         n_simulation_steps=0
     ):
-        from simtk import unit
+        try:
+            from openmm import unit
+        except ImportError: # fall back to older version < 7.6
+            from simtk import unit
         platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
 
         # Compute all energies in child processes due to a bug in the OpenMM's PME code.
@@ -171,9 +174,9 @@ class MultiContext:
     -----------
     n_workers : int
         The number of workers which operate one context each.
-    system : simtk.openmm.System
+    system : openmm.System
         The system that contains all forces.
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
         An OpenMM integrator.
     platform_name : str
         The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
@@ -314,9 +317,9 @@ class MultiContext:
             The queue that the MultiContext pushes tasks to.
         result_queue : multiprocessing.Queue
             The queue that the MultiContext receives results from.
-        system : simtk.openmm.System
+        system : openmm.System
             The system that contains all forces.
-        integrator : simtk.openmm.Integrator
+        integrator : openmm.Integrator
             An OpenMM integrator.
         platform_name : str
             The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
@@ -339,8 +342,12 @@ class MultiContext:
             Positions and box vectors are received from the task_queue in units of nanometers.
             Energies and forces are pushed to the result_queue in units of kJ/mole and kJ/mole/nm, respectively.
             """
-            from simtk import unit
-            from simtk.openmm import Platform, Context
+            try:
+                from openmm import unit
+                from openmm import Platform, Context
+            except ImportError: # fall back to older version < 7.6
+                from simtk import unit
+                from simtk.openmm import Platform, Context
 
             # create the context
             # it is crucial to do that in the run function and not in the constructor
@@ -397,9 +404,9 @@ class SingleContext:
     -----------
     n_workers : int
         Needs to be 1.
-    system : simtk.openmm.System
+    system : openmm.System
         The system that contains all forces.
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
         An OpenMM integrator.
     platform_name : str
         The name of an OpenMM platform ('Reference', 'CPU', 'CUDA', or 'OpenCL')
@@ -409,7 +416,10 @@ class SingleContext:
 
     def __init__(self, n_workers, system, integrator, platform_name, platform_properties={}):
         """Set up workers and queues."""
-        from simtk.openmm import Platform, Context
+        try:
+            from openmm import Platform, Context
+        except ImportError: # fall back to older version < 7.6
+            from simtk.openmm import Platform, Context
         assert n_workers == 1
         openmm_platform = Platform.getPlatformByName(platform_name)
         self._openmm_context = Context(system, integrator, openmm_platform, platform_properties)
@@ -458,7 +468,10 @@ class SingleContext:
         log_path_probability_ratio : np.ndarray or None
             The logarithmic path probability ratios; its shape  is (len(positions), )
         """
-        from simtk import unit
+        try:
+            from openmm import unit
+        except ImportError: # fall back to older version < 7.6
+            from simtk import unit
         assert box_vectors is None or len(box_vectors) == len(positions), \
             "box_vectors and positions have to be the same length"
         box_vectors = [None for _ in positions] if box_vectors is None else box_vectors
