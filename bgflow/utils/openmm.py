@@ -40,7 +40,10 @@ class NumpyReporter(object):
             `superimpose`: openmm/mdtraj topology, will superimpose on first frame
         """
         import mdtraj as md
-        from simtk.openmm.app.topology import Topology as _Topology
+        try:
+            from openmm.app.topology import Topology as _Topology
+        except ImportError: # fall back to older version < 7.6
+            from simtk.openmm.app.topology import Topology as _Topology
         if superimpose is None:
             return np.array(self._coords)
         elif isinstance(superimpose, _Topology):
