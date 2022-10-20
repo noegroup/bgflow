@@ -125,6 +125,7 @@ class ConditionalSplineTransformer(Transformer):
                 min_bin_width=DEFAULT_MIN_BIN_WIDTH,
                 min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
                 min_derivative=DEFAULT_MIN_DERIVATIVE,
+                allow_identity_init=True,
             )
         try:
             z, dlogp = rqs(y)
@@ -158,6 +159,7 @@ class ConditionalSplineTransformer(Transformer):
             min_bin_width=DEFAULT_MIN_BIN_WIDTH,
             min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
             min_derivative=DEFAULT_MIN_DERIVATIVE,
+            allow_identity_init=True,
         )
         try:
             z, dlogp = rqs(y)
