@@ -70,16 +70,16 @@ class ConditionalSplineTransformer(Transformer):
             "min_bin_height": DEFAULT_MIN_BIN_HEIGHT,
             "min_derivative": DEFAULT_MIN_DERIVATIVE,
         }
+
         from inspect import getfullargspec
         from nflows.transforms.splines import rational_quadratic_spline
-        from nflows.transforms.base import InputOutsideDomain
         identity_option = "allow_identity_init"
         if identity_option in getfullargspec(rational_quadratic_spline)[0]:
             self._default_settings[identity_option] = True
         else:
-            #see https://github.com/bayesiains/nflows/pull/65
             warnings.warn(
-                f"your nflows version does not support '{identity_option}'",
+                f"your nflows version does not support '{identity_option}'."
+                "See https://github.com/bayesiains/nflows/pull/65",
                 UserWarning
             )
 
@@ -126,6 +126,9 @@ class ConditionalSplineTransformer(Transformer):
         return widths, heights, slopes
 
     def _forward(self, x, y, *args, **kwargs):
+        from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
+
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y : rational_quadratic_spline(
                 y,
@@ -154,6 +157,9 @@ class ConditionalSplineTransformer(Transformer):
         return z, dlogp.sum(dim=-1, keepdim=True)
 
     def _inverse(self, x, y, *args, **kwargs):
+        from nflows.transforms.splines import rational_quadratic_spline
+        from nflows.transforms.base import InputOutsideDomain
+
         widths, heights, slopes = self._compute_params(x, y.shape[-1])
         rqs = lambda y: rational_quadratic_spline(
             y,
