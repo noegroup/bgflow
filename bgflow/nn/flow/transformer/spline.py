@@ -77,6 +77,7 @@ class ConditionalSplineTransformer(Transformer):
         if identity_option in getfullargspec(rational_quadratic_spline)[0]:
             self._default_settings[identity_option] = True
         else:
+            #see https://github.com/bayesiains/nflows/pull/65
             warnings.warn(
                 f"your nflows version does not support '{identity_option}'",
                 UserWarning
