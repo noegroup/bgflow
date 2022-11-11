@@ -90,7 +90,7 @@ def test_flow_bridge(temperature, n_workers):
     snf = OpenMMStochasticFlow(bridge)
 
     batch_size = 2
-    x = torch.tensor([ala2.positions.value_in_unit(unit.nanometer)] * batch_size).view(batch_size,len(ala2.positions)*3)
+    x = torch.tensor(np.array([ala2.positions.value_in_unit(unit.nanometer)] * batch_size)).view(batch_size,len(ala2.positions)*3)
     y, dlogP = snf._forward(x)
     assert not torch.all(x.isclose(y, atol=1e-3))  # assert that output differs from input
     assert torch.all(x.isclose(y, atol=0.5))  # assert that output does not differ too much
