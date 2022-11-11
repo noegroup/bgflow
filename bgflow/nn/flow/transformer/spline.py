@@ -7,6 +7,9 @@ __all__ = [
     "ConditionalSplineTransformer",
 ]
 
+DEFAULT_MIN_BIN_WIDTH = 1e-3
+DEFAULT_MIN_BIN_HEIGHT = 1e-3
+DEFAULT_MIN_DERIVATIVE = 1e-3
 
 class ConditionalSplineTransformer(Transformer):
     def __init__(
@@ -62,6 +65,24 @@ class ConditionalSplineTransformer(Transformer):
         self._right = right
         self._bottom = bottom
         self._top = top
+        self._default_settings = {
+            "min_bin_width": DEFAULT_MIN_BIN_WIDTH,
+            "min_bin_height": DEFAULT_MIN_BIN_HEIGHT,
+            "min_derivative": DEFAULT_MIN_DERIVATIVE,
+        }
+
+        from inspect import getfullargspec
+        from nflows.transforms.splines import rational_quadratic_spline
+        identity_option = "allow_identity_init"
+        if identity_option in getfullargspec(rational_quadratic_spline)[0]:
+            self._default_settings[identity_option] = True
+        else:
+            warnings.warn(
+                f"your nflows version does not support '{identity_option}'."
+                "See https://github.com/bayesiains/nflows/pull/65",
+                UserWarning
+            )
+
 
     def _compute_params(self, x, y_dim):
         """Compute widths, heights, and slopes from x through the params_net.
@@ -119,6 +140,7 @@ class ConditionalSplineTransformer(Transformer):
                 right=self._right,
                 top=self._top,
                 bottom=self._bottom,
+                **self._default_settings
             )
         try:
             z, dlogp = rqs(y)
@@ -149,6 +171,7 @@ class ConditionalSplineTransformer(Transformer):
             right=self._right,
             top=self._top,
             bottom=self._bottom,
+            **self._default_settings
         )
         try:
             z, dlogp = rqs(y)

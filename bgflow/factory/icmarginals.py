@@ -116,10 +116,11 @@ class InternalCoordinateMarginals(dict):
             constrained_bond_indices=None,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=None
+            torsions=None,
+            broadening=1
     ):
         with torch.no_grad():
-          bond_values, angle_values, torsion_values, *_ = coordinate_transform.forward(data)
+            bond_values, angle_values, torsion_values, *_ = coordinate_transform.forward(data)
 
         if bonds in self.current_dims:
             assert bond_lower < bond_values.min(), "Set a smaller bond_lower"
@@ -132,7 +133,7 @@ class InternalCoordinateMarginals(dict):
                 bond_sigma = bond_sigma[unconstrained_bond_indices]
             self[bonds] = TruncatedNormalDistribution(
                 mu=torch.as_tensor(bond_mu, **self.ctx),
-                sigma=torch.as_tensor(bond_sigma, **self.ctx),
+                sigma=torch.as_tensor(broadening*bond_sigma, **self.ctx),
                 lower_bound=torch.as_tensor(bond_lower, **self.ctx),
                 upper_bound=torch.as_tensor(bond_upper, **self.ctx),
             )
@@ -144,17 +145,19 @@ class InternalCoordinateMarginals(dict):
             angle_sigma = angle_values.std(axis=0)
             self[angles] = TruncatedNormalDistribution(
                 mu=torch.as_tensor(angle_mu, **self.ctx),
-                sigma=torch.as_tensor(angle_sigma, **self.ctx),
+                sigma=torch.as_tensor(broadening*angle_sigma, **self.ctx),
                 lower_bound=torch.as_tensor(angle_lower, **self.ctx),
                 upper_bound=torch.as_tensor(angle_upper, **self.ctx),
             )
 
         if torsions in self.current_dims:
+            assert torsion_lower <= torsion_values.min(), "Set a smaller torsion_lower"
+            assert torsion_upper >= torsion_values.max(), "Set a larger torsion_upper"
             torsion_mu = torsion_values.mean(axis=0)
             torsion_sigma = torsion_values.std(axis=0)
             self[torsions] = TruncatedNormalDistribution(
                 mu=torch.as_tensor(torsion_mu, **self.ctx),
-                sigma=torch.as_tensor(torsion_sigma, **self.ctx),
+                sigma=torch.as_tensor(broadening*torsion_sigma, **self.ctx),
                 lower_bound=torch.as_tensor(torsion_lower, **self.ctx),
                 upper_bound=torch.as_tensor(torsion_upper, **self.ctx),
             )
