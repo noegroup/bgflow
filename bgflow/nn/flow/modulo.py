@@ -1,7 +1,6 @@
 __all__ = ["IncreaseMultiplicityFlow", "CircularShiftFlow"]
 
 import torch
-from typing import Union
 from bgflow.nn.flow.transformer.base import Flow
 
 
