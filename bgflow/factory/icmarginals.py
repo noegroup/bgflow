@@ -116,7 +116,7 @@ class InternalCoordinateMarginals(dict):
             constrained_bond_indices=None,
             bonds=BONDS,
             angles=ANGLES,
-            torsions=TORSIONS,
+            torsions=None,
             broadening=1
     ):
         with torch.no_grad():
