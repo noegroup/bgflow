@@ -1,5 +1,6 @@
 """Test spline transformer"""
 
+
 try:
     import jax
     import jax.numpy as jnp
@@ -17,7 +18,6 @@ import torch
 from bgflow.nn.flow.transformer.jax_bridge import (
     bisect,
     chain,
-    compose,
     to_torch,
     with_ldj,
     invert_bijector,
@@ -27,7 +27,6 @@ from bgflow.nn.flow.transformer.jax import (
     affine_sigmoid,
     mixture,
     ramp_to_sigmoid,
-    remap_to_unit,
     smooth_ramp,
     wrap_around
 )
@@ -140,8 +139,8 @@ def test_approx_inv_gradients():
         (out_y, out_ldj), vjp_fun = jax.vjp(approx_inv, y, a, b)
 
         for label, err_fn in zip(['abs err', 'rel err'], [abs_err, functools.partial(rel_err, eps=threshold)]):
-            err_val = np.max(jax.tree_flatten(jax.tree_map(
-                jnp.max, jax.tree_multimap(
+            err_val = np.max(jax.tree_util.tree_flatten(jax.tree_util.tree_map(
+                jnp.max, jax.tree_util.tree_map(
                     err_fn, get_grads(inv, y, a, b), get_grads(approx_inv, y, a, b))))[0])
             assert err_val < threshold, f"{label}: {err_val} > {threshold}"
 

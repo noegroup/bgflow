@@ -76,5 +76,5 @@ class TriuFlow(Flow):
         """
         R = self._make_r()
         dlogp = torch.ones_like(y[...,0,None])*(-torch.sum(torch.log(torch.abs(torch.diagonal(R)))))
-        x, _ = torch.triangular_solve((y-self.b)[...,None], R)
+        x = torch.linalg.solve_triangular(R, (y-self.b)[...,None], upper=True)
         return x[...,0], dlogp
