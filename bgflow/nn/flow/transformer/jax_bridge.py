@@ -173,7 +173,7 @@ def map_if(predicate):
 def tree_reduce(*args):
     assert len(args) >= 2
     args = list(args)
-    args[1] = jax.tree_flatten(args[1])[0]
+    args[1] = jax.tree_util.tree_flatten(args[1])[0]
     return functools.reduce(*args)
 
 
@@ -193,27 +193,27 @@ class JaxWrapper(torch.autograd.Function):
 
         @staticmethod
         def forward(ctx, fn, *args):
-            args = jax.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), args)
+            args = jax.tree_util.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), args)
             result, ctx.fun_vjp = jax.vjp(fn, *args)
-            result_flat, result_tree = jax.tree_flatten(result)
+            result_flat, result_tree = jax.tree_util.tree_flatten(result)
             ctx.result_tree = result_tree
-            return (*jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), result_flat),
+            return (*jax.tree_util.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), result_flat),
                     result_tree)
 
         @staticmethod
         def backward(ctx, *tangents):
-            tangents = jax.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), tangents)
-            tangents = jax.tree_unflatten(ctx.result_tree, tangents[:-1])
+            tangents = jax.tree_util.tree_map(map_if(is_torch_tensor)(to_jax_ndarray), tangents)
+            tangents = jax.jax.tree_util.tree_unflatten(ctx.result_tree, tangents[:-1])
             grads = ctx.fun_vjp(tangents)
-            return (None, *jax.tree_flatten(jax.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), grads))[0])
+            return (None, *jax.tree_util.tree_flatten(jax.tree_util.tree_map(map_if(is_jax_ndarray)(to_torch_tensor), grads))[0])
 
 
 def wrap_jax_fun(fn):
     @functools.wraps(fn)
     def inner(*args):
-        args_flat, args_tree = jax.tree_flatten(args)
+        args_flat, args_tree = jax.tree_util.tree_flatten(args)
         *result_flat, result_tree = JaxWrapper.apply(fn, *args_flat)
-        return jax.tree_unflatten(result_tree, result_flat)
+        return jax.tree_util.tree_unflatten(result_tree, result_flat)
     return inner
 
 

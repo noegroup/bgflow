@@ -21,14 +21,14 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: ubuntu-latest, python-version: 3.7, torch-version: 'torch>=1.8,<1.9' }
-          - { os: ubuntu-latest, python-version: 3.8, torch-version: 'torch>=1.8,<1.9' }
-          - { os: ubuntu-latest, python-version: 3.9, torch-version: 'torch>=1.8,<1.9' }
-          - { os: ubuntu-latest, python-version: 3.7, torch-version: 'torch>=1.9' }
-          - { os: ubuntu-latest, python-version: 3.8, torch-version: 'torch>=1.9' }
-          - { os: ubuntu-latest, python-version: 3.9, torch-version: 'torch>=1.9' }
-          - { os: windows-latest, python-version: 3.9, torch-version: 'torch>=1.9' }
-          - { os: macos-latest, python-version: 3.9, torch-version: 'torch>=1.9' }
+          - { os: ubuntu-latest, python-version: 3.7, torch-version: 'torch>=1.9,<1.11' }
+          - { os: ubuntu-latest, python-version: 3.8, torch-version: 'torch>=1.9,<1.11' }
+          - { os: ubuntu-latest, python-version: 3.9, torch-version: 'torch>=1.9,<1.11' }
+          - { os: ubuntu-latest, python-version: 3.7, torch-version: 'torch>=1.11' }
+          - { os: ubuntu-latest, python-version: 3.8, torch-version: 'torch>=1.11' }
+          - { os: ubuntu-latest, python-version: 3.9, torch-version: 'torch>=1.11' }
+          - { os: windows-latest, python-version: 3.9, torch-version: 'torch>=1.11' }
+          - { os: macos-latest, python-version: 3.9, torch-version: 'torch>=1.11' }
 
     steps:
 
