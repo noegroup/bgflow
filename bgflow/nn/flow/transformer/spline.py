@@ -73,7 +73,7 @@ class ConditionalSplineTransformer(Transformer):
 
         from inspect import getfullargspec
         from nflows.transforms.splines import rational_quadratic_spline
-        identity_option = "allow_identity_init"
+        identity_option = "enable_identity_init"
         if identity_option in getfullargspec(rational_quadratic_spline)[0]:
             self._default_settings[identity_option] = True
         else:
