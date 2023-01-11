@@ -146,6 +146,7 @@ pytest
   * [jax2torch](https://github.com/lucidrains/jax2torch) (for smooth flows / implicit backprop)
   * [allegro](https://github.com/mir-group/allegro) (for Graph Neural Networks)
   * [nequip](https://github.com/mir-group/nequip) (for Graph Neural Networks)
+  * [bgmol](https://github.com/noegroup/bgmol) (for some example notebooks)
 
 
 ***
