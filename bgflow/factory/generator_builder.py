@@ -173,6 +173,7 @@ class BoltzmannGeneratorBuilder:
         """
         flow = SequentialFlow(self.layers)
         if zero_parameters:
+            warnings.warn("Initializing the flow with zeros makes it much less flexible", UserWarning)
             for p in flow.parameters():
                 p.data.zero_()
         return flow
