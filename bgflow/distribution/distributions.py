@@ -90,9 +90,13 @@ class SloppyUniform(torch.nn.Module):
         try:
             return super().__getattr__(name=name)
         except AttributeError:
-            uniform = _SloppyUniform(self.low, self.high, self.validate_args, tol=self.tol)
-            if hasattr(uniform, name):
-                return getattr(uniform, name)
+            # workaround so that AttributeError is always raised on low and high so that buffers are registered
+            if name == 'low' or name == 'high':
+                raise AttributeError(f"SloppyUniform has no attribute {name}")
+            else:
+                uniform = _SloppyUniform(self.low, self.high, self.validate_args, tol=self.tol)
+                if hasattr(uniform, name):
+                    return getattr(uniform, name)
         except:
             raise AttributeError(f"SloppyUniform has no attribute {name}")
 
