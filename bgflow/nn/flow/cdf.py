@@ -33,6 +33,8 @@ class CDFTransform(Flow):
         logdet = self.distribution.log_prob(x)
         if self._eps is not None:
             logdet = logdet.clamp_min(-1/self._eps)
+            import ipdb
+            #ipdb.set_trace()
 
         return y, logdet.sum(dim=-1, keepdim=True)
 

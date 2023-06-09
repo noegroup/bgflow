@@ -22,7 +22,8 @@ from torch.nn.modules.normalization import LayerNorm
 from typing import Optional, Union, Callable
 
 
-__all__ = ["NormalizedBasis", "CustomTransformerEncoderLayer", "make_allegro_config_dict"]
+__all__ = ["NormalizedBasis", "CustomTransformerEncoderLayer",
+           "make_allegro_config_dict"]
 
 
 # define the Normalized Basis that is also shifted a bit to increase stability:
@@ -52,24 +53,25 @@ class NormalizedBasis(torch.nn.Module):
 
     def __init__(
         self,
-        data = None,
+        data=None,
         original_basis=BesselBasis,
         original_basis_kwargs: dict = {},
         norm_basis_mean_shift: bool = True,
-        offset = 1.
+        offset=1.
     ):
         super().__init__()
         self.offset = offset
-        #### shift all entries to the right a bit.
+        # shift all entries to the right a bit.
         data += self.offset
-        #### change r_max accordingly
+        # change r_max accordingly
         original_basis_kwargs["r_max"] += self.offset
         self.basis = original_basis(**original_basis_kwargs)
         self.num_basis = self.basis.num_basis
 
         with torch.no_grad():
             if data is None:
-                raise ValueError("gotta pass data to inform the Basis Function")
+                raise ValueError(
+                    "gotta pass data to inform the Basis Function")
             bs = self.basis(data)
             assert bs.ndim == 2
             if norm_basis_mean_shift:
@@ -85,8 +87,6 @@ class NormalizedBasis(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_o = x + self.offset
         return (self.basis(x_o) - self._mean) * self._inv_std
-
-
 
 
 class CustomTransformerEncoderLayer(torch.nn.Module):
@@ -152,7 +152,6 @@ class CustomTransformerEncoderLayer(torch.nn.Module):
 
         self.qkv_proj = torch.nn.Linear(d_model, 3 * d_model)
 
-
         self.activation = activation
 
     def __setstate__(self, state):
@@ -176,16 +175,18 @@ class CustomTransformerEncoderLayer(torch.nn.Module):
 
         x = src
         if self.norm_first:
-            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._sa_block(self.norm1(x), src_mask,
+                                   src_key_padding_mask)
             x = x + self._ff_block(self.norm2(x))
         else:
-            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm1(
+                x + self._sa_block(x, src_mask, src_key_padding_mask))
             x = self.norm2(x + self._ff_block(x))
 
         return x
 
-
     # self-attention block
+
     def _sa_block(self, x: Tensor,
                   attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor]) -> Tensor:
         qkv = self.qkv_proj(x)
@@ -202,204 +203,191 @@ class CustomTransformerEncoderLayer(torch.nn.Module):
         return self.dropout2(x)
 
 
-
-
-
-
-
-
 allegro_hparams = {
-"r_max" : 3.2,
-"num_types" : 10,
-"num_basis" : 32,
-"p" : 6,
-"avg_num_neighbors" : 9,
-"num_layers" : 3,
-"env_embed_multiplicity" : 32 ,
-"latent_dim" : 32,
-"two_body_latent_intermediate_dims" : [128, 128, 128],
-"nonscalars_include_parity" : False,
-"irreps_edge_sh" :  '1x0e+1x1o+1x2e', # embed direction vector to only vectors and scalar tensor would be :'1x0e+1x1o'
-"RBF_distance_offset" : 1. ,
-"GNN_feature_dim" : 32,
-"latent_resnet": True,
-"GNN_scope": "atomwise"
-}
-
-
-def make_allegro_config_dict(**kwargs):
-    import allegro
-    from allegro.nn._allegro import Allegro_Module
-    r_max = kwargs["r_max"]
-    num_types = kwargs["num_types"]
-    num_basis = kwargs["num_basis"]
-    p = kwargs["p"]
-    avg_num_neighbors = kwargs["avg_num_neighbors"]
-    num_layers = kwargs["num_layers"]
-    env_embed_multiplicity = kwargs["env_embed_multiplicity"]
-    latent_dim = kwargs["latent_dim"]
-    two_body_latent_intermediate_dims = kwargs["two_body_latent_intermediate_dims"]
-    nonscalars_include_parity = kwargs["nonscalars_include_parity"]
-    irreps_edge_sh = kwargs["irreps_edge_sh"]
-    RBF_distance_offset = kwargs["RBF_distance_offset"]
-    GNN_feature_dim = kwargs["GNN_feature_dim"]
-    latent_resnet = kwargs["latent_resnet"]
-    GNN_scope = kwargs["GNN_scope"]
-
-    base_dict =   {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
-                                    {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
-
-
-                   'radial_basis': (nequip.nn.embedding._edge.RadialBasisEdgeEncoding,
-                                    {'basis': NormalizedBasis,
-                                     'cutoff': nequip.nn.cutoffs.PolynomialCutoff,
-                                     'basis_kwargs': {'data': None,
-                                                      'original_basis': nequip.nn.radial_basis.BesselBasis,
-                                                      'original_basis_kwargs': {'num_basis': num_basis,
-                                                                                'trainable': True,
-                                                                                'r_max': r_max},
-                                                      'norm_basis_mean_shift': True,
-                                                      'offset': RBF_distance_offset},
-                                     'cutoff_kwargs': {'p': p, 'r_max': r_max},
-                                     'out_field': 'edge_embedding'}),
-
-
-                   'spharm': (nequip.nn.embedding._edge.SphericalHarmonicEdgeAttrs,
-                                    {'edge_sh_normalization': 'component',
-                                     'edge_sh_normalize': True,
-                                     'out_field': 'edge_attrs',
-                                     'irreps_edge_sh': irreps_edge_sh}),
-
-
-
-
-
-                   'allegro': (Allegro_Module,
-                                   {'avg_num_neighbors': avg_num_neighbors,
-                                     'r_start_cos_ratio': 0.8, # unused
-                                     'PolynomialCutoff_p': p,
-                                     'per_layer_cutoffs': None,
-                                     'cutoff_type': 'polynomial',
-                                     'field': 'edge_attrs',
-                                     'edge_invariant_field': 'edge_embedding',
-                                     'node_invariant_field': 'node_attrs',
-                                     'env_embed_multiplicity': env_embed_multiplicity,
-                                     'embed_initial_edge': True,
-                                     'linear_after_env_embed': False,
-                                     'nonscalars_include_parity': nonscalars_include_parity,
-                                     'two_body_latent': allegro.nn._fc.ScalarMLPFunction,
-                                     'two_body_latent_kwargs': {'mlp_nonlinearity': 'silu',
-                                                                'mlp_initialization': 'uniform',
-                                                                'mlp_dropout_p': 0.0,
-                                                                'mlp_batchnorm': False,
-                                                                'mlp_latent_dimensions': [*two_body_latent_intermediate_dims, latent_dim]},
-                                     'env_embed': allegro.nn._fc.ScalarMLPFunction,
-                                     'env_embed_kwargs': {'mlp_nonlinearity': None,
-                                                          'mlp_initialization': 'uniform',
-                                                          'mlp_dropout_p': 0.0,
-                                                          'mlp_batchnorm': False,
-                                                          'mlp_latent_dimensions': []},
-                                     'latent': allegro.nn._fc.ScalarMLPFunction,
-                                     'latent_kwargs': {'mlp_nonlinearity': 'silu',
-                                                       'mlp_initialization': 'uniform',
-                                                       'mlp_dropout_p': 0.0,
-                                                       'mlp_batchnorm': False,
-                                                       'mlp_latent_dimensions': [latent_dim]},
-                                     'latent_resnet': latent_resnet,
-                                     'latent_resnet_update_ratios': None,
-                                     'latent_resnet_update_ratios_learnable': False,
-                                     'latent_out_field': 'edge_features',
-                                     'pad_to_alignment': 1,
-                                     'sparse_mode': None,
-                                     'r_max': r_max,
-                                     'num_layers': num_layers,
-                                     'num_types': num_types}),
-                   }
-
-    atomwise_dict = {'atomwise_gather': (allegro.nn._edgewise.EdgewiseReduce,
-                                      {'field': 'edge_features',
-                                       'out_field': 'atomwise_features',
-                                       'avg_num_neighbors': avg_num_neighbors}
-                                     ),
-                  'atomwise_linear': (nequip.nn._atomwise.AtomwiseLinear,
-                                      {'field': 'atomwise_features',
-                                       'out_field': 'outputs',
-                                       'irreps_out': f"{GNN_feature_dim}x0e"}
-                                      )
-    }
-    bondwise_dict = {'bondwise_linear': (nequip.nn._atomwise.AtomwiseLinear,  ## it is still edgewiese
-                                      {'field': 'edge_features',
-                                       'out_field': 'outputs',
-                                       'irreps_out': f"{GNN_feature_dim}x0e"}
-                                      )
-                    }
-    if GNN_scope == "atomwise":
-        dict =  base_dict|atomwise_dict
-    elif GNN_scope == "bondwise":
-        dict = base_dict|bondwise_dict
-    else:
-        raise ValueError('GNN_scope must be either "atomwise" or "bondwise"')
-    return dict
-
-
-#allegro_config_dict = make_allegro_config_dict(**allegro_hparams)
-
-nequip_hparams = {
     "r_max": 3.2,
     "num_types": 10,
     "num_basis": 32,
     "p": 6,
     "avg_num_neighbors": 9,
     "num_layers": 3,
+    "env_embed_multiplicity": 32,
     "latent_dim": 32,
-    "nonscalars_include_parity": False,  # True
-    "irreps_edge_sh": '1x0e+1x1o+1x2e',  #  change this to "1x0e" to reduce nequip to schnett basically
+    "two_body_latent_intermediate_dims": [128, 128, 128],
+    "nonscalars_include_parity": False,
+    # embed direction vector to only vectors and scalar tensor would be :'1x0e+1x1o'
+    "irreps_edge_sh":  '1x0e+1x1o+1x2e',
     "RBF_distance_offset": 1.,
     "GNN_feature_dim": 32,
-
-    "num_interaction_blocks": 4
+    "latent_resnet": True,
+    "GNN_scope": "atomwise"
 }
 
 
-def make_nequip_config_dict(**kwargs):  ###rename to make_nequip_config_dict
-    r_max = kwargs["r_max"]
-    num_types = kwargs["num_types"]
-    num_basis = kwargs["num_basis"]
-    p = kwargs["p"]
-    irreps_edge_sh = kwargs["irreps_edge_sh"]
-    RBF_distance_offset = kwargs["RBF_distance_offset"]
-    GNN_feature_dim = kwargs["GNN_feature_dim"]
-    num_interaction_blocks = kwargs["num_interaction_blocks"]
-
-    base_dict =   {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
-                                    {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
-
-
-                   'radial_basis': (nequip.nn.embedding._edge.RadialBasisEdgeEncoding,
-                                    {'basis': NormalizedBasis,
-                                     'cutoff': nequip.nn.cutoffs.PolynomialCutoff,
-                                     'basis_kwargs': {'data': None,
-                                                      'original_basis': nequip.nn.radial_basis.BesselBasis,
-                                                      'original_basis_kwargs': {'num_basis': num_basis,
-                                                                                'trainable': True,
-                                                                                'r_max': r_max},
-                                                      'norm_basis_mean_shift': True,
-                                                      'offset': RBF_distance_offset},
-                                     'cutoff_kwargs': {'p': p, 'r_max': r_max},
-                                     'out_field': 'edge_embedding'}),
+def make_allegro_config_dict(r_max,
+                             num_types,
+                             num_basis,
+                             p,
+                             avg_num_neighbors,
+                             num_layers,
+                             env_embed_multiplicity,
+                             latent_dim,
+                             two_body_latent_intermediate_dims,
+                             nonscalars_include_parity,
+                             irreps_edge_sh,
+                             RBF_distance_offset,
+                             GNN_feature_dim,
+                             latent_resnet,
+                             GNN_scope
+                             ):
+    import allegro
+    from allegro.nn._allegro import Allegro_Module
+    base_dict = {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
+                             {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
 
 
-                   'spharm': (nequip.nn.embedding._edge.SphericalHarmonicEdgeAttrs,
-                                    {'edge_sh_normalization': 'component',
-                                     'edge_sh_normalize': True,
-                                     'out_field': 'edge_attrs',
-                                     'irreps_edge_sh': irreps_edge_sh}),
+                 'radial_basis': (nequip.nn.embedding._edge.RadialBasisEdgeEncoding,
+                                  {'basis': NormalizedBasis,
+                                   'cutoff': nequip.nn.cutoffs.PolynomialCutoff,
+                                   'basis_kwargs': {'data': None,
+                                                    'original_basis': nequip.nn.radial_basis.BesselBasis,
+                                                    'original_basis_kwargs': {'num_basis': num_basis,
+                                                                              'trainable': True,
+                                                                              'r_max': r_max},
+                                                    'norm_basis_mean_shift': True,
+                                                    'offset': RBF_distance_offset},
+                                   'cutoff_kwargs': {'p': p, 'r_max': r_max},
+                                   'out_field': 'edge_embedding'}),
 
-                   'chemical_embedding': (nequip.nn._atomwise.AtomwiseLinear,
-                                    {'field': 'node_features',
-                                     'out_field': None,
-                                     'irreps_out': '32x0e'})
-                   }
+
+                 'spharm': (nequip.nn.embedding._edge.SphericalHarmonicEdgeAttrs,
+                            {'edge_sh_normalization': 'component',
+                             'edge_sh_normalize': True,
+                             'out_field': 'edge_attrs',
+                             'irreps_edge_sh': irreps_edge_sh}),
+
+
+
+
+
+                 'allegro': (Allegro_Module,
+                             {'avg_num_neighbors': avg_num_neighbors,
+                              'r_start_cos_ratio': 0.8,  # unused
+                              'PolynomialCutoff_p': p,
+                              'per_layer_cutoffs': None,
+                              'cutoff_type': 'polynomial',
+                              'field': 'edge_attrs',
+                              'edge_invariant_field': 'edge_embedding',
+                              'node_invariant_field': 'node_attrs',
+                              'env_embed_multiplicity': env_embed_multiplicity,
+                              'embed_initial_edge': True,
+                              'linear_after_env_embed': False,
+                              'nonscalars_include_parity': nonscalars_include_parity,
+                              'two_body_latent': allegro.nn._fc.ScalarMLPFunction,
+                              'two_body_latent_kwargs': {'mlp_nonlinearity': 'silu',
+                                                         'mlp_initialization': 'uniform',
+                                                         'mlp_dropout_p': 0.0,
+                                                         'mlp_batchnorm': False,
+                                                         'mlp_latent_dimensions': [*two_body_latent_intermediate_dims, latent_dim]},
+                              'env_embed': allegro.nn._fc.ScalarMLPFunction,
+                              'env_embed_kwargs': {'mlp_nonlinearity': None,
+                                                   'mlp_initialization': 'uniform',
+                                                   'mlp_dropout_p': 0.0,
+                                                   'mlp_batchnorm': False,
+                                                   'mlp_latent_dimensions': []},
+                              'latent': allegro.nn._fc.ScalarMLPFunction,
+                              'latent_kwargs': {'mlp_nonlinearity': 'silu',
+                                                'mlp_initialization': 'uniform',
+                                                'mlp_dropout_p': 0.0,
+                                                'mlp_batchnorm': False,
+                                                'mlp_latent_dimensions': [latent_dim]},
+                              'latent_resnet': latent_resnet,
+                              'latent_resnet_update_ratios': None,
+                              'latent_resnet_update_ratios_learnable': False,
+                              'latent_out_field': 'edge_features',
+                              'pad_to_alignment': 1,
+                              'sparse_mode': None,
+                              'r_max': r_max,
+                              'num_layers': num_layers,
+                              'num_types': num_types}),
+                 }
+
+    atomwise_dict = {'atomwise_gather': (allegro.nn._edgewise.EdgewiseReduce,
+                                         {'field': 'edge_features',
+                                          'out_field': 'atomwise_features',
+                                          'avg_num_neighbors': avg_num_neighbors}
+                                         ),
+                     'atomwise_linear': (nequip.nn._atomwise.AtomwiseLinear,
+                                         {'field': 'atomwise_features',
+                                          'out_field': 'outputs',
+                                          'irreps_out': f"{GNN_feature_dim}x0e"}
+                                         )
+                     }
+    bondwise_dict = {'bondwise_linear': (nequip.nn._atomwise.AtomwiseLinear,  # it is still edgewiese
+                                         {'field': 'edge_features',
+                                          'out_field': 'outputs',
+                                          'irreps_out': f"{GNN_feature_dim}x0e"}
+                                         )
+                     }
+    if GNN_scope == "atomwise":
+        dict = base_dict | atomwise_dict
+    elif GNN_scope == "bondwise":
+        dict = base_dict | bondwise_dict
+    else:
+        raise ValueError('GNN_scope must be either "atomwise" or "bondwise"')
+    return dict
+
+
+nequip_hparams = {
+    "r_max": 3.2,
+    "num_types": 10,
+    "num_basis": 32,
+    "p": 6,
+    "RBF_distance_offset": 1.,
+    "GNN_feature_dim": 32,
+    "num_interaction_blocks": 4,
+    "irreps_edge_sh": '1x0e+1x1o+1x2e',  #  change this to "1x0e" to reduce nequip to schnett basically
+}
+
+
+def make_nequip_config_dict(r_max,
+                            num_types,
+                            num_basis,
+                            p,
+                            irreps_edge_sh,
+                            RBF_distance_offset,
+                            GNN_feature_dim,
+                            num_interaction_blocks
+                            ):
+
+    base_dict = {'one_hot': (nequip.nn.embedding._one_hot.OneHotAtomEncoding,
+                             {'irreps_in': None, 'set_features': True, 'num_types': num_types}),
+
+
+                 'radial_basis': (nequip.nn.embedding._edge.RadialBasisEdgeEncoding,
+                                  {'basis': NormalizedBasis,
+                                   'cutoff': nequip.nn.cutoffs.PolynomialCutoff,
+                                   'basis_kwargs': {'data': None,
+                                                    'original_basis': nequip.nn.radial_basis.BesselBasis,
+                                                    'original_basis_kwargs': {'num_basis': num_basis,
+                                                                              'trainable': True,
+                                                                              'r_max': r_max},
+                                                    'norm_basis_mean_shift': True,
+                                                    'offset': RBF_distance_offset},
+                                   'cutoff_kwargs': {'p': p, 'r_max': r_max},
+                                   'out_field': 'edge_embedding'}),
+
+
+                 'spharm': (nequip.nn.embedding._edge.SphericalHarmonicEdgeAttrs,
+                            {'edge_sh_normalization': 'component',
+                             'edge_sh_normalize': True,
+                             'out_field': 'edge_attrs',
+                             'irreps_edge_sh': irreps_edge_sh}),
+
+                 'chemical_embedding': (nequip.nn._atomwise.AtomwiseLinear,
+                                        {'field': 'node_features',
+                                         'out_field': None,
+                                         'irreps_out': '32x0e'})
+                 }
     conv_dict = {}
 
     for i in range(num_interaction_blocks):
@@ -407,11 +395,11 @@ def make_nequip_config_dict(**kwargs):  ###rename to make_nequip_config_dict
                        {'convolution': nequip.nn._interaction_block.InteractionBlock,
                         'convolution_kwargs': {'invariant_layers': 2,
                                                'invariant_neurons': 64,
-                                               'avg_num_neighbors': None, ### have to set this from data
+                                               'avg_num_neighbors': None,  # have to set this from data
                                                'use_sc': True,
                                                'nonlinearity_scalars': {'e': 'silu',
                                                                         'o': 'tanh'}},
-                        'num_layers': 4,  ## this is a dead end argument, I believe.
+                        'num_layers': 4,  # this is a dead end argument, I believe.
                         'resnet': False,
                         'nonlinearity_type': 'gate',
                         'nonlinearity_scalars': {'e': 'silu',
@@ -419,28 +407,30 @@ def make_nequip_config_dict(**kwargs):  ###rename to make_nequip_config_dict
                         'nonlinearity_gates': {'e': 'silu',
                                                'o': 'tanh'},
                         'feature_irreps_hidden': '32x0e+32x1e+32x0o+32x1o'})
-                    }
+                       }
         conv_dict = {**conv_dict, **conv_dict_i}
 
-
-
-
-
-
     output_dict = {
-    'self_interaction_0': (nequip.nn._atomwise.AtomwiseLinear,
-                          {'field': 'node_features',
-                           'out_field': 'outputs',
-                           'irreps_out': f'{GNN_feature_dim}x0e'})
-                   }
+        'self_interaction_0': (nequip.nn._atomwise.AtomwiseLinear,
+                               {'field': 'node_features',
+                                'out_field': 'outputs',
+                                'irreps_out': f'{GNN_feature_dim}x0e'})
+    }
 
-    dict = base_dict | conv_dict | output_dict  ## join the dictionaries
+    dict = base_dict | conv_dict | output_dict  # join the dictionaries
     return dict
 
 
-#nequip_config_dict = make_nequip_config_dict(**nequip_hparams)
-
 class NequipWrapper(torch.nn.Module):
+    """
+    This is a wrapper for nequip-style GNNs (this also includes allegro GNNs).
+    It then constructs an atomicdatadict, which is what the nequip GNN acts on.
+    The atomicdatadict contains coordinates, atom types (here every atom gets a unique type)
+    and edges (these are constructed by the distance alone, and not from the molecular bondgraph).
+    the invariant feature vectors the GNN outputs are flattened and returned.
+    """    
+
+    
     def __init__(
         self,
         nequip_GNN: Union[torch.nn.Module, Callable],
@@ -450,30 +440,37 @@ class NequipWrapper(torch.nn.Module):
     ):
         super().__init__()
         if isinstance(nequip_GNN, torch.nn.Module):
-            self.GNN = nequip_GNN  #register the GNN that is to be used in the conditioner
+            self.GNN = nequip_GNN  # register the GNN that is to be used in the conditioner
         elif callable(nequip_GNN):
-            self.GNN = nequip_GNN(**kwargs)  #create a GNN from the constructor, using the kwargs
+            # create a GNN from the constructor, using the kwargs
+            GNN = nequip_GNN.from_parameters(**kwargs)
+            self.GNN = GNN
         self.output_field = output_field
         self.cutoff = cutoff
-    def forward(self, x):  #this takes as input just the cartesian coordinates of the atoms.
+
+
+    # this takes as input just the cartesian coordinates of the atoms.
+    def forward(self, x):
         batchsize = x.shape[0]
         n_cart_atoms = x.shape[1]
         distances = torch.cdist(x, x)
         in_bonds = distances <= self.cutoff
         indices = in_bonds.nonzero()
-        indices = indices[indices[:, 1] != indices[:, 2]]  # remove edges from node to itself:
+        # remove edges from node to itself:
+        indices = indices[indices[:, 1] != indices[:, 2]]
         edge_index = torch.vstack([indices[:, 1], indices[:, 2]])
         batch_index = indices[:, 0]
         offset_tensor = (batch_index * n_cart_atoms).repeat((2, 1))
 
-        edge_index_batch = edge_index + offset_tensor  # make sure that all edges are in their respective graphs (multiple graphs in a batch)
+        # make sure that all edges are in their respective graphs (multiple graphs in a batch)
+        edge_index_batch = edge_index + offset_tensor
         atom_types = torch.arange(n_cart_atoms).repeat(batchsize)
 
         batch = torch.arange(x.shape[0]).repeat_interleave(n_cart_atoms)
         r_max = torch.full((batchsize,), self.cutoff)
 
-        ## this is an atomicdatadict, it is used by the nequip GNNs to keep track of multiple graphs in a batch.
-        ## The graphs may have a different number of atoms in their neighborhoods, so each graph in a batch can have a different number of edges
+        # this is an atomicdatadict, it is used by the nequip GNNs to keep track of multiple graphs in a batch.
+        # The graphs may have a different number of atoms in their neighborhoods, so each graph in a batch can have a different number of edges
         data = dict(pos=x.view(-1, 3),
                     edge_index=edge_index_batch.to(x.device),
                     batch=batch.to(x.device),
@@ -484,28 +481,39 @@ class NequipWrapper(torch.nn.Module):
         features = feature_vectors.view(batchsize, -1)
         return features
 
+
 class WrapDistancesGNN(torch.nn.Module):
-    def __init__(self, **kwargs):
+    """
+    A wrapdistancesGNN is a kind of GNN that takes as input the cartesian coordinates and returns a feature vector
+    that contains just the pairwise distances of all pairs that are less than r_max apart.
+    It does not return the distances directly, but instead embeds them into N radial basis functions
+    """
+    
+    def __init__(self, num_basis, r_max, env_p):
         super().__init__()
-        self.N = kwargs["num_basis"]  # number of RBFs
-        self.c = kwargs["r_max"]  # cutoff
-        self.p = kwargs["env_p"]  # envelope parameter
+        self.N = num_basis  # number of RBFs
+        self.c = r_max # cutoff
+        self.p = env_p  # envelope parameter
 
         self.wrapdistancespure = WrapDistances(torch.nn.Identity())
-        wavenumbers = torch.Tensor([torch.pi*(i+1)/self.c for i in range(self.N)])
+        wavenumbers = torch.Tensor(
+            [torch.pi*(i+1)/self.c for i in range(self.N)])
         self.wavenumbers = torch.nn.Parameter(wavenumbers)
-
-
 
     def bessel(self, x, wavenumber, c):
         return ((2 / c) ** 0.5 * torch.sin(wavenumber * x) / x)
+
     def envelope(self, x, c, p):
-        #taken from the paper: https://arxiv.org/pdf/2003.03123.pdf
+        # taken from the paper: https://arxiv.org/pdf/2003.03123.pdf
         x = x/c
         return(1 - ((p+1)*(p+2))/2*x**p + p*(p+2)*x**(p+1) - (p*(p+1))/2*x**(p+2))
+
     def forward(self, x):
-        distances = self.wrapdistancespure(x.view(x.shape[0],-1))
-        binned_distances = self.bessel(distances[...,None], self.wavenumbers, self.c)
+        distances = self.wrapdistancespure(x.view(x.shape[0], -1))
+        distances = torch.clamp(distances, min=None, max=self.c)
+        binned_distances = self.bessel(
+            distances[..., None], self.wavenumbers, self.c)
         u = self.envelope(distances, c=self.c, p=self.p)
-        binned_enveloped_distances = (u.unsqueeze(-1) * binned_distances).view(x.shape[0], -1)
+        binned_enveloped_distances = (
+            u.unsqueeze(-1) * binned_distances).view(x.shape[0], -1)
         return binned_enveloped_distances

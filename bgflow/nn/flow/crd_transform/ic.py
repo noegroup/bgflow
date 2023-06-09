@@ -197,8 +197,8 @@ class ReferenceSystemTransformation(Flow):
             alpha, dlogp_alpha = normalize_torsions(alpha)
 
             dlogp += dlogp_alpha
-            #             beta, dlogp_beta = normalize_angles(beta)
-            #             dlogp += dlogp_beta
+            #beta, dlogp_beta = normalize_angles(beta)
+            #dlogp += dlogp_beta
             gamma, dlogp_gamma = normalize_torsions(gamma)
             dlogp += dlogp_gamma
         orientation = torch.cat([alpha, beta, gamma], dim=-1)

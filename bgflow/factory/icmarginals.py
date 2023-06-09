@@ -161,3 +161,29 @@ class InternalCoordinateMarginals(dict):
                 lower_bound=torch.as_tensor(torsion_lower, **self.ctx),
                 upper_bound=torch.as_tensor(torsion_upper, **self.ctx),
             )
+
+    def inform_with_data_o(
+            self,
+            data,
+            coordinate_transform,
+            o_lower=-2.5,
+            o_upper=2.5,
+            origin=None
+            
+    ):
+        with torch.no_grad():
+          bond_values, angle_values, torsion_values, origin_values, rotation, _ = coordinate_transform.forward(data)
+
+
+        assert o_lower < origin_values.min(), "Set a smaller o_lower"
+        assert o_upper > origin_values.max(), "Set a larger o_upper"
+        o_mu = origin_values.mean(axis=0).squeeze()
+        o_sigma = origin_values.std(axis=0).squeeze()
+        import ipdb
+        #ipdb.set_trace()
+        self[origin] = TruncatedNormalDistribution(
+            mu=torch.as_tensor(o_mu, **self.ctx),
+            sigma=torch.as_tensor(o_sigma, **self.ctx),
+            lower_bound=torch.as_tensor(o_lower, **self.ctx),
+            upper_bound=torch.as_tensor(o_upper, **self.ctx),
+        )
