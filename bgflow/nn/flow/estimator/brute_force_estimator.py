@@ -1,8 +1,7 @@
-from bgflow.utils.autograd import brute_force_jacobian_trace
 import torch
 
 
-class BruteForceEstimator(torch.nn.Module):
+class BruteForceEstimatorFast(torch.nn.Module):
     """
     Exact bruteforce estimation of the divergence of a dynamics function.
     """
@@ -35,9 +34,13 @@ class BruteForceEstimator(torch.nn.Module):
 
         with torch.set_grad_enabled(True):
             xs.requires_grad_(True)
-            dxs = dynamics(t, xs)
+            x = [xs[:, [i]] for i in range(xs.size(1))]
+
+            dxs = dynamics(t, torch.cat(x, dim=1))
 
             assert len(dxs.shape) == 2, "`dxs` must have shape [n_btach, system_dim]"
-            divergence = brute_force_jacobian_trace(dxs, xs)
+            divergence = 0
+            for i in range(xs.size(1)):
+                divergence += torch.autograd.grad(dxs[:, [i]], x[i], torch.ones_like(dxs[:, [i]]), retain_graph=True)[0]
 
         return dxs, -divergence.view(-1, 1)
