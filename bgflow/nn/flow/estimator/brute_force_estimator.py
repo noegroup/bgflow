@@ -1,7 +1,7 @@
 import torch
 
 
-class BruteForceEstimatorFast(torch.nn.Module):
+class BruteForceEstimator(torch.nn.Module):
     """
     Exact bruteforce estimation of the divergence of a dynamics function.
     """
