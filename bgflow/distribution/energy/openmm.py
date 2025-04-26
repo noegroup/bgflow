@@ -42,6 +42,7 @@ class OpenMMBridge(_Bridge):
         openmm_system,
         openmm_integrator,
         platform_name='CPU',
+        platform_properties=None,
         err_handling="warning",
         n_workers=mp.cpu_count(),
         n_simulation_steps=0
@@ -50,7 +51,8 @@ class OpenMMBridge(_Bridge):
             from openmm import unit
         except ImportError: # fall back to older version < 7.6
             from simtk import unit
-        platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
+        if platform_properties is None:
+            platform_properties = {'Threads': str(max(1, mp.cpu_count()//n_workers))} if platform_name == "CPU" else {}
 
         # Compute all energies in child processes due to a bug in the OpenMM's PME code.
         # This might be problematic if an energy has already been computed in the same program on the parent thread,

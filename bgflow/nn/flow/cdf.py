@@ -91,7 +91,7 @@ class ConstrainGaussianFlow(Flow):
         mu,
         sigma=torch.tensor(1.0),
         lower_bound=0.0,
-        upper_bound=np.infty,
+        upper_bound=np.inf,
         assert_range=True,
         mu_out=None,
         sigma_out=None,

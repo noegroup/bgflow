@@ -216,16 +216,31 @@ class Energy(torch.nn.Module):
 
 class _BridgeEnergyWrapper(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, bridge):
-        energy, force, *_ = bridge.evaluate(input)
-        ctx.save_for_backward(-force)
-        return energy
+    def forward(x, bridge):
+        energy, force, *_ = bridge.evaluate(x)
+        return energy, -force
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, _0):
         neg_force, = ctx.saved_tensors
-        grad_input = grad_output * neg_force
+        grad_input = grad_output[:, None] * neg_force
         return grad_input, None
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        x, bridge = inputs
+        energy, neg_force = output
+        ctx.save_for_backward(neg_force)
+
+    @staticmethod
+    def vmap(info, in_dims, x , bridge):
+        x_shape = x.shape
+        x = x.reshape(-1, x_shape[-1])
+        energy, force, *_ = bridge.evaluate(x)
+        energy = energy.reshape(x_shape[:-1])
+        force = force.reshape(x_shape)
+        return (energy, -force), (0, 0)
+
 
 
 _evaluate_bridge_energy = _BridgeEnergyWrapper.apply
@@ -308,16 +323,16 @@ class _BridgeEnergy(Energy):
 
     def _energy(self, batch, no_grads=False):
         # check if we have already computed this energy (hash of string representation should be sufficient)
-        if hash(str(batch)) == self._last_batch:
-            return self._bridge.last_energies
-        else:
-            self._last_batch = hash(str(batch))
-            return _evaluate_bridge_energy(batch, self._bridge)
+#        if hash(str(batch)) == self._last_batch:
+#            return self._bridge.last_energies
+#        else:
+        self._last_batch = hash(str(batch))
+        return _evaluate_bridge_energy(batch, self._bridge)[0]
 
     def force(self, batch, temperature=None):
         # check if we have already computed this energy
-        if hash(str(batch)) == self.last_batch:
-            return self.bridge.last_forces
-        else:
-            self._last_batch = hash(str(batch))
-            return self._bridge.evaluate(batch)[1]
+#        if hash(str(batch)) == self.last_batch:
+#            return self.bridge.last_forces
+#        else:
+        self._last_batch = hash(str(batch))
+        return self._bridge.evaluate(batch)[1]

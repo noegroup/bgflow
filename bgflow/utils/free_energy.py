@@ -146,7 +146,7 @@ def _bar(forward_work, reverse_work, compute_uncertainty=True, maximum_iteration
         f_upper_bound = _bar_zero(forward_work, reverse_work, upper_bound)
         f_lower_bound = _bar_zero(forward_work, reverse_work, lower_bound)
 
-    delta_f_old = np.infty
+    delta_f_old = np.inf
     for iterations in range(maximum_iterations):
         delta_f = upper_bound - f_upper_bound * (upper_bound - lower_bound) / (f_upper_bound - f_lower_bound)
         f_new = _bar_zero(forward_work, reverse_work, delta_f)

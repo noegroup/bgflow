@@ -128,13 +128,13 @@ class XTBBridge(_Bridge):
                     f"Original exception: {e}"
                 )
                 force = np.zeros_like(positions)
-                energy = np.infty
+                energy = np.inf
             elif self.err_handling == "ignore":
                 force = np.zeros_like(positions)
-                energy = np.infty
+                energy = np.inf
         except AssertionError:
             force[np.isnan(force)] = 0.
-            energy = np.infty
+            energy = np.inf
             if self.err_handling in ["error", "warning"]:
                 warnings.warn("Found nan in xtb force or energy. Returning infinite energy and zero force.")
 

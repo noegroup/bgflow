@@ -61,7 +61,7 @@ class ASEBridge(_Bridge):
             assert not np.isnan(force).any()
         except AssertionError as e:
             force[np.isnan(force)] = 0.
-            energy = np.infty
+            energy = np.inf
             if self.err_handling == "warning":
                 warnings.warn("Found nan in ase force or energy. Returning infinite energy and zero force.")
             elif self.err_handling == "error":

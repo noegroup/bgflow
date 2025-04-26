@@ -19,7 +19,7 @@ class InternalCoordinateMarginals(dict):
             bond_mu=1.0,
             bond_sigma=1.0,
             bond_lower=1e-5,
-            bond_upper=np.infty,
+            bond_upper=np.inf,
             angle_mu=0.5,
             angle_sigma=1.0,
             angle_lower=1e-5,

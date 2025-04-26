@@ -74,7 +74,7 @@ def test_builder_add_layer_and_param_groups(ctx):
     # transform some fields
     builder.add_layer(
         CDFTransform(
-            TruncatedNormalDistribution(torch.zeros(10, **ctx), lower_bound=-torch.tensor(np.infty)),
+            TruncatedNormalDistribution(torch.zeros(10, **ctx), lower_bound=-torch.tensor(np.inf)),
         ),
         what=[BONDS],
         inverse=True,

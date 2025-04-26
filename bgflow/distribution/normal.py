@@ -105,9 +105,9 @@ class TruncatedNormalDistribution(Energy, Sampler):
         Mean of the untruncated normal distribution.
     sigma : float or tensor of floats of shape (dim, )
         Standard deviation of the untruncated normal distribution.
-    lower_bound : float, -np.infty, or tensor of floats of shape (dim, )
+    lower_bound : float, -np.inf, or tensor of floats of shape (dim, )
         Lower truncation bound.
-    upper_bound : float, np.infty, or tensor of floats of shape (dim, )
+    upper_bound : float, np.inf, or tensor of floats of shape (dim, )
         Upper truncation bound.
     assert_range : bool
         Whether to raise an error when `energy` is called on input that falls out of bounds.
@@ -123,7 +123,7 @@ class TruncatedNormalDistribution(Energy, Sampler):
         mu,
         sigma=torch.tensor(1.0),
         lower_bound=torch.tensor(0.0),
-        upper_bound=torch.tensor(np.infty),
+        upper_bound=torch.tensor(np.inf),
         assert_range=True,
         sampling_method="icdf",
         is_learnable=False
@@ -208,8 +208,8 @@ class TruncatedNormalDistribution(Energy, Sampler):
             if (x < self._lower_bound).any() or (x > self._upper_bound).any():
                 raise ValueError("input out of bounds")
         else:
-            energies[x < self._lower_bound] = np.infty
-            energies[x > self._upper_bound] = np.infty
+            energies[x < self._lower_bound] = np.inf
+            energies[x > self._upper_bound] = np.inf
         return 0.5 * energies.sum(dim=-1, keepdim=True)
 
     def icdf(self, x):
