@@ -1,0 +1,21 @@
+# Mandatory dependencies
+torch
+einops
+numpy
+
+# Optional dependencies
+# matplotlib       # for plotting
+# pytest           # for testing
+# nflows           # for Neural Spline Flows
+# torchdiffeq      # for neural ODEs
+# ANODE            # for neural ODEs
+# openmm           # for molecular mechanics energies
+# ase              # for atomic simulation environment
+# xtb-python       # for GFN quantum energies
+# netCDF4          # for ReplayBufferReporter
+# jax              # for implicit flows
+# jax2torch        # for jax-to-torch bridges
+# allegro          # for GNNs
+# nequip           # for GNNs
+# bgmol            # for examples
+

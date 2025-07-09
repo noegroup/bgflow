@@ -5,7 +5,7 @@ __all__ = ["MultiDoubleWellPotential"]
 
 
 class MultiDoubleWellPotential(Energy):
-    """Energy for a many particle system with pair wise double-well interactions.
+    r"""Energy for a many particle system with pair wise double-well interactions.
     The energy of the double-well is given via
 
     .. math::
